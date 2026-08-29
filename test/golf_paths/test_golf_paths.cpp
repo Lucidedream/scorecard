@@ -37,13 +37,11 @@ TEST(GolfPaths, RejectsUndersizedOutputWithoutOverflow) {
 }
 
 TEST(GolfPaths, FormatsBaseAndCollisionFilenames) {
-  uint16_t date = 0;
-  ASSERT_TRUE(golfParseDate("2026-08-29", date));
   char filename[GOLF_ROUND_FILENAME_BUFFER_SIZE];
-  ASSERT_TRUE(golfRoundFilename(date, "Pebble Beach", 0, filename, sizeof(filename)));
-  EXPECT_STREQ(filename, "2026-08-29-pebble-beach.json");
-  ASSERT_TRUE(golfRoundFilename(date, "Pebble Beach", 2, filename, sizeof(filename)));
-  EXPECT_STREQ(filename, "2026-08-29-pebble-beach-2.json");
+  ASSERT_TRUE(golfRoundFilename(12, "Pebble Beach", 0, filename, sizeof(filename)));
+  EXPECT_STREQ(filename, "round-0012-pebble-beach.json");
+  ASSERT_TRUE(golfRoundFilename(12, "Pebble Beach", 2, filename, sizeof(filename)));
+  EXPECT_STREQ(filename, "round-0012-pebble-beach-2.json");
 }
 
 TEST(GolfPaths, RejectsInvalidDates) {
@@ -60,9 +58,9 @@ TEST(GolfArchiveMarker, StateWithoutMarkerIsNotArchived) {
 
 TEST(GolfArchiveMarker, StateCarryingMarkerIsRecognisedAsArchived) {
   GolfArchiveMarker marker{};
-  ASSERT_TRUE(setGolfArchiveMarker(marker, "2026-08-29-pebble-beach.json"));
+  ASSERT_TRUE(setGolfArchiveMarker(marker, "round-0001-pebble-beach.json"));
   EXPECT_TRUE(isGolfArchiveMarked(marker));
-  EXPECT_STREQ(golfArchivedFilename(marker), "2026-08-29-pebble-beach.json");
+  EXPECT_STREQ(golfArchivedFilename(marker), "round-0001-pebble-beach.json");
   clearGolfArchiveMarker(marker);
   EXPECT_FALSE(isGolfArchiveMarked(marker));
 }

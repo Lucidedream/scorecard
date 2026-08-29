@@ -84,32 +84,36 @@ bool writeArray(HalFile& file, const T* values, uint8_t count) {
 bool writeCompletedRound(HalFile& file, const GolfRound& round) {
   char date[GOLF_DATE_BUFFER_SIZE];
   char metadata[32];
-  if (!golfFormatDate(round.dateYmd, date, sizeof(date)) || !writeText(file, "{\"v\":1,\"date\":") ||
-      !writeJsonString(file, date) || !writeText(file, ",\"course\":") || !writeJsonString(file, round.courseName) ||
-      !writeText(file, ",\"tees\":") || !writeJsonString(file, round.tees)) {
+  if (!writeText(file, "{\"v\":2,\"date\":")) return false;
+  if (golfFormatDate(round.dateYmd, date, sizeof(date))) {
+    if (!writeJsonString(file, date)) return false;
+  } else if (!writeText(file, "null")) {
+    return false;
+  }
+  if (!writeText(file, ",\"course\":") || !writeJsonString(file, round.courseName) || !writeText(file, ",\"tees\":") ||
+      !writeJsonString(file, round.tees)) {
     return false;
   }
   snprintf(metadata, sizeof(metadata), ",\"holes\":%u,\"par\":", round.holeCount);
-  return writeText(file, metadata) && writeArray(file, round.par, round.holeCount) &&
-         writeText(file, ",\"strokes\":") && writeArray(file, round.strokes, round.holeCount) &&
-         writeText(file, ",\"putts\":") && writeArray(file, round.putts, round.holeCount) &&
-         writeText(file, ",\"in100\":") && writeArray(file, round.in100, round.holeCount) && writeText(file, "}\n");
+  return writeText(file, metadata) && writeArray(file, round.par, round.holeCount) && writeText(file, ",\"putts\":") &&
+         writeArray(file, round.putts, round.holeCount) && writeText(file, ",\"in100\":") &&
+         writeArray(file, round.in100, round.holeCount) && writeText(file, ",\"out100\":") &&
+         writeArray(file, round.out100, round.holeCount) && writeText(file, "}\n");
 }
 
 bool appendIndex(const GolfRound& round, const char* filename) {
   char date[GOLF_DATE_BUFFER_SIZE];
   char csv[GOLF_CSV_ROW_BUFFER_SIZE];
-  if (!golfFormatDate(round.dateYmd, date, sizeof(date))) {
-    return false;
-  }
-  const int32_t parTotal = static_cast<int32_t>(golfScore(round)) - golfToPar(round);
+  date[0] = '\0';
+  golfFormatDate(round.dateYmd, date, sizeof(date));
   const GolfIndexRowView row{date,
                              round.courseName,
                              round.holeCount,
                              golfScore(round),
-                             static_cast<uint16_t>(parTotal),
+                             golfParTotal(round),
                              golfPuttsTotal(round),
                              golfIn100Total(round),
+                             golfLongTotal(round),
                              filename};
   if (!golfFormatIndexRow(row, csv, sizeof(csv))) {
     LOG_ERR("GOLF", "Failed to format history row");
@@ -140,6 +144,29 @@ void logArchiveRepairs(const GolfRound& round, const GolfValidationResult& valid
   }
 }
 
+uint16_t nextRoundSequence() {
+  HalFile directory = Storage.open(ROUNDS_DIRECTORY);
+  if (!directory || !directory.isDirectory()) return 1;
+  uint16_t highest = 0;
+  for (HalFile entry = directory.openNextFile(); entry; entry = directory.openNextFile()) {
+    if (entry.isDirectory()) continue;
+    char filename[GOLF_ROUND_FILENAME_BUFFER_SIZE]{};
+    if (entry.getName(filename, sizeof(filename)) == 0 || strncmp(filename, "round-", 6) != 0) continue;
+    uint16_t sequence = 0;
+    bool valid = true;
+    for (uint8_t digit = 0; digit < 4; ++digit) {
+      const char value = filename[6 + digit];
+      if (value < '0' || value > '9') {
+        valid = false;
+        break;
+      }
+      sequence = static_cast<uint16_t>(sequence * 10 + value - '0');
+    }
+    if (valid && filename[10] == '-' && sequence > highest) highest = sequence;
+  }
+  return highest >= 9999 ? 0 : static_cast<uint16_t>(highest + 1);
+}
+
 }  // namespace
 
 bool RoundArchive::archive(const GolfRound& source) {
@@ -160,15 +187,20 @@ bool RoundArchive::archive(const GolfRound& source) {
 
   char filename[GOLF_ROUND_FILENAME_BUFFER_SIZE];
   char path[sizeof(ROUNDS_DIRECTORY) + GOLF_ROUND_FILENAME_BUFFER_SIZE + 1];
-  uint16_t sequence = 0;
+  const uint16_t roundSequence = nextRoundSequence();
+  if (roundSequence == 0) {
+    LOG_ERR("GOLF", "Exhausted round sequence numbers");
+    return false;
+  }
+  uint16_t collisionSuffix = 0;
   do {
-    if (!golfRoundFilename(round.dateYmd, round.courseName, sequence, filename, sizeof(filename))) {
+    if (!golfRoundFilename(roundSequence, round.courseName, collisionSuffix, filename, sizeof(filename))) {
       LOG_ERR("GOLF", "Failed to create round filename");
       return false;
     }
     snprintf(path, sizeof(path), "%s/%s", ROUNDS_DIRECTORY, filename);
-    sequence = sequence == 0 ? 2 : static_cast<uint16_t>(sequence + 1);
-    if (sequence == 0) {
+    collisionSuffix = collisionSuffix == 0 ? 2 : static_cast<uint16_t>(collisionSuffix + 1);
+    if (collisionSuffix == 0) {
       LOG_ERR("GOLF", "Exhausted round filename suffixes");
       return false;
     }
@@ -192,41 +224,6 @@ bool RoundArchive::archive(const GolfRound& source) {
     return false;
   }
   return GOLF_ROUND_STORE.clear();
-}
-
-bool RoundArchive::lastRoundDate(uint16_t& dateYmd) {
-  HalFile index = Storage.open(INDEX_PATH);
-  if (!index) return false;
-
-  char line[GOLF_CSV_ROW_BUFFER_SIZE]{};
-  size_t length = 0;
-  bool found = false;
-  while (index.available()) {
-    const int next = index.read();
-    if (next < 0) break;
-    if (next != '\n' && length + 1 < sizeof(line)) {
-      line[length++] = static_cast<char>(next);
-      continue;
-    }
-    line[length] = '\0';
-    GolfIndexRow row{};
-    uint16_t parsedDate = 0;
-    if (golfParseIndexRow(line, row) && golfParseDate(row.date, parsedDate)) {
-      dateYmd = parsedDate;
-      found = true;
-    }
-    length = 0;
-  }
-  if (length > 0) {
-    line[length] = '\0';
-    GolfIndexRow row{};
-    uint16_t parsedDate = 0;
-    if (golfParseIndexRow(line, row) && golfParseDate(row.date, parsedDate)) {
-      dateYmd = parsedDate;
-      found = true;
-    }
-  }
-  return found;
 }
 
 #endif

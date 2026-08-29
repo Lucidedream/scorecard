@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstring>
 
+#include "CourseBuiltIns.h"
 #include "GolfCourseValidate.h"
 
 namespace {
@@ -76,6 +77,7 @@ void logValidationFailure(const char* filename, const GolfCourseValidationResult
 
 GolfCourseListResult CourseStore::enumerate(GolfCourseFile* files, uint8_t capacity) {
   GolfCourseListResult result{};
+  bool builtInOverridden[GOLF_BUILT_IN_COURSE_COUNT]{};
   if (!Storage.ensureDirectoryExists("/golf") || !Storage.ensureDirectoryExists(COURSE_DIRECTORY) ||
       !Storage.ensureDirectoryExists(ROUNDS_DIRECTORY)) {
     LOG_ERR("GOLF", "Failed to create golf directories");
@@ -85,12 +87,10 @@ GolfCourseListResult CourseStore::enumerate(GolfCourseFile* files, uint8_t capac
     capacity = GOLF_MAX_COURSES;
   }
   HalFile directory = Storage.open(COURSE_DIRECTORY);
-  if (!directory || !directory.isDirectory()) {
-    return result;
-  }
 
   uint16_t jsonFiles = 0;
-  for (HalFile entry = directory.openNextFile(); entry; entry = directory.openNextFile()) {
+  for (HalFile entry = directory && directory.isDirectory() ? directory.openNextFile() : HalFile{}; entry;
+       entry = directory.openNextFile()) {
     if (entry.isDirectory()) {
       continue;
     }
@@ -103,8 +103,17 @@ GolfCourseListResult CourseStore::enumerate(GolfCourseFile* files, uint8_t capac
     if (!load(filename, course)) {
       continue;
     }
+    int8_t overrideIndex = -1;
+    for (uint8_t builtIn = 0; builtIn < GOLF_BUILT_IN_COURSE_COUNT; ++builtIn) {
+      if (strcmp(course.courseName, GOLF_BUILT_IN_COURSES[builtIn].courseName) == 0) {
+        builtInOverridden[builtIn] = true;
+        overrideIndex = static_cast<int8_t>(builtIn);
+      }
+    }
     if (files != nullptr && result.count < capacity) {
       memcpy(files[result.count].filename, filename, sizeof(filename));
+      // CONTRACTS-V2 §7.1: an SD file overriding a built-in inherits its table slot.
+      files[result.count].builtInIndex = overrideIndex;
       ++result.count;
     } else {
       result.overflow = true;
@@ -112,6 +121,16 @@ GolfCourseListResult CourseStore::enumerate(GolfCourseFile* files, uint8_t capac
   }
   if (jsonFiles > GOLF_MAX_COURSES) {
     result.overflow = true;
+  }
+  for (uint8_t builtIn = 0; builtIn < GOLF_BUILT_IN_COURSE_COUNT; ++builtIn) {
+    if (builtInOverridden[builtIn]) continue;
+    if (files != nullptr && result.count < capacity) {
+      files[result.count] = {};
+      files[result.count].builtInIndex = static_cast<int8_t>(builtIn);
+      ++result.count;
+    } else {
+      result.overflow = true;
+    }
   }
   if (result.overflow) {
     LOG_ERR("GOLF", "More than %u course entries found; list is bounded", GOLF_MAX_COURSES);
@@ -164,17 +183,36 @@ bool CourseStore::load(const char* filename, GolfCourse& course) {
   return true;
 }
 
+bool CourseStore::load(const GolfCourseFile& file, GolfCourse& course) {
+  // A non-empty filename means an SD file: load it even when builtInIndex is set, since
+  // that index only records which built-in slot the override inherits (CONTRACTS-V2 §7.1).
+  if (file.filename[0] != '\0') {
+    return load(file.filename, course);
+  }
+  if (file.builtInIndex >= 0 && file.builtInIndex < GOLF_BUILT_IN_COURSE_COUNT) {
+    course = GOLF_BUILT_IN_COURSES[file.builtInIndex];
+    return true;
+  }
+  return false;
+}
+
 bool CourseStore::findByName(const char* courseName, GolfCourse& course) {
   if (courseName == nullptr || courseName[0] == '\0') return false;
   HalFile directory = Storage.open(COURSE_DIRECTORY);
-  if (!directory || !directory.isDirectory()) return false;
-  for (HalFile entry = directory.openNextFile(); entry; entry = directory.openNextFile()) {
+  for (HalFile entry = directory && directory.isDirectory() ? directory.openNextFile() : HalFile{}; entry;
+       entry = directory.openNextFile()) {
     if (entry.isDirectory()) continue;
     char filename[GOLF_COURSE_FILENAME_BUFFER_SIZE]{};
     if (entry.getName(filename, sizeof(filename)) == 0 || !hasJsonExtension(filename)) continue;
     GolfCourse candidate{};
     if (load(filename, candidate) && strcmp(candidate.courseName, courseName) == 0) {
       course = candidate;
+      return true;
+    }
+  }
+  for (const GolfCourse& builtIn : GOLF_BUILT_IN_COURSES) {
+    if (strcmp(builtIn.courseName, courseName) == 0) {
+      course = builtIn;
       return true;
     }
   }

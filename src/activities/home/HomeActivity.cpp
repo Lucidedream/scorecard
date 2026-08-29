@@ -25,6 +25,14 @@
 #if CROSSPOINT_GOLF
 #include "activities/golf/GolfNavigation.h"
 #include "activities/golf/GolfStrings.h"
+
+namespace {
+
+int getScorecardMenuIndex(const ThemeMetrics& metrics, const bool hasRecentBooks) {
+  return metrics.homeContinueReadingInMenu && hasRecentBooks ? 1 : 0;
+}
+
+}  // namespace
 #endif
 
 int HomeActivity::getMenuItemCount() const {
@@ -36,7 +44,7 @@ int HomeActivity::getMenuItemCount() const {
     count++;
   }
 #if CROSSPOINT_GOLF
-  count++;  // Golf row, appended after Settings
+  count++;  // Scorecard row, before File Browser
 #endif
   return count;
 }
@@ -128,6 +136,9 @@ void HomeActivity::onEnter() {
 
   const auto base = static_cast<int>(recentBooks.size());
   selectorIndex = initialMenuItem == HomeMenuItem::NONE ? 0 : base + menuItemToIndex(initialMenuItem, hasOpdsServers);
+#if CROSSPOINT_GOLF
+  if (initialMenuItem != HomeMenuItem::NONE) ++selectorIndex;
+#endif
 
   // Trigger first update
   requestUpdate();
@@ -180,19 +191,22 @@ void HomeActivity::loop() {
   const int menuCount = getMenuItemCount();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  auto activateSelection = [this] {
+  auto activateSelection = [this, &metrics] {
     if (selectorIndex < recentBooks.size()) {
       onSelectBook(recentBooks[selectorIndex].path);
       return;
     }
-    const int menuIndex = selectorIndex - static_cast<int>(recentBooks.size());
+    int menuIndex = selectorIndex - static_cast<int>(recentBooks.size());
 #if CROSSPOINT_GOLF
-    // Golf is appended after Settings and has no HomeMenuItem enum value
+    const int scorecardIndex = getScorecardMenuIndex(metrics, !recentBooks.empty());
+    const int renderedMenuIndex = metrics.homeContinueReadingInMenu ? selectorIndex : menuIndex;
+    // Scorecard precedes File Browser and has no HomeMenuItem enum value.
     // (adding one would touch ActivityManager.h, a fifth upstream file).
-    if (menuIndex == getMenuItemCount() - static_cast<int>(recentBooks.size()) - 1) {
+    if (renderedMenuIndex == scorecardIndex) {
       openGolfHome(activityManager, renderer, mappedInput);
       return;
     }
+    --menuIndex;
 #endif
     switch (indexToMenuItem(menuIndex, hasOpdsServers)) {
       case HomeMenuItem::FILE_BROWSER:
@@ -323,9 +337,13 @@ void HomeActivity::render(RenderLock&&) {
                           std::bind(&HomeActivity::storeCoverBuffer, this));
 
   // Build menu items dynamically
-  std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_FILE_TRANSFER),
-                                        tr(STR_SETTINGS_TITLE)};
-  std::vector<UIIcon> menuIcons = {Folder, Recent, Transfer, Settings};
+  std::vector<const char*> menuItems;
+  std::vector<UIIcon> menuIcons;
+  menuItems.reserve(7);
+  menuIcons.reserve(7);
+  menuItems.insert(menuItems.end(),
+                   {tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_FILE_TRANSFER), tr(STR_SETTINGS_TITLE)});
+  menuIcons.insert(menuIcons.end(), {Folder, Recent, Transfer, Settings});
 
   if (hasOpdsServers) {
     menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));
@@ -339,8 +357,9 @@ void HomeActivity::render(RenderLock&&) {
   }
 
 #if CROSSPOINT_GOLF
-  menuItems.push_back(GolfStrings::APP_TITLE);
-  menuIcons.push_back(Bookmark);
+  const size_t scorecardIndex = getScorecardMenuIndex(metrics, !recentBooks.empty());
+  menuItems.insert(menuItems.begin() + scorecardIndex, GolfStrings::APP_TITLE);
+  menuIcons.insert(menuIcons.begin() + scorecardIndex, Scorecard);
 #endif
 
   GUI.drawButtonMenu(

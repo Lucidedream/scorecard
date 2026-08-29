@@ -2,6 +2,7 @@
 
 #include <numeric>
 
+#include "CourseBuiltIns.h"
 #include "CourseStore.h"
 #include "GolfCourseValidate.h"
 
@@ -27,6 +28,85 @@ GolfCourse nineHoleCourse() {
 }
 
 }  // namespace
+
+TEST(GolfBuiltInCourses, SanyangShipsVerifiedScorecardDataForBothTees) {
+  const GolfCourse* sanyang = nullptr;
+  int8_t sanyangIndex = -1;
+  int8_t index = 0;
+  for (const GolfCourse& course : GOLF_BUILT_IN_COURSES) {
+    if (strcmp(course.courseName, "Sanyang Golf Club") == 0) {
+      sanyang = &course;
+      sanyangIndex = index;
+      break;
+    }
+    ++index;
+  }
+
+  ASSERT_NE(sanyang, nullptr);
+  EXPECT_EQ(sanyang->holeCount, 18);
+  EXPECT_TRUE(sanyang->hasYards);
+  EXPECT_TRUE(sanyang->hasSi);
+  EXPECT_EQ(std::accumulate(sanyang->par, sanyang->par + 9, 0), 36);
+  EXPECT_EQ(std::accumulate(sanyang->par + 9, sanyang->par + 18, 0), 36);
+  EXPECT_EQ(std::accumulate(sanyang->par, sanyang->par + 18, 0), 72);
+  EXPECT_EQ(std::accumulate(sanyang->yards, sanyang->yards + 9, 0), 3196);
+  EXPECT_EQ(std::accumulate(sanyang->yards + 9, sanyang->yards + 18, 0), 3270);
+  EXPECT_EQ(std::accumulate(sanyang->yards, sanyang->yards + 18, 0), 6466);
+
+  bool seenStrokeIndexes[19]{};
+  for (uint8_t hole = 0; hole < sanyang->holeCount; ++hole) {
+    ASSERT_GE(sanyang->si[hole], 1);
+    ASSERT_LE(sanyang->si[hole], 18);
+    EXPECT_FALSE(seenStrokeIndexes[sanyang->si[hole]]);
+    seenStrokeIndexes[sanyang->si[hole]] = true;
+  }
+  for (uint8_t strokeIndex = 1; strokeIndex <= 18; ++strokeIndex) EXPECT_TRUE(seenStrokeIndexes[strokeIndex]);
+
+  EXPECT_TRUE(validateGolfCourse(*sanyang).valid);
+
+  GolfCourse white = *sanyang;
+  ASSERT_TRUE(applyBuiltInTeeYardages(sanyangIndex, "White", white));
+  EXPECT_EQ(std::accumulate(white.par, white.par + 9, 0), 36);
+  EXPECT_EQ(std::accumulate(white.par + 9, white.par + 18, 0), 36);
+  EXPECT_EQ(std::accumulate(white.par, white.par + 18, 0), 72);
+  EXPECT_EQ(std::accumulate(white.yards, white.yards + 9, 0), 2910);
+  EXPECT_EQ(std::accumulate(white.yards + 9, white.yards + 18, 0), 3043);
+  EXPECT_EQ(std::accumulate(white.yards, white.yards + 18, 0), 5953);
+  EXPECT_TRUE(validateGolfCourse(white).valid);
+}
+
+TEST(GolfBuiltInCourses, MoganShanGowinShipsVerifiedBlueTeeCardWithoutStrokeIndexes) {
+  const GolfCourse* moganshan = nullptr;
+  int8_t moganshanIndex = -1;
+  int8_t index = 0;
+  for (const GolfCourse& course : GOLF_BUILT_IN_COURSES) {
+    if (strcmp(course.courseName, "MoganShan Gowin") == 0) {
+      moganshan = &course;
+      moganshanIndex = index;
+      break;
+    }
+    ++index;
+  }
+
+  ASSERT_NE(moganshan, nullptr);
+  EXPECT_EQ(moganshanIndex, MOGANSHAN_BUILT_IN_INDEX);
+  EXPECT_EQ(moganshanIndex, 1);  // second, immediately after Sanyang (CONTRACTS-V2 §7)
+  EXPECT_EQ(moganshan->holeCount, 18);
+  EXPECT_TRUE(moganshan->hasYards);
+  EXPECT_FALSE(moganshan->hasSi);
+
+  EXPECT_EQ(std::accumulate(moganshan->par, moganshan->par + 9, 0), 36);
+  EXPECT_EQ(std::accumulate(moganshan->par + 9, moganshan->par + 18, 0), 36);
+  EXPECT_EQ(std::accumulate(moganshan->par, moganshan->par + 18, 0), 72);
+  EXPECT_EQ(std::accumulate(moganshan->yards, moganshan->yards + 9, 0), 3100);
+  EXPECT_EQ(std::accumulate(moganshan->yards + 9, moganshan->yards + 18, 0), 3132);
+  EXPECT_EQ(std::accumulate(moganshan->yards, moganshan->yards + 18, 0), 6232);
+
+  // Stroke indexes were not supplied, so the array stays zeroed rather than guessed.
+  for (uint8_t hole = 0; hole < moganshan->holeCount; ++hole) EXPECT_EQ(moganshan->si[hole], 0);
+
+  EXPECT_TRUE(validateGolfCourse(*moganshan).valid);
+}
 
 TEST(GolfCourseValidate, RealPebbleBeachFixtureValidatesWithoutOptionalArrays) {
   const GolfCourse course = pebbleBeach();
@@ -138,9 +218,9 @@ TEST(GolfCourseApply, SeedsRoundAndClearsAllCounters) {
   course.yards[0] = 380;
   course.si[0] = 7;
   GolfRound round{};
-  memset(round.strokes, 9, sizeof(round.strokes));
   memset(round.putts, 4, sizeof(round.putts));
   memset(round.in100, 3, sizeof(round.in100));
+  memset(round.out100, 9, sizeof(round.out100));
 
   CourseStore::applyGolfCourse(course, round, 0x1234);
 
@@ -152,8 +232,20 @@ TEST(GolfCourseApply, SeedsRoundAndClearsAllCounters) {
   EXPECT_EQ(round.par[0], 4);
   EXPECT_EQ(round.yards[0], 380);
   for (uint8_t hole = 0; hole < GolfRound::MAX_HOLES; ++hole) {
-    EXPECT_EQ(round.strokes[hole], 0);
     EXPECT_EQ(round.putts[hole], 0);
     EXPECT_EQ(round.in100[hole], 0);
+    EXPECT_EQ(round.out100[hole], 0);
   }
+}
+
+TEST(GolfCourseApply, PreservesParFreeTemplate) {
+  GolfCourse course{};
+  strcpy(course.courseName, "Template course");
+  course.holeCount = 18;
+  GolfRound round{};
+
+  CourseStore::applyGolfCourse(course, round, 0);
+
+  EXPECT_STREQ(round.courseName, "Template course");
+  for (uint8_t hole = 0; hole < round.holeCount; ++hole) EXPECT_EQ(round.par[hole], 0);
 }

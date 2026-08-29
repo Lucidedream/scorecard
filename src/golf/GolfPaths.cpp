@@ -106,18 +106,19 @@ bool golfParseDate(const char* date, uint16_t& dateYmd) {
   return true;
 }
 
-bool golfRoundFilename(uint16_t dateYmd, const char* courseName, uint16_t sequence, char* output, size_t outputSize) {
-  if (output == nullptr || outputSize == 0 || sequence == 1) {
+bool golfRoundFilename(uint16_t roundSequence, const char* courseName, uint16_t collisionSuffix, char* output,
+                       size_t outputSize) {
+  if (output == nullptr || outputSize == 0 || roundSequence == 0 || roundSequence > 9999 || collisionSuffix == 1) {
     return false;
   }
-  char date[GOLF_DATE_BUFFER_SIZE];
   char slug[GOLF_SLUG_BUFFER_SIZE];
-  if (!golfFormatDate(dateYmd, date, sizeof(date)) || !golfSlug(courseName, slug, sizeof(slug))) {
+  if (!golfSlug(courseName, slug, sizeof(slug))) {
     output[0] = '\0';
     return false;
   }
-  const int length = sequence == 0 ? snprintf(output, outputSize, "%s-%s.json", date, slug)
-                                   : snprintf(output, outputSize, "%s-%s-%u.json", date, slug, sequence);
+  const int length = collisionSuffix == 0
+                         ? snprintf(output, outputSize, "round-%04u-%s.json", roundSequence, slug)
+                         : snprintf(output, outputSize, "round-%04u-%s-%u.json", roundSequence, slug, collisionSuffix);
   if (length < 0 || static_cast<size_t>(length) >= outputSize) {
     output[0] = '\0';
     return false;

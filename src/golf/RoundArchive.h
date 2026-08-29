@@ -5,5 +5,4 @@
 class RoundArchive {
  public:
   static bool archive(const GolfRound& round);
-  static bool lastRoundDate(uint16_t& dateYmd);
 };

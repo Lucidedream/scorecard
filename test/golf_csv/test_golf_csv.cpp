@@ -15,7 +15,8 @@ GolfIndexRow makeRow(const char* course) {
   row.par = 72;
   row.putts = 33;
   row.in100 = 21;
-  strcpy(row.file, "2026-08-29-course.json");
+  row.out100 = 32;
+  strcpy(row.file, "round-0001-course.json");
   return row;
 }
 
@@ -33,6 +34,7 @@ void expectRoundTrip(const char* course, const char* encodedCourse) {
   EXPECT_EQ(parsed.par, source.par);
   EXPECT_EQ(parsed.putts, source.putts);
   EXPECT_EQ(parsed.in100, source.in100);
+  EXPECT_EQ(parsed.out100, source.out100);
   EXPECT_STREQ(parsed.file, source.file);
 }
 
@@ -43,7 +45,17 @@ TEST(GolfCsv, QuotesAndRoundTripsComma) { expectRoundTrip("Pebble, Beach", "\"Pe
 TEST(GolfCsv, EscapesAndRoundTripsQuote) { expectRoundTrip("Pebble \"Beach\"", "\"Pebble \"\"Beach\"\"\""); }
 TEST(GolfCsv, EscapesAndRoundTripsCommaAndQuote) { expectRoundTrip("Pebble, \"Beach\"", "\"Pebble, \"\"Beach\"\"\""); }
 
+TEST(GolfCsv, RoundTripsUnknownDateAsEmptyCell) {
+  GolfIndexRow source = makeRow("Practice 9");
+  source.date[0] = '\0';
+  char output[GOLF_CSV_ROW_BUFFER_SIZE];
+  ASSERT_TRUE(golfFormatIndexRow(source, output, sizeof(output)));
+  GolfIndexRow parsed{};
+  ASSERT_TRUE(golfParseIndexRow(output, parsed));
+  EXPECT_STREQ(parsed.date, "");
+}
+
 TEST(GolfCsv, RejectsUnterminatedQuotedCourse) {
   GolfIndexRow row{};
-  EXPECT_FALSE(golfParseIndexRow("2026-08-29,\"Pebble,18,86,72,33,21,round.json", row));
+  EXPECT_FALSE(golfParseIndexRow("2026-08-29,\"Pebble,18,86,72,33,21,32,round.json", row));
 }

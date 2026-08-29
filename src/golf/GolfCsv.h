@@ -5,7 +5,7 @@
 
 #include "GolfPaths.h"
 
-inline constexpr char GOLF_INDEX_HEADER[] = "date,course,holes,strokes,par,putts,in100,file\r\n";
+inline constexpr char GOLF_INDEX_HEADER[] = "date,course,holes,strokes,par,putts,in100,out100,file\r\n";
 inline constexpr size_t GOLF_CSV_ROW_BUFFER_SIZE = 192;
 
 struct GolfIndexRow {
@@ -16,6 +16,7 @@ struct GolfIndexRow {
   uint16_t par;
   uint16_t putts;
   uint16_t in100;
+  uint16_t out100;
   char file[GOLF_ROUND_FILENAME_BUFFER_SIZE];
 };
 
@@ -27,6 +28,7 @@ struct GolfIndexRowView {
   uint16_t par;
   uint16_t putts;
   uint16_t in100;
+  uint16_t out100;
   const char* file;
 };
 

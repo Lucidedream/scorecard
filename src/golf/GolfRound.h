@@ -13,9 +13,9 @@ struct GolfRound {
 
   uint8_t par[MAX_HOLES];
   uint16_t yards[MAX_HOLES];
-  uint8_t strokes[MAX_HOLES];
   uint8_t putts[MAX_HOLES];
   uint8_t in100[MAX_HOLES];
+  uint8_t out100[MAX_HOLES];
 };
 
 static_assert(sizeof(GolfRound) == 164);

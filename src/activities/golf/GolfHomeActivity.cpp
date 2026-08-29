@@ -5,7 +5,7 @@
 #include <HalStorage.h>
 #include <Memory.h>
 
-#include "GolfMessageActivity.h"
+#include "GolfHistoryActivity.h"
 #include "GolfNavigation.h"
 #include "GolfSetupActivity.h"
 #include "GolfStrings.h"
@@ -47,13 +47,12 @@ void GolfHomeActivity::activateIndex(const int index) {
     openGolfSetup(activityManager, renderer, mappedInput);
     return;
   }
-  auto message =
-      makeUniqueNoThrow<GolfMessageActivity>(renderer, mappedInput, GolfStrings::HISTORY, GolfStrings::HISTORY_STUB);
-  if (!message) {
-    LOG_ERR("GOLF", "OOM: history message");
+  auto history = makeUniqueNoThrow<GolfHistoryActivity>(renderer, mappedInput);
+  if (!history) {
+    LOG_ERR("GOLF", "OOM: history activity");
     return;
   }
-  startActivityForResult(std::move(message), nullptr);
+  startActivityForResult(std::move(history), nullptr);
 }
 
 void GolfHomeActivity::buildScreen(UiScreen& screen) {

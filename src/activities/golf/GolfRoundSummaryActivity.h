@@ -1,0 +1,22 @@
+#pragma once
+
+#include "activities/Activity.h"
+#include "components/UiAppHost.h"
+#include "golf/GolfHistory.h"
+
+class GolfRoundSummaryActivity final : public Activity, protected UiAppHost {
+ public:
+  GolfRoundSummaryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const GolfHistoryEntry& entry)
+      : Activity("GolfRoundSummary", renderer, mappedInput), UiAppHost(renderer), entry(entry) {}
+
+  void onEnter() override;
+  void loop() override;
+  void render(RenderLock&&) override;
+
+ private:
+  GolfHistoryEntry entry{};
+  char cells[5][2][20]{};
+
+  static void screenTrampoline(UiScreen& screen, void* user);
+  void buildScreen(UiScreen& screen);
+};

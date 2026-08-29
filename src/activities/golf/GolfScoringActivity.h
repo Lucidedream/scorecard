@@ -2,6 +2,7 @@
 
 #include "activities/Activity.h"
 #include "components/UiAppHost.h"
+#include "golf/GolfConfirm.h"
 #include "golf/GolfRules.h"
 
 class GolfScoringActivity final : public Activity, protected UiAppHost {
@@ -16,17 +17,18 @@ class GolfScoringActivity final : public Activity, protected UiAppHost {
   bool handleHomeGesture() override;
 
  private:
-  GolfField focusedField = GolfField::Strokes;
-  uint8_t blockingFlash = 0;
+  GolfField focusedField = GolfField::Putts;
   uint8_t si[GolfRound::MAX_HOLES]{};
   bool hasSi = false;
-  bool autoBumpNotice = false;
+  const char* carryNotice = nullptr;
   bool saveFailed = false;
   uint8_t paintCount = 0;
   uint32_t lastCounterChangeAt = 0;
   uint32_t lastRepeatAt = 0;
 
   void mutateCounter(bool increment);
+  void handleConfirm();
+  void commitAndAdvance();
   void changeHole(int delta);
   void openRoundMenu();
   bool flushDirty();

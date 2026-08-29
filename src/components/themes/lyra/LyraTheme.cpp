@@ -20,6 +20,7 @@
 #include "components/icons/hotspot.h"
 #include "components/icons/library.h"
 #include "components/icons/recent.h"
+#include "components/icons/scorecard.h"
 #include "components/icons/settings2.h"
 #include "components/icons/transfer.h"
 #include "components/icons/wifi.h"
@@ -55,6 +56,8 @@ const uint8_t* iconForName(UIIcon icon) {
       return HotspotIcon;
     case UIIcon::Bookmark:
       return BookmarkIcon;
+    case UIIcon::Scorecard:
+      return ScorecardIcon;
     default:
       return nullptr;
   }

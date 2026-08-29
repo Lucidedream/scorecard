@@ -2,6 +2,7 @@
 
 #if defined(CROSSPOINT_GOLF)
 
+#include <BoardConfig.h>
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <HalDisplay.h>
@@ -10,6 +11,7 @@
 #include <cstdio>
 #include <cstring>
 
+#include "CrossPointSettings.h"
 #include "GolfNavigation.h"
 #include "GolfRoundMenuActivity.h"
 #include "GolfStrings.h"
@@ -130,17 +132,56 @@ void GolfScoringActivity::mutateCounter(const bool increment) {
   {
     RenderLock lock(*this);
     GolfRound& round = GOLF_ROUND_STORE.getRound();
+    const bool seeded = seedGolfHoleAtPar(round, round.currentHole);
     result = increment ? incrementGolfCounter(round, round.currentHole, focusedField)
                        : decrementGolfCounter(round, round.currentHole, focusedField);
-    if (result.blocked) blockingFlash = result.blockingFields;
-    if (result.autoBumpedStrokes) autoBumpNotice = true;
+    if (seeded && !result.changed) result.changed = true;
+    if (result.carriedIn100) carryNotice = GolfStrings::IN100_CARRY;
+    if (result.loweredPutts) carryNotice = GolfStrings::PUTTS_CARRY;
   }
   if (result.changed) {
     markGolfRoundDirty();
     lastCounterChangeAt = millis();
     saveFailed = false;
   }
-  if (result.changed || result.blocked) requestUpdate();
+  if (result.changed) requestUpdate();
+}
+
+void GolfScoringActivity::handleConfirm() {
+  GolfConfirmAction action = GolfConfirmAction::CycleFocus;
+  {
+    RenderLock lock(*this);
+    const GolfRound& round = GOLF_ROUND_STORE.getRound();
+    const uint8_t hole = round.currentHole;
+    const bool logged = golfHoleScore(round, hole) != 0;
+    const bool canCommit = !logged && round.par[hole] >= 3;
+    action = golfConfirmPress(focusedField, logged, canCommit);
+    if (action == GolfConfirmAction::CycleFocus) focusedField = nextGolfField(focusedField);
+  }
+  if (action == GolfConfirmAction::CommitAndAdvance) {
+    commitAndAdvance();
+    return;
+  }
+  if (action == GolfConfirmAction::AdvanceWithoutCommit) {
+    changeHole(1);
+    return;
+  }
+  requestUpdate();
+}
+
+void GolfScoringActivity::commitAndAdvance() {
+  bool committed = false;
+  {
+    RenderLock lock(*this);
+    GolfRound& round = GOLF_ROUND_STORE.getRound();
+    committed = seedGolfHoleAtPar(round, round.currentHole);
+  }
+  if (committed) {
+    markGolfRoundDirty();
+    lastCounterChangeAt = millis();
+    saveFailed = false;
+  }
+  changeHole(1);
 }
 
 void GolfScoringActivity::changeHole(const int delta) {
@@ -148,9 +189,8 @@ void GolfScoringActivity::changeHole(const int delta) {
     RenderLock lock(*this);
     GolfRound& round = GOLF_ROUND_STORE.getRound();
     round.currentHole = static_cast<uint8_t>((round.currentHole + round.holeCount + delta) % round.holeCount);
-    focusedField = GolfField::Strokes;
-    blockingFlash = 0;
-    autoBumpNotice = false;
+    focusedField = GolfField::Putts;
+    carryNotice = nullptr;
   }
   markGolfRoundDirty();
   flushDirty();
@@ -184,12 +224,18 @@ void GolfScoringActivity::loop() {
     changeHole(1);
     return;
   }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    {
-      RenderLock lock(*this);
-      focusedField = nextGolfField(focusedField);
-    }
-    requestUpdate();
+  const bool confirmReleased = mappedInput.wasReleased(MappedInputManager::Button::Confirm);
+  bool powerCyclesField = SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::SLEEP;
+#if FREEINK_CAP_TOUCH
+  // X4 Pro turns a configured Power-as-Confirm click into a delayed Confirm event.
+  // Waiting for that event avoids counting the same physical click twice.
+  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PWR_CONFIRM && BoardConfig::isX4Pro()) {
+    powerCyclesField = false;
+  }
+#endif
+  powerCyclesField = powerCyclesField && mappedInput.wasReleased(MappedInputManager::Button::Power);
+  if (confirmReleased || powerCyclesField) {
+    handleConfirm();
     return;
   }
   if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
@@ -227,9 +273,11 @@ void GolfScoringActivity::drawHoleBand() const {
   renderer.drawText(UI_10_FONT_ID, 18, 61, GolfStrings::HOLE, true, EpdFontFamily::BOLD);
   drawNumber(renderer, 125, 82, 58, hole + 1, true, false);
   char text[24];
-  snprintf(text, sizeof(text), "%s %u", GolfStrings::PAR, round.par[hole]);
-  renderer.drawText(UI_12_FONT_ID, renderer.getScreenWidth() - 20 - renderer.getTextWidth(UI_12_FONT_ID, text), 66,
-                    text, true, EpdFontFamily::BOLD);
+  if (round.par[hole] != 0) {
+    snprintf(text, sizeof(text), "%s %u", GolfStrings::PAR, round.par[hole]);
+    renderer.drawText(UI_12_FONT_ID, renderer.getScreenWidth() - 20 - renderer.getTextWidth(UI_12_FONT_ID, text), 66,
+                      text, true, EpdFontFamily::BOLD);
+  }
   int y = 100;
   if (round.yards[hole] != 0) {
     snprintf(text, sizeof(text), "%u %s", round.yards[hole], GolfStrings::YARDS);
@@ -248,31 +296,39 @@ void GolfScoringActivity::drawHoleBand() const {
 void GolfScoringActivity::drawCounters() const {
   const GolfRound& round = GOLF_ROUND_STORE.getRound();
   const uint8_t hole = round.currentHole;
-  const uint8_t values[] = {round.strokes[hole], round.putts[hole], round.in100[hole]};
-  const char* labels[] = {GolfStrings::STROKES, GolfStrings::PUTTS, GolfStrings::IN100};
+  const bool entered = golfHoleScore(round, hole) != 0;
+  const bool preseed = !entered && round.par[hole] >= 3;
+  const uint8_t values[] = {preseed ? static_cast<uint8_t>(2) : round.putts[hole],
+                            preseed ? static_cast<uint8_t>(2) : round.in100[hole],
+                            preseed ? static_cast<uint8_t>(round.par[hole] - 2) : round.out100[hole]};
+  const char* labels[] = {GolfStrings::PUTTS, GolfStrings::IN100, GolfStrings::OUT100};
   int top = HOLE_BOTTOM;
   for (uint8_t index = 0; index < 3; ++index) {
     const bool focused = focusedField == static_cast<GolfField>(index);
     const int height = focused ? 170 : 150;
-    const bool flash = (blockingFlash & (1u << index)) != 0;
-    const bool inverse = focused != flash;
+    const bool inverse = focused;
     if (inverse) renderer.fillRect(0, top, renderer.getScreenWidth(), height, true);
     renderer.drawText(UI_10_FONT_ID, 20, top + 14, labels[index], !inverse, EpdFontFamily::BOLD);
-    if (index == 0 && values[0] != 0) {
-      char badge[8];
-      formatToPar(static_cast<int16_t>(values[0]) - round.par[hole], badge, sizeof(badge));
+    if (index == 2) {
+      char badge[24];
+      const uint16_t total = static_cast<uint16_t>(values[1]) + values[2];
+      if (round.par[hole] != 0) {
+        char toPar[8];
+        formatToPar(static_cast<int16_t>(total) - round.par[hole], toPar, sizeof(toPar));
+        snprintf(badge, sizeof(badge), "%s %u %s", GolfStrings::TOTAL, total, toPar);
+      } else {
+        snprintf(badge, sizeof(badge), "%s %u", GolfStrings::TOTAL, total);
+      }
       renderer.drawText(UI_10_FONT_ID, renderer.getScreenWidth() - 22 - renderer.getTextWidth(UI_10_FONT_ID, badge),
                         top + 14, badge, !inverse, EpdFontFamily::BOLD);
-    } else if (autoBumpNotice && index == static_cast<uint8_t>(focusedField)) {
+    } else if (carryNotice != nullptr && index == static_cast<uint8_t>(focusedField)) {
       renderer.drawText(UI_10_FONT_ID,
-                        renderer.getScreenWidth() - 22 - renderer.getTextWidth(UI_10_FONT_ID, GolfStrings::AUTO_BUMP),
-                        top + 14, GolfStrings::AUTO_BUMP, !inverse, EpdFontFamily::BOLD);
+                        renderer.getScreenWidth() - 22 - renderer.getTextWidth(UI_10_FONT_ID, carryNotice), top + 14,
+                        carryNotice, !inverse, EpdFontFamily::BOLD);
     }
-    const bool preseed = index == 0 && values[0] == 0;
-    const uint8_t displayValue = preseed ? round.par[hole] : values[index];
     const int digitHeight = focused ? 100 : 66;
     drawNumber(renderer, renderer.getScreenWidth() / 2, top + (height - digitHeight) / 2 + 12, digitHeight,
-               displayValue, !inverse, preseed);
+               values[index], !inverse, preseed);
     renderer.drawLine(0, top + height - 1, renderer.getScreenWidth(), top + height - 1, !inverse);
     top += height;
   }
@@ -281,11 +337,16 @@ void GolfScoringActivity::drawCounters() const {
 void GolfScoringActivity::drawTotals() const {
   const GolfRound& round = GOLF_ROUND_STORE.getRound();
   const int width = renderer.getScreenWidth() / 3;
-  const char* labels[] = {GolfStrings::THRU, GolfStrings::SCORE, GolfStrings::TO_PAR};
+  const bool hasPar = golfHasPar(round);
+  const char* labels[] = {GolfStrings::THRU, GolfStrings::SCORE, hasPar ? GolfStrings::TO_PAR : ""};
   char values[3][8];
   snprintf(values[0], sizeof(values[0]), "%u", golfThru(round));
   snprintf(values[1], sizeof(values[1]), "%u", golfScore(round));
-  formatToPar(golfToPar(round), values[2], sizeof(values[2]));
+  if (hasPar) {
+    formatToPar(golfToPar(round), values[2], sizeof(values[2]));
+  } else {
+    values[2][0] = '\0';
+  }
   for (uint8_t index = 0; index < 3; ++index) {
     const int x = index * width;
     const int labelWidth = renderer.getTextWidth(UI_10_FONT_ID, labels[index], EpdFontFamily::BOLD);
@@ -312,10 +373,11 @@ void GolfScoringActivity::drawNineStrip() const {
     snprintf(number, sizeof(number), "%u", hole + 1);
     renderer.drawText(SMALL_FONT_ID, x + (cellWidth - renderer.getTextWidth(SMALL_FONT_ID, number)) / 2,
                       TOTALS_BOTTOM + 5, number, !current, EpdFontFamily::BOLD);
-    if (round.strokes[hole] == 0) {
+    const uint16_t score = golfHoleScore(round, hole);
+    if (score == 0) {
       snprintf(number, sizeof(number), ".");
     } else {
-      snprintf(number, sizeof(number), "%u", round.strokes[hole]);
+      snprintf(number, sizeof(number), "%u", score);
     }
     renderer.drawText(UI_10_FONT_ID, x + (cellWidth - renderer.getTextWidth(UI_10_FONT_ID, number)) / 2,
                       TOTALS_BOTTOM + 28, number, !current, EpdFontFamily::BOLD);
@@ -323,7 +385,7 @@ void GolfScoringActivity::drawNineStrip() const {
 }
 
 void GolfScoringActivity::drawFooter() const {
-  const auto labels = mappedInput.mapDirectionalLabels(GolfStrings::MENU, GolfStrings::FIELD, GolfStrings::LEFT,
+  const auto labels = mappedInput.mapDirectionalLabels(GolfStrings::MENU, GolfStrings::FIELD_POWER, GolfStrings::LEFT,
                                                        GolfStrings::RIGHT, GolfStrings::PLUS, GolfStrings::MINUS);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
@@ -339,9 +401,8 @@ void GolfScoringActivity::render(RenderLock&&) {
   ++paintCount;
   if (paintCount % 8 == 0) renderer.promoteNextRefresh(HalDisplay::HALF_REFRESH);
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-  if (blockingFlash != 0 || autoBumpNotice) {
-    blockingFlash = 0;
-    autoBumpNotice = false;
+  if (carryNotice != nullptr) {
+    carryNotice = nullptr;
     requestUpdate();
   }
 }

@@ -101,8 +101,8 @@ bool golfFormatIndexRow(const GolfIndexRowView& row, char* output, size_t output
   }
   size_t written = 0;
   char totals[64];
-  const int totalsLength =
-      snprintf(totals, sizeof(totals), ",%u,%u,%u,%u,%u,", row.holes, row.strokes, row.par, row.putts, row.in100);
+  const int totalsLength = snprintf(totals, sizeof(totals), ",%u,%u,%u,%u,%u,%u,", row.holes, row.strokes, row.par,
+                                    row.putts, row.in100, row.out100);
   if (totalsLength < 0 || static_cast<size_t>(totalsLength) >= sizeof(totals) ||
       !appendText(row.date, output, outputSize, written) || !appendChar(',', output, outputSize, written) ||
       !appendCourse(row.course, output, outputSize, written) || !appendText(totals, output, outputSize, written) ||
@@ -115,8 +115,9 @@ bool golfFormatIndexRow(const GolfIndexRowView& row, char* output, size_t output
 }
 
 bool golfFormatIndexRow(const GolfIndexRow& row, char* output, size_t outputSize) {
-  return golfFormatIndexRow({row.date, row.course, row.holes, row.strokes, row.par, row.putts, row.in100, row.file},
-                            output, outputSize);
+  return golfFormatIndexRow(
+      {row.date, row.course, row.holes, row.strokes, row.par, row.putts, row.in100, row.out100, row.file}, output,
+      outputSize);
 }
 
 bool golfParseIndexRow(const char* input, GolfIndexRow& row) {
@@ -131,8 +132,8 @@ bool golfParseIndexRow(const char* input, GolfIndexRow& row) {
     return false;
   }
   uint16_t holes = 0;
-  uint16_t* values[] = {&holes, &parsed.strokes, &parsed.par, &parsed.putts, &parsed.in100};
-  for (uint8_t field = 0; field < 5; ++field) {
+  uint16_t* values[] = {&holes, &parsed.strokes, &parsed.par, &parsed.putts, &parsed.in100, &parsed.out100};
+  for (uint8_t field = 0; field < 6; ++field) {
     if (!parseField(current, numeric, sizeof(numeric)) ||
         !parseUnsigned(numeric, field == 0 ? std::numeric_limits<uint8_t>::max() : std::numeric_limits<uint16_t>::max(),
                        *values[field]) ||

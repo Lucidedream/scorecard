@@ -4,7 +4,7 @@
 
 #include <Memory.h>
 
-#include "GolfMessageActivity.h"
+#include "GolfCardActivity.h"
 #include "GolfNavigation.h"
 #include "GolfStrings.h"
 #include "activities/util/ConfirmationActivity.h"
@@ -29,13 +29,12 @@ const char* GolfRoundMenuActivity::headerTitle() const {
 void GolfRoundMenuActivity::activateIndex(const int index) {
   app.clearTapFlash();
   if (index == 0) {
-    auto message =
-        makeUniqueNoThrow<GolfMessageActivity>(renderer, mappedInput, GolfStrings::VIEW_CARD, GolfStrings::CARD_STUB);
-    if (!message) {
-      LOG_ERR("GOLF", "OOM: card message");
+    auto card = makeUniqueNoThrow<GolfCardActivity>(renderer, mappedInput);
+    if (!card) {
+      LOG_ERR("GOLF", "OOM: card activity");
       return;
     }
-    startActivityForResult(std::move(message), nullptr);
+    startActivityForResult(std::move(card), nullptr);
     return;
   }
   confirmAction(index == 1 ? PendingAction::Finish : PendingAction::Abandon);

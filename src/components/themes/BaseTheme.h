@@ -134,6 +134,7 @@ enum UIIcon {
   Wifi,
   Hotspot,
   Bookmark,
+  Scorecard,
   Usb
 };
 
