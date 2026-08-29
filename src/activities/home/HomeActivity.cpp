@@ -22,6 +22,11 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
+#if CROSSPOINT_GOLF
+#include "activities/golf/GolfNavigation.h"
+#include "activities/golf/GolfStrings.h"
+#endif
+
 int HomeActivity::getMenuItemCount() const {
   int count = 4;  // File Browser, Recents, File transfer, Settings
   if (!recentBooks.empty()) {
@@ -30,6 +35,9 @@ int HomeActivity::getMenuItemCount() const {
   if (hasOpdsServers) {
     count++;
   }
+#if CROSSPOINT_GOLF
+  count++;  // Golf row, appended after Settings
+#endif
   return count;
 }
 
@@ -178,6 +186,14 @@ void HomeActivity::loop() {
       return;
     }
     const int menuIndex = selectorIndex - static_cast<int>(recentBooks.size());
+#if CROSSPOINT_GOLF
+    // Golf is appended after Settings and has no HomeMenuItem enum value
+    // (adding one would touch ActivityManager.h, a fifth upstream file).
+    if (menuIndex == getMenuItemCount() - static_cast<int>(recentBooks.size()) - 1) {
+      openGolfHome(activityManager, renderer, mappedInput);
+      return;
+    }
+#endif
     switch (indexToMenuItem(menuIndex, hasOpdsServers)) {
       case HomeMenuItem::FILE_BROWSER:
         onFileBrowserOpen();
@@ -321,6 +337,11 @@ void HomeActivity::render(RenderLock&&) {
     menuItems.insert(menuItems.begin(), tr(STR_CONTINUE_READING));
     menuIcons.insert(menuIcons.begin(), Book);
   }
+
+#if CROSSPOINT_GOLF
+  menuItems.push_back(GolfStrings::APP_TITLE);
+  menuIcons.push_back(Bookmark);
+#endif
 
   GUI.drawButtonMenu(
       renderer,

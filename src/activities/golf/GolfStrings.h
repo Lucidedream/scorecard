@@ -1,0 +1,55 @@
+#pragma once
+
+namespace GolfStrings {
+inline constexpr char APP_TITLE[] = "Golf";
+inline constexpr char RESUME_ROUND[] = "Resume round";
+inline constexpr char NEW_ROUND[] = "New round";
+inline constexpr char HISTORY[] = "History";
+inline constexpr char HISTORY_STUB[] = "History is coming in the next milestone.";
+inline constexpr char VIEW_CARD[] = "View card";
+inline constexpr char CARD_STUB[] = "The full scorecard is coming in the next milestone.";
+inline constexpr char FINISH_ROUND[] = "Finish round";
+inline constexpr char ABANDON_ROUND[] = "Abandon round";
+inline constexpr char FINISH_PROMPT[] = "Archive this round?";
+inline constexpr char ABANDON_PROMPT[] = "Permanently discard this round?";
+inline constexpr char CANCEL[] = "Cancel";
+inline constexpr char CONFIRM[] = "Confirm";
+inline constexpr char BACK[] = "Back";
+inline constexpr char SELECT[] = "Select";
+inline constexpr char UP[] = "Up";
+inline constexpr char DOWN[] = "Down";
+inline constexpr char LEFT[] = "Prev hole";
+inline constexpr char RIGHT[] = "Next hole";
+inline constexpr char MENU[] = "Menu";
+inline constexpr char FIELD[] = "Field";
+inline constexpr char PLUS[] = "+";
+inline constexpr char MINUS[] = "-";
+inline constexpr char SWITCH_FIELD[] = "Change";
+inline constexpr char NEXT[] = "Next";
+inline constexpr char COURSES[] = "Choose a course";
+inline constexpr char QUICK_ROUND[] = "Quick round (all par 4)";
+inline constexpr char COURSE_OVERFLOW[] = "More than 32 course files found";
+inline constexpr char NO_COURSES[] = "No course files found; Quick round is available";
+inline constexpr char DATE[] = "Round date (set manually)";
+inline constexpr char YEAR[] = "Year";
+inline constexpr char MONTH[] = "Month";
+inline constexpr char DAY[] = "Day";
+inline constexpr char START_ROUND[] = "Start round";
+inline constexpr char STATE_ERROR[] = "Saved round is corrupt; start a new round or recover state.json";
+inline constexpr char RESUME_ERROR[] = "Saved golf round could not be loaded. state.json was preserved.";
+inline constexpr char SAVE_ERROR[] = "Could not save the round. Check the SD card.";
+inline constexpr char ARCHIVE_ERROR[] = "Archive failed. The open round was preserved.";
+inline constexpr char ABANDON_ERROR[] = "Could not clear state.json. The round was preserved.";
+inline constexpr char HOLE[] = "HOLE";
+inline constexpr char PAR[] = "PAR";
+inline constexpr char YARDS[] = "YD";
+inline constexpr char SI[] = "SI";
+inline constexpr char STROKES[] = "STROKES";
+inline constexpr char PUTTS[] = "PUTTS";
+inline constexpr char IN100[] = "INSIDE 100";
+inline constexpr char THRU[] = "THRU";
+inline constexpr char SCORE[] = "SCORE";
+inline constexpr char TO_PAR[] = "TO PAR";
+inline constexpr char EVEN[] = "E";
+inline constexpr char AUTO_BUMP[] = "STROKES +1";
+}  // namespace GolfStrings

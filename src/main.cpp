@@ -41,6 +41,10 @@
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
 
+#if CROSSPOINT_GOLF
+#include "activities/golf/GolfNavigation.h"
+#endif
+
 GfxRenderer renderer(display);
 MappedInputManager mappedInputManager(gpio, renderer);
 ActivityManager activityManager(renderer, mappedInputManager);
@@ -267,6 +271,11 @@ void enterDeepSleep(bool fromTimeout = false) {
   APP_STATE.showBootScreen = false;
 
   APP_STATE.saveToFile();
+#if CROSSPOINT_GOLF
+  // Covers both sleep paths (auto-sleep timeout and power-button hold), since
+  // GolfScoringActivity::onExit() must not do SD I/O (CONTRACTS.md §6).
+  if (!flushGolfRoundForSleep()) LOG_ERR("MAIN", "Golf round flush before sleep failed");
+#endif
 
   // Commit to sleeping before goToSleep() runs the outgoing activity's onExit():
   // a WiFi activity would otherwise silentRestart() here and reboot instead.
@@ -524,6 +533,13 @@ void setup() {
   } else if (rebootedFromPanic) {
     // If we rebooted from a panic, go to crash report screen to show the panic info
     activityManager.goToCrashReport();
+#if CROSSPOINT_GOLF
+  } else if (resumeGolfRound(activityManager, renderer, mappedInputManager)) {
+    // An open round in /golf/state.json resumes straight into the scoring
+    // screen at currentHole (CONTRACTS.md §7). A file marked archivedAs is
+    // a completed round: resumeGolfRound() deletes it and returns false,
+    // falling through to ordinary routing below rather than resuming it.
+#endif
   } else if (resume == BootResume::Silent && snapshotTarget == SILENT_REBOOT_TARGET_READER &&
              !APP_STATE.openEpubPath.empty()) {
     activityManager.goToReader(APP_STATE.openEpubPath);

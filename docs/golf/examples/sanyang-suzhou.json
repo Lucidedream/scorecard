@@ -1,0 +1,8 @@
+{
+  "v": 1,
+  "name": "Sanyang Golf & Country Club",
+  "tees": "Blue",
+  "holes": 18,
+  "_TODO": "Replace every 0 below with the real par from the scorecard. Must sum to 72.",
+  "par": [0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0]
+}
