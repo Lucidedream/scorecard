@@ -377,3 +377,75 @@ exactly what the Right button already does — and the hole stays blank on the c
 is the truthful outcome. Do not commit zeros to avoid an empty hole.
 
 Advance uses the same wrap as Right: hole 18 wraps to hole 1.
+
+
+## 11. Trends (M3)
+
+*Added 2026-08-30. Scope corrected: the planned "CSV export" half of M3 is dropped —
+`/golf` is already browsable and downloadable through the existing webserver (`/files`,
+`/download`), only `System Volume Information` and `XTCache` are hidden, and
+`index.csv` is already a CSV. There was nothing to build.*
+
+### Source and bound
+
+Trends read **`index.csv` only**, through the existing `GolfHistoryReader`. No round
+JSON, no new file, no new parser. The reader already streams the most recent 50 rounds
+into a fixed ring buffer, and that same window is the trend window.
+
+Adding no new I/O is the point: every figure below is a fold over data already in RAM
+when History is open.
+
+### The figures
+
+Over the rounds in the window, **18-hole and 9-hole rounds must not be mixed** — a 9-hole
+round would halve every average. Compute over 18-hole rounds; if fewer than two exist,
+say so rather than showing a figure derived from one round.
+
+| Figure | Definition |
+| --- | --- |
+| Rounds | count in the window |
+| Scoring average | mean `strokes` |
+| Average to par | mean `strokes - par`, suppressed when any round in the window has `par == 0` |
+| Best / worst | min and max `strokes` |
+| Putts per round | mean `putts` |
+| Bucket mix | mean `out100`, mean `in100 - putts`, mean `putts`, as counts and as percentages of `strokes` |
+
+Integer arithmetic only, no floating point on the reader path. Averages are shown to
+one decimal place and **rounded symmetrically about zero**:
+
+```cpp
+// Rounds half away from zero. C++ integer division truncates toward zero, so the
+// bias term must follow the sign of the numerator or negative averages round the
+// wrong way.
+int32_t golfTenths(int32_t sum, int32_t n) {
+  return (sum * 10 + (sum >= 0 ? n / 2 : -(n / 2))) / n;
+}
+```
+
+*Corrected 2026-08-30. §11 originally specified `(sum * 10 + n/2) / n`, which is only
+right for non-negative sums. M3 caught it: average-to-par is signed, and for a sum of
+-25 over 10 rounds that formula yields -2.4 for a true -2.5 — a round-toward-zero bias
+that flatters every under-par average. Verified before ruling.*
+
+**Use one shared helper for every average**, signed or not, rather than a signed variant
+beside an unsigned one. Two formulas invite the wrong one being picked later, and the
+figures most likely to be added next — a to-par trend line, a differential — are exactly
+the signed ones.
+
+### Presentation
+
+A **Trends row on Golf home**, below History. One screen, no tabs.
+
+* **Fewer than two 18-hole rounds:** a plain message saying trends need at least two
+  rounds, and how many exist. Not an error, and not an empty table of zeros.
+* **Par-free rounds in the window:** score figures still compute; every to-par figure is
+  suppressed, exactly as §5.2 does for a par-free History row.
+* Show the window size actually used, so "average over 4 rounds" is never mistaken for a
+  lifetime average.
+
+### What this is not
+
+No handicap estimate. It needs a differential against course rating and slope, which no
+course file carries and which the owner has not asked for. Reporting a number that looks
+like a handicap but is not one is the same class of error as the fabricated course data
+in v2.1 — plausible, authoritative-looking, and wrong.

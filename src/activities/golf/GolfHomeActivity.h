@@ -10,12 +10,12 @@ class GolfHomeActivity final : public UiListActivity {
   void onEnter() override;
 
  private:
-  static constexpr uint8_t MAX_ROWS = 3;
+  static constexpr uint8_t MAX_ROWS = 4;
   freeink::ui::ListItem rows[MAX_ROWS]{};
   bool hasOpenRound = false;
   bool stateError = false;
 
-  int listCount() const override { return hasOpenRound ? 3 : 2; }
+  int listCount() const override { return hasOpenRound ? 4 : 3; }
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
   const char* headerTitle() const override;

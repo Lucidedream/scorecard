@@ -9,6 +9,7 @@
 #include "GolfNavigation.h"
 #include "GolfSetupActivity.h"
 #include "GolfStrings.h"
+#include "GolfTrendsActivity.h"
 #include "components/UITheme.h"
 #include "golf/GolfRoundStore.h"
 
@@ -28,6 +29,7 @@ void GolfHomeActivity::onEnter() {
   if (hasOpenRound) rows[row++].label = GolfStrings::RESUME_ROUND;
   rows[row++].label = GolfStrings::NEW_ROUND;
   rows[row++].label = GolfStrings::HISTORY;
+  rows[row++].label = GolfStrings::TRENDS;
   for (uint8_t i = 0; i < row; ++i) rows[i].actionValue = i;
   UiListActivity::onEnter();
 }
@@ -47,12 +49,21 @@ void GolfHomeActivity::activateIndex(const int index) {
     openGolfSetup(activityManager, renderer, mappedInput);
     return;
   }
-  auto history = makeUniqueNoThrow<GolfHistoryActivity>(renderer, mappedInput);
-  if (!history) {
-    LOG_ERR("GOLF", "OOM: history activity");
+  if (logical == 1) {
+    auto history = makeUniqueNoThrow<GolfHistoryActivity>(renderer, mappedInput);
+    if (!history) {
+      LOG_ERR("GOLF", "OOM: history activity");
+      return;
+    }
+    startActivityForResult(std::move(history), nullptr);
     return;
   }
-  startActivityForResult(std::move(history), nullptr);
+  auto trends = makeUniqueNoThrow<GolfTrendsActivity>(renderer, mappedInput);
+  if (!trends) {
+    LOG_ERR("GOLF", "OOM: trends activity");
+    return;
+  }
+  startActivityForResult(std::move(trends), nullptr);
 }
 
 void GolfHomeActivity::buildScreen(UiScreen& screen) {
