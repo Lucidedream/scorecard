@@ -676,42 +676,45 @@ side rocker and does not belong there. Two cells:
 one principle stated twice: a footer cell is a promise about a front button.*
 
 
-## 14. Scorecard at the top of home (v3.2)
+## 14. Scorecard at the top of home (v3.2, revised 2026-08-31)
 
-*Owner request, 2026-08-30: "the current top menu is recent opened book, I need to toggle
-down to select scorecard."*
+*Owner requests: "the current top menu is recent opened book, I need to toggle down to
+select scorecard"; then "the second is the preview of the book. Can we hide that?"*
 
 ### The layout
 
-Scorecard becomes its own row at the **very top** of the home screen, above the recent-book
-cover tile, and is **selected on entry**.
+The golf build uses one contiguous home menu. The recent-book cover tile and individual
+recent-book selector slots are omitted. Scorecard is the first row and is selected on
+entry:
 
 ```
-  [ Scorecard ]        <- own row, selector index 0, selected on entry
-  [ cover tile  ]      <- recent book(s), shifted down
-  [ Browse files ]     <- the rest of the menu, unchanged order
-  [ Recent books ]
-  [ File transfer]
-  [ Settings     ]
+  [ Scorecard     ]    <- selector index 0, selected on entry
+  [ Browse files  ]
+  [ Recent books  ]
+  [ File transfer ]
+  [ Settings      ]
 ```
+
+The optional OPDS row keeps its upstream position after Recent books when servers are
+configured. The stock build keeps its cover preview unchanged.
 
 ### The index mapping
 
-Scorecard leaves the menu list entirely. `getScorecardMenuIndex()` and its interleaving go
-away — the row is no longer *in* the menu, it is above it. The selector becomes:
+Golf home indices map directly to the rendered rows:
 
 | Selector index | Meaning |
 | --- | --- |
 | `0` | Scorecard |
-| `1 .. recentBooks.size()` | recent book at `selectorIndex - 1` |
-| beyond | menu item at `selectorIndex - recentBooks.size() - 1` |
+| `1` and beyond | existing home menu item at `selectorIndex - 1` |
 
-This is simpler than what it replaces: one unconditional offset instead of a
-theme-dependent interleave. **Both `loop()` and `render()` must derive from this one
-mapping** — the earlier off-by-one bugs in this file came from two sites computing the
-same position differently.
+`recentBooks.size()` does not contribute selector slots or `getMenuItemCount()` in the
+golf build. Recent books are still loaded for the Back-button resume shortcut and remain
+available through the Recent books row, but home does not generate cover thumbnails or
+allocate a cover snapshot buffer.
 
-`getMenuItemCount()` still counts Scorecard, so navigation wraps correctly.
+**Both `loop()` and `render()` must use this same direct mapping.** Touch rows begin at
+`homeTopPadding` and match the single rendered menu; there is no separate cover-touch
+region.
 
 ### Selection on entry
 
@@ -724,8 +727,7 @@ changes.
 This restructures upstream's home layout inside `HomeActivity.cpp`, which is a touchpoint.
 The diff there grows and will conflict on future rebases. Accepted deliberately: on this
 device the scorecard is the primary application, and reaching it should not cost a
-keypress every round. Keep the change as contained as possible — shift geometry, do not
-reorganise unrelated drawing.
+keypress every round. Keep the golf branch contained; do not alter the stock home layout.
 
 
 ## 15. Dates, and percentages in trends (v4)
