@@ -44,11 +44,15 @@ void GolfHoleReviewActivity::loop() {
     finish();
     return;
   }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Left) ||
+      mappedInput.wasReleased(MappedInputManager::Button::PageBack)) {
     changeHole(-1);
     return;
   }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) changeHole(1);
+  if (mappedInput.wasReleased(MappedInputManager::Button::Right) ||
+      mappedInput.wasReleased(MappedInputManager::Button::PageForward)) {
+    changeHole(1);
+  }
 }
 
 void GolfHoleReviewActivity::drawHoleBand(const int top) const {
