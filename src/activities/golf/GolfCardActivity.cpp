@@ -6,8 +6,10 @@
 
 #include <cstdio>
 
+#include "GolfReviewFormat.h"
 #include "GolfStrings.h"
 #include "components/UITheme.h"
+#include "fontIds.h"
 #include "golf/GolfPenalty.h"
 #include "golf/GolfRoundStore.h"
 #include "golf/GolfStats.h"
@@ -25,10 +27,6 @@ uint16_t rangeTotal(const GolfRound& round, const uint8_t first, const uint8_t l
       total += round.par[hole];
     } else if (entered(round, hole)) {
       if (row == 2) total += golfHoleScore(round, hole);
-      if (row == 3) total += round.putts[hole];
-      if (row == 4) total += round.in100[hole];
-      if (row == 5) total += round.out100[hole];
-      if (row == 6) total += golfPenaltyStrokesForHole(round, hole);
     }
   }
   return total;
@@ -39,12 +37,6 @@ bool anyEntered(const GolfRound& round, const uint8_t first, const uint8_t last)
     if (entered(round, hole)) return true;
   }
   return false;
-}
-
-void formatPercent(const uint16_t part, const uint16_t whole, char* output, const size_t size) {
-  const uint16_t percent =
-      whole == 0 ? 0 : static_cast<uint16_t>((static_cast<uint32_t>(part) * 100 + whole / 2) / whole);
-  snprintf(output, size, GolfStrings::WHOLE_PERCENT_FORMAT, percent);
 }
 
 }  // namespace
@@ -64,7 +56,7 @@ void GolfCardActivity::screenTrampoline(UiScreen& screen, void* user) {
 }
 
 void GolfCardActivity::tabTrampoline(const fui::ActionEvent& event, void* user) {
-  if (event.value < 0 || event.value > 2) return;
+  if (event.value < 0 || event.value > 1) return;
   auto* self = static_cast<GolfCardActivity*>(user);
   {
     RenderLock lock(*self);
@@ -75,7 +67,7 @@ void GolfCardActivity::tabTrampoline(const fui::ActionEvent& event, void* user) 
 }
 
 void GolfCardActivity::changeTab(const int delta) {
-  const uint8_t count = round.holeCount == 18 ? 3 : 1;
+  const uint8_t count = round.holeCount == 18 ? 2 : 1;
   if (count == 1) return;
   {
     RenderLock lock(*this);
@@ -110,11 +102,10 @@ void GolfCardActivity::buildScreen(UiScreen& screen) {
                                       static_cast<int16_t>(metrics.buttonHintsHeight), 0});
   if (round.holeCount == 18) {
     const fui::TabItem tabs[] = {{GolfStrings::FRONT_NINE, {}, {}, 0, activeTab == 0, true},
-                                 {GolfStrings::BACK_NINE, {}, {}, 1, activeTab == 1, true},
-                                 {GolfStrings::STATS, {}, {}, 2, activeTab == 2, true}};
+                                 {GolfStrings::BACK_NINE, {}, {}, 1, activeTab == 1, true}};
     fui::TabBarProps props;
     props.tabs = tabs;
-    props.count = 3;
+    props.count = 2;
     props.action = ACTION_TAB;
     props.inputMask = fui::InputTouch;
     props.text = screen.theme().smallText;
@@ -122,24 +113,19 @@ void GolfCardActivity::buildScreen(UiScreen& screen) {
     fui::tabBar(screen.frame(), screen.takeTop(static_cast<int16_t>(metrics.tabBarHeight)), props);
     screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
   }
-  if (round.holeCount == 18 && activeTab == 2) {
-    buildStats(screen);
-  } else {
-    const uint8_t first = round.holeCount == 18 && activeTab == 1 ? 9 : 0;
-    buildCard(screen, first,
-              first == 0 && round.holeCount == 18 ? GolfStrings::OUT
-              : first == 9                        ? GolfStrings::IN
-                                                  : nullptr);
-  }
+  const uint8_t first = round.holeCount == 18 && activeTab == 1 ? 9 : 0;
+  buildCard(screen, first,
+            first == 0 && round.holeCount == 18 ? GolfStrings::OUT
+            : first == 9                        ? GolfStrings::IN
+                                                : nullptr);
 }
 
 void GolfCardActivity::buildCard(UiScreen& screen, const uint8_t firstHole, const char* segmentLabel) {
   const bool hasPar = golfHasPar(round);
-  const uint8_t rows = hasPar ? 7 : 6;
+  const uint8_t rows = hasPar ? 3 : 2;
   const uint8_t columns = round.holeCount == 18 ? 12 : 11;
   const uint8_t lastHole = static_cast<uint8_t>(firstHole + 9);
-  const char* labels[] = {GolfStrings::HOLE,       GolfStrings::PAR,         GolfStrings::SCORE,   GolfStrings::PUTTS,
-                          GolfStrings::IN100_CARD, GolfStrings::OUT100_CARD, GolfStrings::PEN_CARD};
+  const char* labels[] = {GolfStrings::HOLE, GolfStrings::PAR, GolfStrings::SCORE};
 
   for (uint8_t displayRow = 0; displayRow < rows; ++displayRow) {
     const uint8_t dataRow = !hasPar && displayRow > 0 ? static_cast<uint8_t>(displayRow + 1) : displayRow;
@@ -150,14 +136,10 @@ void GolfCardActivity::buildCard(UiScreen& screen, const uint8_t firstHole, cons
         snprintf(cells[displayRow][column], sizeof(cells[displayRow][column]), "%u", hole + 1);
       } else if (dataRow == 1) {
         snprintf(cells[displayRow][column], sizeof(cells[displayRow][column]), "%u", round.par[hole]);
-      } else if (!entered(round, hole) || (dataRow == 6 && golfPenaltyStrokesForHole(round, hole) == 0)) {
+      } else if (!entered(round, hole)) {
         snprintf(cells[displayRow][column], sizeof(cells[displayRow][column]), "%s", GolfStrings::DOT);
       } else {
-        const uint16_t value = dataRow == 2   ? golfHoleScore(round, hole)
-                               : dataRow == 3 ? round.putts[hole]
-                               : dataRow == 4 ? round.in100[hole]
-                               : dataRow == 5 ? round.out100[hole]
-                                              : golfPenaltyStrokesForHole(round, hole);
+        const uint16_t value = golfHoleScore(round, hole);
         snprintf(cells[displayRow][column], sizeof(cells[displayRow][column]), "%u", value);
       }
     }
@@ -183,7 +165,12 @@ void GolfCardActivity::buildCard(UiScreen& screen, const uint8_t firstHole, cons
   }
 
   const fui::Rect body = screen.body();
-  const int16_t rowHeight = static_cast<int16_t>(body.height / rows);
+  tableLeft = body.x;
+  tableTop = body.y;
+  tableWidth = body.width;
+  tableColumns = columns;
+  tableFirstHole = firstHole;
+  int16_t y = body.y;
   for (uint8_t row = 0; row < rows; ++row) {
     const char* pointers[MAX_TABLE_COLS]{};
     for (uint8_t column = 0; column < columns; ++column) pointers[column] = cells[row][column];
@@ -191,42 +178,30 @@ void GolfCardActivity::buildCard(UiScreen& screen, const uint8_t firstHole, cons
     props.cells = pointers;
     props.rows = 1;
     props.cols = columns;
+    const bool scoreRow = row == static_cast<uint8_t>(rows - 1);
+    const int16_t rowHeight = row == 0 ? HEADER_ROW_HEIGHT : scoreRow ? SCORE_ROW_HEIGHT : PAR_ROW_HEIGHT;
     props.rowHeight = rowHeight;
     props.padding = 1;
-    props.text = screen.theme().smallText;
+    props.text = scoreRow ? screen.theme().bodyText : screen.theme().smallText;
     props.text.align = fui::TextAlign::Center;
-    props.text.bold = row == 0 || (!hasPar ? row == 1 : row == 2);
+    props.text.bold = row == 0 || scoreRow;
     props.headerRow = row == 0;
-    fui::table(screen.frame(), fui::Rect{body.x, static_cast<int16_t>(body.y + row * rowHeight), body.width, rowHeight},
-               props);
+    fui::table(screen.frame(), fui::Rect{body.x, y, body.width, rowHeight}, props);
+    y = static_cast<int16_t>(y + rowHeight);
   }
 }
 
-void GolfCardActivity::buildStats(UiScreen& screen) {
-  const char* labels[] = {GolfStrings::LONG_GAME, GolfStrings::SHORT_GAME, GolfStrings::PUTTING,
-                          GolfStrings::PENALTIES, GolfStrings::ONE_PUTTS,  GolfStrings::THREE_PUTTS};
-  const uint16_t values[] = {golfLongTotal(round),  golfShortTotal(round),
-                             golfPuttsTotal(round), golfPenaltyStrokesForRound(round),
-                             golfOnePutts(round),   golfThreePutts(round)};
-  const uint16_t score = golfScore(round);
-  const fui::Rect body = screen.body();
-  const int16_t rowHeight = static_cast<int16_t>(body.height / 6);
-  for (uint8_t row = 0; row < 6; ++row) {
-    snprintf(cells[row][0], sizeof(cells[row][0]), "%s", labels[row]);
-    snprintf(cells[row][1], sizeof(cells[row][1]), "%u", values[row]);
-    cells[row][2][0] = '\0';
-    if (row < 4) formatPercent(values[row], score, cells[row][2], sizeof(cells[row][2]));
-    const char* pointers[] = {cells[row][0], cells[row][1], cells[row][2]};
-    fui::TableProps props;
-    props.cells = pointers;
-    props.rows = 1;
-    props.cols = 3;
-    props.rowHeight = rowHeight;
-    props.text = screen.theme().bodyText;
-    props.text.align = fui::TextAlign::Center;
-    props.text.bold = row < 4;
-    fui::table(screen.frame(), fui::Rect{body.x, static_cast<int16_t>(body.y + row * rowHeight), body.width, rowHeight},
-               props);
+void GolfCardActivity::drawPenaltySuperscripts() const {
+  if (tableColumns == 0) return;
+  const bool hasPar = golfHasPar(round);
+  const int16_t scoreTop = static_cast<int16_t>(tableTop + HEADER_ROW_HEIGHT + (hasPar ? PAR_ROW_HEIGHT : 0));
+  const int16_t cellWidth = static_cast<int16_t>(tableWidth / tableColumns);
+  for (uint8_t offset = 0; offset < 9 && tableFirstHole + offset < round.holeCount; ++offset) {
+    const uint8_t hole = static_cast<uint8_t>(tableFirstHole + offset);
+    if (round.penaltyCount[hole] == 0 || !entered(round, hole)) continue;
+    const char* marker = golfObsForHole(round, hole) > 0 ? GolfStrings::O_TAG : GolfStrings::HAZARD_TAG;
+    const int16_t center = static_cast<int16_t>(tableLeft + (offset + 1) * cellWidth + cellWidth / 2);
+    renderer.drawText(SMALL_FONT_ID, center + 5, scoreTop + 5, marker, true, EpdFontFamily::BOLD);
   }
 }
 
@@ -239,9 +214,12 @@ void GolfCardActivity::drawFooter() const {
 void GolfCardActivity::render(RenderLock&&) {
   renderer.clearScreen();
   const auto& metrics = UITheme::getInstance().getMetrics();
+  char status[20];
+  golfFormatRoundStatus(round, status, sizeof(status));
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, renderer.getScreenWidth(), metrics.headerHeight},
-                 GolfStrings::VIEW_CARD, archived ? round.courseName : nullptr);
+                 GolfStrings::SCORECARD, status);
   renderUi();
+  drawPenaltySuperscripts();
   drawFooter();
   renderer.displayBuffer(firstPaint ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
   firstPaint = false;

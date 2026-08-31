@@ -12,6 +12,7 @@
 #include <cstring>
 
 #include "CrossPointSettings.h"
+#include "GolfLargeNumber.h"
 #include "GolfNavigation.h"
 #include "GolfRoundMenuActivity.h"
 #include "GolfStrings.h"
@@ -60,52 +61,6 @@ constexpr int SHEET_TEXT_X = 92;     // title / subtitle left edge
 // A Confirm hold this long opens the picker when Confirm is the field-cycle
 // button (i.e. Power cannot cycle, §12.6).
 constexpr unsigned long PICKER_LONGPRESS_MS = 500;
-
-uint8_t segmentMask(const uint8_t digit) {
-  static constexpr uint8_t MASKS[] = {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F};
-  return digit < 10 ? MASKS[digit] : 0;
-}
-
-void drawSegment(const GfxRenderer& renderer, const int x, const int y, const int width, const int height,
-                 const bool ink, const bool outline) {
-  if (outline) {
-    renderer.drawRect(x, y, width, height, 2, ink);
-  } else {
-    renderer.fillRect(x, y, width, height, ink);
-  }
-}
-
-void drawDigit(const GfxRenderer& renderer, const int x, const int y, const int height, const uint8_t digit,
-               const bool ink, const bool outline) {
-  const int thickness = height / 10;
-  const int width = height * 11 / 20;
-  const int half = height / 2;
-  const uint8_t mask = segmentMask(digit);
-  if (mask & 0x01) drawSegment(renderer, x + thickness, y, width - thickness * 2, thickness, ink, outline);
-  if (mask & 0x02)
-    drawSegment(renderer, x + width - thickness, y + thickness, thickness, half - thickness, ink, outline);
-  if (mask & 0x04) drawSegment(renderer, x + width - thickness, y + half, thickness, half - thickness, ink, outline);
-  if (mask & 0x08)
-    drawSegment(renderer, x + thickness, y + height - thickness, width - thickness * 2, thickness, ink, outline);
-  if (mask & 0x10) drawSegment(renderer, x, y + half, thickness, half - thickness, ink, outline);
-  if (mask & 0x20) drawSegment(renderer, x, y + thickness, thickness, half - thickness, ink, outline);
-  if (mask & 0x40)
-    drawSegment(renderer, x + thickness, y + half - thickness / 2, width - thickness * 2, thickness, ink, outline);
-}
-
-void drawNumber(const GfxRenderer& renderer, const int centerX, const int y, const int height, const uint8_t value,
-                const bool ink, const bool outline) {
-  const int digitWidth = height * 11 / 20;
-  const int gap = height / 10;
-  const bool twoDigits = value >= 10;
-  const int totalWidth = twoDigits ? digitWidth * 2 + gap : digitWidth;
-  int x = centerX - totalWidth / 2;
-  if (twoDigits) {
-    drawDigit(renderer, x, y, height, value / 10, ink, outline);
-    x += digitWidth + gap;
-  }
-  drawDigit(renderer, x, y, height, value % 10, ink, outline);
-}
 
 void formatToPar(const int16_t value, char* output, const size_t size) {
   if (value == 0) {
@@ -433,7 +388,7 @@ void GolfScoringActivity::drawHoleBand() const {
   const GolfRound& round = GOLF_ROUND_STORE.getRound();
   const uint8_t hole = round.currentHole;
   renderer.drawText(UI_10_FONT_ID, 18, 61, GolfStrings::HOLE, true, EpdFontFamily::BOLD);
-  drawNumber(renderer, 125, 82, 58, hole + 1, true, false);
+  golfDrawLargeNumber(renderer, 125, 82, 58, hole + 1);
   char text[24];
   if (round.par[hole] != 0) {
     snprintf(text, sizeof(text), "%s %u", GolfStrings::PAR, round.par[hole]);
@@ -539,8 +494,8 @@ void GolfScoringActivity::drawCounters() const {
                         carryNotice, !inverse, EpdFontFamily::BOLD);
     }
     const int digitHeight = focused ? 100 : 66;
-    drawNumber(renderer, screenWidth / 2, top + (height - digitHeight) / 2 + 12, digitHeight, values[index], !inverse,
-               preseed);
+    golfDrawLargeNumber(renderer, screenWidth / 2, top + (height - digitHeight) / 2 + 12, digitHeight, values[index],
+                        !inverse, preseed);
 
     // Markers for this field, right of the number, in the order they happened.
     char markers[48];

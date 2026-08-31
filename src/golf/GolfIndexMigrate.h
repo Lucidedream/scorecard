@@ -22,6 +22,9 @@ using GolfIndexMigrateSink = bool (*)(const char* data, size_t size, void* user)
 class GolfIndexMigrator {
  public:
   void reset();
+  // Rewrites either recognised index version as v3 while omitting exactly one
+  // row whose file column matches `filename`.
+  bool resetForDelete(const char* filename);
   bool feed(const char* data, size_t size, GolfIndexMigrateSink sink, void* user);
   bool finish();
 
@@ -30,15 +33,22 @@ class GolfIndexMigrator {
   bool needsMigration() const { return sourceVersion_ == GolfIndexVersion::V2; }
   // Data rows that parsed: rows emitted in v2 mode, rows counted in v3 mode.
   uint32_t dataRows() const { return dataRows_; }
+  uint32_t outputRows() const { return outputRows_; }
+  uint8_t deletedRows() const { return deletedRows_; }
   bool aborted() const { return aborted_; }
 
  private:
   char line_[GOLF_CSV_ROW_BUFFER_SIZE]{};
   uint32_t lineNumber_ = 1;
   uint32_t dataRows_ = 0;
+  uint32_t outputRows_ = 0;
   uint16_t lineLength_ = 0;
   bool lineOverflow_ = false;
   bool aborted_ = false;
+  bool deleting_ = false;
+  uint8_t deletedRows_ = 0;
+  // Borrowed only for the synchronous feed/finish operation; no heap or copy.
+  const char* deleteFilename_ = nullptr;
   GolfIndexVersion sourceVersion_ = GolfIndexVersion::Unknown;
 
   bool acceptLine(GolfIndexMigrateSink sink, void* user);

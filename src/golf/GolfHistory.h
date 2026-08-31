@@ -9,6 +9,7 @@ inline constexpr uint8_t GOLF_HISTORY_CAPACITY = 50;
 
 struct GolfHistoryEntry {
   char course[40];
+  uint16_t dateYmd;
   uint16_t strokes;
   uint16_t par;
   uint16_t putts;

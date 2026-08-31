@@ -60,6 +60,8 @@ void GolfHistoryReader::acceptLine(const GolfHistoryMalformedCallback malformedC
 
   GolfHistoryEntry& entry = entries[nextEntry];
   memcpy(entry.course, parsed.course, sizeof(entry.course));
+  entry.dateYmd = 0;
+  golfParseDate(parsed.date, entry.dateYmd);
   entry.strokes = parsed.strokes;
   entry.par = parsed.par;
   entry.putts = parsed.putts;

@@ -18,11 +18,10 @@ struct GolfTrendStats {
   uint32_t longPercentTenths = 0;
   uint32_t shortPercentTenths = 0;
   uint32_t puttingPercentTenths = 0;
+  uint32_t penaltyPercentTenths = 0;
 
-  // Penalty figures fold over the 18-hole rounds that actually recorded penalty
-  // data. Rounds played before penalty tracking carry no data and are excluded,
-  // never counted as a clean (zero-penalty) round — the same suppression the
-  // par figures apply when a round has no par.
+  // The complete four-bucket mix folds over the 18-hole rounds that actually
+  // recorded penalty data. Older rounds are excluded from every mix bucket.
   uint8_t penaltyRounds = 0;
   bool showsPenalties = false;
   uint32_t hazardsAverageTenths = 0;
@@ -30,6 +29,7 @@ struct GolfTrendStats {
   uint32_t penaltyStrokesAverageTenths = 0;
 
   bool enoughRounds() const { return rounds >= 2; }
+  bool enoughMixRounds() const { return penaltyRounds >= 2; }
 };
 
 GolfTrendStats golfCalculateTrends(const GolfHistoryReader& history);

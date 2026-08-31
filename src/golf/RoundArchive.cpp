@@ -7,8 +7,11 @@
 
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 
+#include "CrossPointSettings.h"
 #include "GolfCsv.h"
+#include "GolfHistory.h"
 #include "GolfIndexMigrate.h"
 #include "GolfPaths.h"
 #include "GolfPenalty.h"
@@ -42,6 +45,58 @@ bool runMigrator(const char* path, GolfIndexMigrator& migrator, GolfIndexMigrate
     if (!migrator.feed(chunk, static_cast<size_t>(bytesRead), sink, sinkUser)) break;
   }
   migrator.finish();
+  return true;
+}
+
+bool historyRowCount(const char* path, uint32_t& rows) {
+  // GolfHistoryReader owns the 50-row ring (~3 KB). A fixed BSS instance keeps
+  // it off the small task stack and introduces no heap allocation/fragmentation.
+  static GolfHistoryReader reader;
+  reader.reset();
+  HalFile file;
+  if (!Storage.openFileForRead("GOLF", path, file)) return false;
+  char chunk[128];
+  while (file.available() > 0) {
+    const int bytesRead = file.read(chunk, sizeof(chunk));
+    if (bytesRead <= 0) return false;
+    reader.feed(chunk, static_cast<size_t>(bytesRead));
+  }
+  reader.finish();
+  rows = reader.totalValidRows();
+  return true;
+}
+
+bool commitStagedIndex(const uint32_t expectedRows, const char* operation) {
+  GolfIndexMigrator verifier;
+  verifier.reset();
+  uint32_t historyRows = 0;
+  const bool validHeader =
+      runMigrator(INDEX_NEW_PATH, verifier, nullptr, nullptr) && verifier.sourceVersion() == GolfIndexVersion::V3;
+  const bool validRows = historyRowCount(INDEX_NEW_PATH, historyRows) && historyRows == expectedRows;
+  if (!validHeader || !validRows) {
+    Storage.remove(INDEX_NEW_PATH);
+    LOG_ERR("GOLF", "index.csv %s: verify failed (rows %lu vs %lu); left unchanged", operation,
+            static_cast<unsigned long>(historyRows), static_cast<unsigned long>(expectedRows));
+    return false;
+  }
+
+  if (Storage.exists(INDEX_BAK_PATH)) Storage.remove(INDEX_BAK_PATH);
+  if (!Storage.rename(INDEX_PATH, INDEX_BAK_PATH)) {
+    Storage.remove(INDEX_NEW_PATH);
+    LOG_ERR("GOLF", "index.csv %s: could not set aside original; left unchanged", operation);
+    return false;
+  }
+  if (!Storage.rename(INDEX_NEW_PATH, INDEX_PATH)) {
+    LOG_ERR("GOLF", "index.csv %s: swap failed; restoring original", operation);
+    if (!Storage.rename(INDEX_BAK_PATH, INDEX_PATH)) {
+      LOG_ERR("GOLF", "index.csv %s: original preserved as %s", operation, INDEX_BAK_PATH);
+    }
+    Storage.remove(INDEX_NEW_PATH);
+    return false;
+  }
+  if (!Storage.remove(INDEX_BAK_PATH)) {
+    LOG_ERR("GOLF", "index.csv %s succeeded; stale %s left behind", operation, INDEX_BAK_PATH);
+  }
   return true;
 }
 
@@ -93,37 +148,37 @@ bool migrateIndexToV3IfNeeded() {
     return true;  // already v3, or a header we do not recognise -> nothing to do
   }
 
-  // Verify the staged file with the same parser History reads it with, and only
-  // proceed if it holds the v3 header and exactly the rows the rewrite emitted.
+  // Verify and swap through the shared staged-rewrite path also used by delete.
   const uint32_t expectedRows = migrator.dataRows();
-  migrator.reset();
-  const bool verifyOk = runMigrator(INDEX_NEW_PATH, migrator, nullptr, nullptr);
-  if (!verifyOk || migrator.sourceVersion() != GolfIndexVersion::V3 || migrator.dataRows() != expectedRows) {
-    Storage.remove(INDEX_NEW_PATH);
-    LOG_ERR("GOLF", "index.csv migration: verify failed (rows %lu vs %lu); %s left unchanged",
-            static_cast<unsigned long>(migrator.dataRows()), static_cast<unsigned long>(expectedRows), INDEX_PATH);
+  if (!commitStagedIndex(expectedRows, "migration")) return false;
+  LOG_INF("GOLF", "index.csv migrated to v3 (%lu rows)", static_cast<unsigned long>(expectedRows));
+  return true;
+}
+
+bool rewriteIndexWithout(const char* filename) {
+  if (!Storage.exists(INDEX_PATH)) return false;
+  if (Storage.exists(INDEX_NEW_PATH) && !Storage.remove(INDEX_NEW_PATH)) return false;
+  HalFile staged = Storage.open(INDEX_NEW_PATH, O_WRONLY | O_CREAT | O_TRUNC);
+  if (!staged) {
+    LOG_ERR("GOLF", "index.csv delete: cannot create staging file; left unchanged");
     return false;
   }
 
-  if (Storage.exists(INDEX_BAK_PATH)) Storage.remove(INDEX_BAK_PATH);
-  if (!Storage.rename(INDEX_PATH, INDEX_BAK_PATH)) {
-    Storage.remove(INDEX_NEW_PATH);
-    LOG_ERR("GOLF", "index.csv migration: could not set aside %s; left unchanged", INDEX_PATH);
-    return false;
-  }
-  if (!Storage.rename(INDEX_NEW_PATH, INDEX_PATH)) {
-    LOG_ERR("GOLF", "index.csv migration: swap failed; restoring original");
-    if (!Storage.rename(INDEX_BAK_PATH, INDEX_PATH)) {
-      LOG_ERR("GOLF", "index.csv migration: original preserved as %s", INDEX_BAK_PATH);
-    }
+  GolfIndexMigrator rewrite;
+  if (!rewrite.resetForDelete(filename)) {
+    staged.close();
     Storage.remove(INDEX_NEW_PATH);
     return false;
   }
-  if (!Storage.remove(INDEX_BAK_PATH)) {
-    LOG_ERR("GOLF", "index.csv migration: succeeded; stale %s left behind", INDEX_BAK_PATH);
+  const bool readOk = runMigrator(INDEX_PATH, rewrite, &migrateSink, &staged);
+  staged.flush();
+  staged.close();
+  if (!readOk || rewrite.aborted() || rewrite.deletedRows() != 1) {
+    Storage.remove(INDEX_NEW_PATH);
+    LOG_ERR("GOLF", "index.csv delete: rewrite failed or matched %u rows; left unchanged", rewrite.deletedRows());
+    return false;
   }
-  LOG_INF("GOLF", "index.csv migrated to v3 (%lu rows)", static_cast<unsigned long>(expectedRows));
-  return true;
+  return commitStagedIndex(rewrite.outputRows(), "delete");
 }
 
 bool writeJsonString(HalFile& file, const char* value) {
@@ -320,6 +375,9 @@ bool RoundArchive::archive(const GolfRound& source) {
     return GOLF_ROUND_STORE.clear();
   }
   GolfRound round = source;
+  round.dateYmd = 0;
+  const int16_t utcOffsetMinutes = static_cast<int16_t>(static_cast<int16_t>(SETTINGS.clockUtcOffsetQ) - 48) * 15;
+  golfDateFromTimestamp(static_cast<int64_t>(time(nullptr)), utcOffsetMinutes, round.dateYmd);
   const GolfValidationResult validation = validateGolfRound(round);
   if (!validation.valid) {
     LOG_ERR("GOLF", "Refused to archive unsupported hole count %u", round.holeCount);
@@ -370,6 +428,21 @@ bool RoundArchive::archive(const GolfRound& source) {
     return false;
   }
   return GOLF_ROUND_STORE.clear();
+}
+
+bool RoundArchive::remove(const char* filename) {
+  if (filename == nullptr || filename[0] == '\0' || strchr(filename, '/') != nullptr ||
+      !rewriteIndexWithout(filename)) {
+    return false;
+  }
+  char path[sizeof(ROUNDS_DIRECTORY) + GOLF_ROUND_FILENAME_BUFFER_SIZE + 1];
+  snprintf(path, sizeof(path), "%s/%s", ROUNDS_DIRECTORY, filename);
+  if (Storage.exists(path) && !Storage.remove(path)) {
+    // The visible record is already gone. Leaving an unreferenced JSON is safer
+    // than attempting to put the index row back through another rewrite.
+    LOG_ERR("GOLF", "Round removed from History but orphan file remains: %s", path);
+  }
+  return true;
 }
 
 #endif

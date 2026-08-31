@@ -43,6 +43,7 @@
 
 #if CROSSPOINT_GOLF
 #include "activities/golf/GolfNavigation.h"
+#include "golf/GolfClock.h"
 #endif
 
 GfxRenderer renderer(display);
@@ -586,6 +587,10 @@ void loop() {
   static unsigned long maxLoopDuration = 0;
   const unsigned long loopStartTime = millis();
   static unsigned long lastMemPrint = 0;
+
+#if CROSSPOINT_GOLF
+  golfSystemClockWifiTick(WiFi.status() == WL_CONNECTED);
+#endif
 
   gpio.setSharedConfirmPowerShortPressEmitsPower(SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
   mappedInputManager.update();

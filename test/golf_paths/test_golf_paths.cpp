@@ -50,6 +50,20 @@ TEST(GolfPaths, RejectsInvalidDates) {
   EXPECT_TRUE(golfParseDate("2028-02-29", date));
 }
 
+TEST(GolfPaths, TimestampBefore2020HasNoDate) {
+  uint16_t date = 0x1234;
+  EXPECT_FALSE(golfDateFromTimestamp(1577836799, 0, date));
+  EXPECT_EQ(date, 0x1234);
+}
+
+TEST(GolfPaths, ValidTimestampProducesLocalDate) {
+  uint16_t date = 0;
+  ASSERT_TRUE(golfDateFromTimestamp(1788134400, 8 * 60, date));  // 2026-08-31 08:00 in Shanghai
+  char formatted[GOLF_DATE_BUFFER_SIZE];
+  ASSERT_TRUE(golfFormatDate(date, formatted, sizeof(formatted)));
+  EXPECT_STREQ(formatted, "2026-08-31");
+}
+
 TEST(GolfArchiveMarker, StateWithoutMarkerIsNotArchived) {
   const GolfArchiveMarker marker{};
   EXPECT_FALSE(isGolfArchiveMarked(marker));

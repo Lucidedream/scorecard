@@ -1,0 +1,1445 @@
+<title>X4 Scorecard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Libre+Franklin:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+/* ============================================================
+   Tokens — light is the base, defined on bare :root so the
+   un-stamped (system-default) document always resolves.
+   ============================================================ */
+:root {
+  --paper:      #F1F4F1;
+  --card:       #FBFCFA;
+  --ink:        #13181A;
+  --ink-2:      #4C5654;
+  --ink-3:      #737E7A;
+  --rule:       #D2D9D2;
+  --rule-soft:  #E3E8E2;
+  --accent:     #1E5C3E;
+  --accent-ink: #123A28;
+  --accent-wash:#E2ECE4;
+  --flag:       #A93826;
+  --flag-wash:  #F4E4E0;
+  --panel-bg:   #FFFFFF;
+  --panel-ink:  #000000;
+  --panel-edge: #98A29C;
+
+  --measure: 68ch;
+  --gutter: 13rem;
+
+  --step--1: clamp(0.78rem, 0.76rem + 0.10vw, 0.84rem);
+  --step-0:  clamp(1.00rem, 0.97rem + 0.14vw, 1.08rem);
+  --step-1:  clamp(1.22rem, 1.15rem + 0.32vw, 1.42rem);
+  --step-2:  clamp(1.55rem, 1.40rem + 0.68vw, 2.05rem);
+  --step-3:  clamp(2.05rem, 1.72rem + 1.55vw, 3.30rem);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:      #0F1412;
+    --card:       #161C19;
+    --ink:        #E6EBE6;
+    --ink-2:      #A3AEA8;
+    --ink-3:      #7B8681;
+    --rule:       #29322D;
+    --rule-soft:  #1E2622;
+    --accent:     #6FC08D;
+    --accent-ink: #A5DCB9;
+    --accent-wash:#17251D;
+    --flag:       #E1745F;
+    --flag-wash:  #2A1A16;
+    --panel-bg:   #E9EBE7;
+    --panel-ink:  #0B0E0C;
+    --panel-edge: #3A433D;
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper:      #0F1412;
+  --card:       #161C19;
+  --ink:        #E6EBE6;
+  --ink-2:      #A3AEA8;
+  --ink-3:      #7B8681;
+  --rule:       #29322D;
+  --rule-soft:  #1E2622;
+  --accent:     #6FC08D;
+  --accent-ink: #A5DCB9;
+  --accent-wash:#17251D;
+  --flag:       #E1745F;
+  --flag-wash:  #2A1A16;
+  --panel-bg:   #E9EBE7;
+  --panel-ink:  #0B0E0C;
+  --panel-edge: #3A433D;
+}
+
+/* ============================================================
+   Base
+   ============================================================ */
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "Libre Franklin", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: var(--step-0);
+  line-height: 1.62;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 {
+  font-family: Archivo, "Libre Franklin", system-ui, sans-serif;
+  text-wrap: balance;
+  margin: 0;
+  line-height: 1.14;
+  letter-spacing: -0.014em;
+}
+
+p { margin: 0; }
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+code, kbd, pre, .mono, .num {
+  font-family: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   Page shell — measured column with a left reference rail
+   ============================================================ */
+.wrap {
+  max-width: 78rem;
+  margin: 0 auto;
+  padding: 0 clamp(1.15rem, 4vw, 3rem);
+}
+
+.masthead {
+  padding: clamp(3rem, 8vw, 6rem) 0 clamp(2rem, 4vw, 3rem);
+  border-bottom: 2px solid var(--ink);
+}
+
+.eyebrow {
+  font-family: Archivo, system-ui, sans-serif;
+  font-size: var(--step--1);
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 1.15rem;
+}
+
+.masthead h1 {
+  font-size: var(--step-3);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  max-width: 18ch;
+}
+
+.standfirst {
+  margin-top: 1.4rem;
+  max-width: 60ch;
+  font-size: var(--step-1);
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+.meta-strip {
+  margin-top: 2.4rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 2.5rem;
+  row-gap: 1.1rem;
+  font-size: var(--step--1);
+}
+.meta-strip div { display: flex; flex-direction: column; gap: 0.2rem; }
+.meta-strip dt,
+.meta-strip .k {
+  font-family: Archivo, system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  font-size: 0.72rem;
+}
+.meta-strip .v { font-weight: 500; color: var(--ink); }
+
+/* Section = rail + body */
+section.doc {
+  display: grid;
+  grid-template-columns: var(--gutter) minmax(0, 1fr);
+  gap: 0 3rem;
+  padding: clamp(2.6rem, 6vw, 4.4rem) 0;
+  border-bottom: 1px solid var(--rule);
+}
+section.doc:last-of-type { border-bottom: 0; }
+
+.rail { position: sticky; top: 1.5rem; align-self: start; }
+.rail .idx {
+  font-family: Archivo, system-ui, sans-serif;
+  font-size: var(--step--1);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  display: block;
+  margin-bottom: 0.5rem;
+}
+.rail .label {
+  font-size: var(--step--1);
+  color: var(--ink-3);
+  line-height: 1.4;
+  max-width: 15ch;
+}
+
+.body > * + * { margin-top: 1.35rem; }
+.body h2 {
+  font-size: var(--step-2);
+  font-weight: 700;
+  max-width: 24ch;
+}
+.body h3 {
+  font-size: var(--step-1);
+  font-weight: 600;
+  margin-top: 2.6rem;
+}
+.body h4 {
+  font-family: Archivo, system-ui, sans-serif;
+  font-size: var(--step--1);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-top: 2rem;
+}
+.body p, .body li { max-width: var(--measure); }
+.body ul, .body ol { margin: 0; padding-left: 1.25rem; }
+.body li + li { margin-top: 0.5rem; }
+.body li::marker { color: var(--ink-3); }
+strong { font-weight: 600; }
+
+@media (max-width: 860px) {
+  section.doc { grid-template-columns: minmax(0, 1fr); gap: 1.2rem; }
+  .rail { position: static; display: flex; align-items: baseline; gap: 0.85rem; }
+  .rail .idx { margin-bottom: 0; }
+  .rail .label { max-width: none; }
+}
+
+/* ============================================================
+   Components
+   ============================================================ */
+.callout {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-wash);
+  padding: 1.05rem 1.3rem;
+  max-width: var(--measure);
+  font-size: 0.96rem;
+}
+.callout.warn { border-left-color: var(--flag); background: var(--flag-wash); }
+.callout h4 { margin-top: 0; color: var(--ink-2); }
+.callout > * + * { margin-top: 0.6rem; }
+
+.scroller { overflow-x: auto; max-width: 100%; padding-bottom: 0.4rem; }
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 34rem;
+  font-size: 0.93rem;
+}
+caption {
+  caption-side: top;
+  text-align: left;
+  font-family: Archivo, system-ui, sans-serif;
+  font-size: var(--step--1);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  padding-bottom: 0.7rem;
+}
+th, td {
+  text-align: left;
+  padding: 0.6rem 1rem 0.6rem 0;
+  border-bottom: 1px solid var(--rule-soft);
+  vertical-align: top;
+}
+thead th {
+  font-family: Archivo, system-ui, sans-serif;
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  border-bottom: 1px solid var(--rule);
+  white-space: nowrap;
+}
+tbody tr:last-child td { border-bottom: 0; }
+td.num, th.num { font-family: "JetBrains Mono", monospace; font-variant-numeric: tabular-nums; }
+
+kbd {
+  display: inline-block;
+  border: 1px solid var(--rule);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  background: var(--card);
+  padding: 0.05em 0.42em;
+  font-size: 0.8em;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+pre {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  padding: 1rem 1.15rem;
+  overflow-x: auto;
+  font-size: 0.82rem;
+  line-height: 1.62;
+  margin: 0;
+}
+pre code { background: none; padding: 0; border: 0; font-size: inherit; }
+:not(pre) > code {
+  background: var(--rule-soft);
+  padding: 0.1em 0.36em;
+  font-size: 0.86em;
+  border-radius: 2px;
+}
+
+.tag {
+  display: inline-block;
+  font-family: Archivo, system-ui, sans-serif;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 0.18em 0.5em;
+  border: 1px solid currentColor;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.tag.go   { color: var(--accent); }
+.tag.stop { color: var(--flag); }
+
+/* ---- Bucket model diagram ---- */
+.buckets { max-width: var(--measure); }
+.bucket-bar {
+  display: grid;
+  grid-template-columns: 5fr 2fr 3fr;
+  border: 1px solid var(--ink);
+  font-family: Archivo, system-ui, sans-serif;
+  overflow: hidden;
+}
+.bucket-bar > div {
+  padding: 0.85rem 0.9rem;
+  border-right: 1px solid var(--ink);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.bucket-bar > div:last-child { border-right: 0; }
+.bucket-bar .b-long { background: var(--ink); color: var(--paper); }
+.bucket-bar .b-short { background: var(--accent-wash); color: var(--accent-ink); }
+.bucket-bar .b-putt { background: var(--card); color: var(--ink-2); }
+.bucket-note {
+  display: grid;
+  grid-template-columns: 5fr 2fr 3fr;
+  font-size: 0.78rem;
+  color: var(--ink-3);
+  margin-top: 0.5rem;
+}
+.bucket-note > div { padding-right: 0.9rem; }
+@media (max-width: 620px) {
+  .bucket-bar, .bucket-note { grid-template-columns: 1fr; }
+  .bucket-bar > div { border-right: 0; border-bottom: 1px solid var(--ink); }
+  .bucket-bar > div:last-child { border-bottom: 0; }
+}
+
+/* ---- Device mockups: strict 1-bit, 480x800 at 1:1 ---- */
+.mockrow {
+  display: flex;
+  gap: 2rem;
+  align-items: flex-start;
+  overflow-x: auto;
+  padding-bottom: 0.6rem;
+}
+figure { margin: 0; }
+figcaption {
+  margin-top: 0.85rem;
+  font-size: var(--step--1);
+  color: var(--ink-3);
+  max-width: 30rem;
+}
+figcaption b {
+  display: block;
+  font-family: Archivo, system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  color: var(--ink-2);
+  margin-bottom: 0.3rem;
+}
+
+.panel {
+  width: 480px;
+  height: 800px;
+  flex: none;
+  background: var(--panel-bg);
+  color: var(--panel-ink);
+  border: 1px solid var(--panel-edge);
+  display: flex;
+  flex-direction: column;
+  font-family: Archivo, system-ui, sans-serif;
+  overflow: hidden;
+}
+.panel * { border-color: var(--panel-ink); }
+
+.p-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 16px;
+  height: 46px;
+  border-bottom: 2px solid var(--panel-ink);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.p-status .right { display: flex; gap: 14px; align-items: center; font-variant-numeric: tabular-nums; }
+
+.p-hole {
+  padding: 16px 18px 14px;
+  border-bottom: 1px solid var(--panel-ink);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+.p-hole .h-l .lab {
+  font-size: 12px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase;
+}
+.p-hole .h-l .big {
+  font-size: 52px; font-weight: 700; line-height: 1; letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.p-hole .h-r { text-align: right; font-size: 15px; font-weight: 500; line-height: 1.5; font-variant-numeric: tabular-nums; }
+.p-hole .h-r b { font-weight: 700; }
+
+.p-field {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 18px;
+  height: 118px;
+  border-bottom: 1px solid var(--panel-ink);
+}
+.p-field.focus {
+  background: var(--panel-ink);
+  color: var(--panel-bg);
+  height: 150px;
+}
+.p-field .cue {
+  width: 20px; font-size: 22px; font-weight: 700; line-height: 1;
+}
+.p-field .name {
+  flex: 1;
+  font-size: 15px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase;
+}
+.p-field .val {
+  font-size: 58px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums;
+  min-width: 68px; text-align: right;
+}
+.p-field.focus .val { font-size: 88px; }
+.p-field .val.ghost { opacity: 0.42; }
+.p-field .toPar {
+  font-size: 17px; font-weight: 600; width: 40px; text-align: right; font-variant-numeric: tabular-nums;
+}
+
+.p-totals {
+  display: flex;
+  border-bottom: 2px solid var(--panel-ink);
+}
+.p-totals div {
+  flex: 1;
+  padding: 12px 14px;
+  border-right: 1px solid var(--panel-ink);
+}
+.p-totals div:last-child { border-right: 0; }
+.p-totals .k { font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; }
+.p-totals .v { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
+
+.p-strip { padding: 12px 14px; border-bottom: 1px solid var(--panel-ink); }
+.p-strip table { min-width: 0; width: 100%; font-family: Archivo, sans-serif; font-size: 14px; }
+.p-strip th, .p-strip td {
+  border: 0; padding: 3px 0; text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.p-strip th { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; color: inherit; opacity: 0.62; text-transform: none; }
+.p-strip td { font-size: 17px; font-weight: 600; }
+.p-strip td.now { background: var(--panel-ink); color: var(--panel-bg); }
+.p-strip td.none { opacity: 0.4; }
+
+.p-foot {
+  margin-top: auto;
+  display: flex;
+  border-top: 2px solid var(--panel-ink);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+.p-foot div {
+  flex: 1; text-align: center; padding: 13px 4px; border-right: 1px solid var(--panel-ink);
+}
+.p-foot div:last-child { border-right: 0; }
+
+/* card screen */
+.p-card { padding: 10px 12px; flex: 1; }
+.p-card table { min-width: 0; width: 100%; font-family: Archivo, sans-serif; }
+.p-card th, .p-card td {
+  border: 0; border-bottom: 1px solid var(--panel-ink);
+  padding: 7px 2px; text-align: center; font-size: 15px; font-variant-numeric: tabular-nums;
+  color: inherit;
+}
+.p-card th {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  border-bottom: 2px solid var(--panel-ink); color: inherit;
+}
+.p-card td.lbl, .p-card th.lbl {
+  text-align: left; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+  width: 74px;
+}
+.p-card tr.tot td { font-weight: 700; border-bottom: 2px solid var(--panel-ink); }
+.p-card td.out { font-weight: 700; }
+.p-tabs { display: flex; border-bottom: 2px solid var(--panel-ink); }
+.p-tabs div {
+  flex: 1; text-align: center; padding: 11px 0; font-size: 13px; font-weight: 600;
+  letter-spacing: 0.12em; text-transform: uppercase; border-right: 1px solid var(--panel-ink);
+}
+.p-tabs div:last-child { border-right: 0; }
+.p-tabs div.on { background: var(--panel-ink); color: var(--panel-bg); }
+.p-sum { display: grid; grid-template-columns: 1fr 1fr; border-top: 2px solid var(--panel-ink); }
+.p-sum div { padding: 12px 14px; border-right: 1px solid var(--panel-ink); border-bottom: 1px solid var(--panel-ink); }
+.p-sum div:nth-child(2n) { border-right: 0; }
+.p-sum .k { font-size: 11px; font-weight: 600; letter-spacing: 0.13em; text-transform: uppercase; }
+.p-sum .v { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* ---- screen flow ---- */
+.flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.6rem;
+  max-width: var(--measure);
+}
+.node {
+  border: 1px solid var(--rule);
+  background: var(--card);
+  padding: 0.6rem 0.8rem;
+  font-size: 0.83rem;
+  line-height: 1.35;
+}
+.node b {
+  display: block;
+  font-family: Archivo, system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 0.86rem;
+}
+.node span { color: var(--ink-3); font-size: 0.76rem; }
+.node.hot { border-color: var(--accent); border-left-width: 3px; }
+.arrow { align-self: center; color: var(--ink-3); font-family: "JetBrains Mono", monospace; }
+
+/* ---- milestones ---- */
+.miles { border-top: 1px solid var(--rule); max-width: var(--measure); }
+.mile {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr;
+  gap: 0 1.2rem;
+  padding: 1.1rem 0;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.mile .m-id {
+  font-family: Archivo, system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 0.88rem;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+.mile .m-b > * + * { margin-top: 0.35rem; }
+.mile h4 { margin: 0; font-family: "Libre Franklin", sans-serif; font-size: 1rem; font-weight: 600;
+  letter-spacing: 0; text-transform: none; color: var(--ink); }
+.mile p { font-size: 0.9rem; color: var(--ink-2); }
+
+footer.end {
+  padding: 3.5rem 0 5rem;
+  border-top: 2px solid var(--ink);
+  font-size: var(--step--1);
+  color: var(--ink-3);
+}
+footer.end p { max-width: var(--measure); }
+footer.end p + p { margin-top: 0.8rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <div class="eyebrow">Design · Xteink X4 · CrossPoint fork</div>
+  <h1>A golf scorecard that runs on the reader</h1>
+  <p class="standfirst">
+    Three numbers per hole, seven buttons, no touchscreen, no network, no phone.
+    This is the design for a scorecard app built as a fork of CrossPoint Reader,
+    grounded in what the X4 hardware and the firmware actually give us.
+  </p>
+  <div class="meta-strip">
+    <div><span class="k">Device</span><span class="v">Xteink X4 · ESP32-C3</span></div>
+    <div><span class="k">Base firmware</span><span class="v">CrossPoint <code>develop</code></span></div>
+    <div><span class="k">Screen</span><span class="v">480 × 800 logical, 1-bit</span></div>
+    <div><span class="k">Scope</span><span class="v">Offline · single player</span></div>
+    <div><span class="k">Captured</span><span class="v">Strokes · putts · inside 100</span></div>
+  </div>
+</header>
+
+<!-- ============================================================ 1 -->
+<section class="doc">
+  <div class="rail">
+    <span class="idx">§ 1</span>
+    <span class="label">What we are building, and what we are not</span>
+  </div>
+  <div class="body">
+    <h2>The product in one paragraph</h2>
+    <p>
+      You keep score on the X4 while you play. Each hole records three numbers: total strokes,
+      putts, and strokes played from inside 100 yards. When the round ends the device writes a
+      file to the SD card and shows you the card. Everything happens on the device — no companion
+      app, no cloud, no Wi-Fi needed on the course. To get rounds off, you either pull the SD card
+      or use the webserver CrossPoint already ships.
+    </p>
+    <p>
+      StrokeInk is the reference point for the <em>shape</em> of the interaction — a dedicated
+      e-ink card you press a button on instead of holding a phone — but this deliberately stops
+      where their product starts adding a phone app, a course library of 20,000 courses, and
+      an AI coach. The device half is the whole product here.
+    </p>
+
+    <h4>Out of scope, on purpose</h4>
+    <ul>
+      <li><strong>Multi-player.</strong> One column of scores. No foursome axis on the scoring screen.</li>
+      <li><strong>Fairways hit, GIR, penalties, sand saves.</strong> Not captured. Each one is another button press per hole on a device with no touchscreen.</li>
+      <li><strong>Per-hole notes.</strong> Text entry through a 7-button keyboard grid mid-round is a feature nobody uses twice.</li>
+      <li><strong>GPS, yardages to pin, shot tracking.</strong> The X4 has no GPS radio.</li>
+    </ul>
+
+    <div class="callout warn">
+      <h4>This will live in a fork</h4>
+      <p>
+        CrossPoint's <code>SCOPE.md</code> lists <strong>“Interactive Apps: No notepads,
+        calculators, or games”</strong> under Out-of-Scope, and its Phase&nbsp;1 roadmap has
+        temporarily closed new network connectors while the team cuts RAM and flash. A golf
+        scorecard is not going upstream, and it should not try to.
+      </p>
+      <p>
+        That is a normal outcome in this ecosystem — there are already a dozen public forks. It
+        does mean the design has one hard structural requirement: keep the diff against upstream
+        files down to a handful of lines so rebasing onto <code>develop</code> stays cheap. See §7.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 2 -->
+<section class="doc">
+  <div class="rail">
+    <span class="idx">§ 2</span>
+    <span class="label">The three numbers, and why they are the right three</span>
+  </div>
+  <div class="body">
+    <h2>Every hole splits into three buckets</h2>
+    <p>
+      Strokes, putts, and strokes inside 100 yards are not three unrelated counters. If
+      “inside 100” is defined as <strong>non-putt strokes played from inside 100 yards</strong>
+      — wedges, pitches, chips, bunker shots — then the three numbers partition the hole
+      completely and without overlap:
+    </p>
+
+    <div class="buckets">
+      <div class="bucket-bar">
+        <div class="b-long">Long game</div>
+        <div class="b-short">Inside 100</div>
+        <div class="b-putt">Putting</div>
+      </div>
+      <div class="bucket-note">
+        <div><code>strokes − putts − in100</code><br>Tee shots and approaches</div>
+        <div><code>in100</code><br>Wedge and short game</div>
+        <div><code>putts</code><br>On the green</div>
+      </div>
+    </div>
+
+    <p>
+      Long game is derived, never entered. That is what makes three counters worth more than
+      three counters: after a round you can say “I lost six shots inside 100 yards,” which is the
+      kind of sentence a paper card cannot produce. It also gives every stats screen in §5 an
+      obvious spine.
+    </p>
+
+    <h4>The invariant</h4>
+    <p>
+      <code class="mono">putts + in100 &lt;= strokes</code>, on every hole, at every moment. This is
+      not a validation step at save time — it is enforced live by the counters, and it makes data
+      entry <em>faster</em> rather than fussier:
+    </p>
+    <ul>
+      <li>Incrementing <strong>putts</strong> or <strong>inside 100</strong> when the sum is already
+        at <code>strokes</code> <strong>bumps strokes too</strong>. Adding a putt means you took
+        a shot; the app knows that, so you don't press twice.</li>
+      <li>Decrementing <strong>strokes</strong> below the sum is refused, and the blocking field
+        flashes inverse for one frame so you can see which number is holding the floor.</li>
+    </ul>
+
+    <div class="callout">
+      <h4>Confirm this reading</h4>
+      <p>
+        The whole model rests on “inside 100” <em>excluding</em> putts. If you meant it to include
+        them — every shot from inside 100 yards, putts included — the buckets overlap, long game
+        becomes <code>strokes − in100</code>, and putts becomes a sub-figure rather than a peer.
+        Both are workable; they produce different screens. Say which you meant.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 3 -->
+<section class="doc">
+  <div class="rail">
+    <span class="idx">§ 3</span>
+    <span class="label">Hardware facts that dictate the design</span>
+  </div>
+  <div class="body">
+    <h2>Six constraints, six consequences</h2>
+    <p>
+      These are read off the CrossPoint <code>develop</code> tree and the FreeInk SDK's
+      <code>XTEINK_X4</code> board profile, not from marketing copy. Each one forces a
+      design decision rather than merely colouring one.
+    </p>
+
+    <div class="scroller">
+      <table>
+        <caption>Constraint → consequence</caption>
+        <thead>
+          <tr><th style="width:34%">What the hardware does</th><th>What the design has to do</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>~380&nbsp;KB usable RAM</strong>, and ~47&nbsp;KB of it is already the
+              display framebuffer (<code>100 × 480</code> bytes, single-buffer mode).</td>
+            <td>The whole round lives in one fixed-size struct of about 170 bytes (§6). No
+              <code>std::vector</code>, no <code>std::string</code>, no JSON document held open
+              in the scoring path. Course and history lists stream from SD.</td>
+          </tr>
+          <tr>
+            <td><strong>Seven buttons on an ADC ladder</strong> — Back, Confirm, Left, Right, Up,
+              Down, Power — and <strong>no touchscreen</strong>. Touch is X4&nbsp;Pro only; the X4
+              profile is <code>NO_TOUCH</code>.</td>
+            <td>A focus-cycling entry model (§4). Every screen must be fully operable with
+              Up/Down/Left/Right/Confirm/Back, and every target sized for reading, not tapping.</td>
+          </tr>
+          <tr>
+            <td><strong>E-ink refresh is whole-buffer.</strong> The HAL exposes
+              <code>FULL_REFRESH</code>, <code>HALF_REFRESH</code>, and <code>FAST_REFRESH</code>
+              (custom LUT) — there is no windowed partial-update API to repaint just a numeral.</td>
+            <td>One press = one full <code>FAST_REFRESH</code>. Hold-to-repeat has to coalesce, which
+              CrossPoint's deferred <code>requestUpdate()</code> already does for free. A ghost-clearing
+              pass gets scheduled on a cadence rather than on every paint (§4).</td>
+          </tr>
+          <tr>
+            <td><strong>Sleep is a cold boot.</strong> Auto-sleep and the power-button hold both
+              call <code>esp_deep_sleep_start()</code>; RAM does not survive. Wake re-runs
+              <code>BootActivity</code>.</td>
+            <td>Round state is written through to SD and reloaded on wake. The app resumes
+              <em>into the scoring screen at the current hole</em>, not at a menu (§6).</td>
+          </tr>
+          <tr>
+            <td><strong>No real-time clock.</strong> The X4 board profile is <code>NO_SENSORS</code>;
+              the X3 is the sibling that carries a DS3231. <code>HalClock::isAvailable()</code>
+              returns false, and <code>syncFromNTP()</code> needs Wi-Fi.</td>
+            <td>The device cannot know the date on a golf course. Date is entered once at round
+              setup, defaulted forward from the last round, with an optional NTP sync when
+              Wi-Fi happens to be in range (§8).</td>
+          </tr>
+          <tr>
+            <td><strong>Storage is generous.</strong> 16&nbsp;MB flash with two 6.5&nbsp;MB OTA app
+              slots, plus the SD card.</td>
+            <td>Flash budget is a non-issue. Rounds and courses are plain JSON on SD, human-readable
+              and trivially exportable — no binary packing needed for space.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>What CrossPoint hands us for free</h3>
+    <p>
+      This is the argument for building on CrossPoint rather than stock XTOS or bare metal: the
+      hard parts are already written and field-tested.
+    </p>
+    <ul>
+      <li><strong><code>ActivityManager</code></strong> — an activity stack with
+        <code>startActivityForResult()</code> / <code>setResult()</code> / <code>finish()</code>,
+        a single shared 8&nbsp;KB render task, and a global <code>RenderLock</code> mutex. Screen
+        navigation and lifetime management are solved problems.</li>
+      <li><strong><code>UiListActivity</code> / <code>UiAppHost</code></strong> — list screens with
+        viewport sync, button navigation, and hold-to-page already wired.</li>
+      <li><strong>FreeInkUI components</strong> — <code>table</code>, <code>metricCard</code>,
+        <code>stepperRow</code>, <code>tabBar</code>, <code>progressBar</code>,
+        <code>optionDialog</code>, <code>keyboard</code>. The scorecard grid is a
+        <code>table</code>; the stats screen is <code>metricCard</code>s.</li>
+      <li><strong><code>PersistableStore&lt;T&gt;</code></strong> — the JSON-on-SD persistence
+        pattern <code>CrossPointState</code> itself uses. Round state inherits it directly.</li>
+      <li><strong>The webserver</strong> — <code>GET /api/files</code>,
+        <code>GET /download?path=</code>, <code>POST /upload</code>. Round export and course
+        import need no new network code, which also keeps us clear of the closed area in
+        <code>SCOPE.md</code>.</li>
+      <li><strong>Deep sleep, battery, boot, crash handling, i18n, theming</strong> — untouched.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================ 4 -->
+<section class="doc">
+  <div class="rail">
+    <span class="idx">§ 4</span>
+    <span class="label">The scoring screen and its input model</span>
+  </div>
+  <div class="body">
+    <h2>The screen you use 95% of the time</h2>
+    <p>
+      Everything else in the app is scaffolding around this one screen. It is shown here at 1:1 —
+      480&nbsp;×&nbsp;800 logical pixels, pure black on white, because that is literally what the
+      panel can render.
+    </p>
+
+    <div class="mockrow">
+      <figure>
+        <div class="panel">
+          <div class="p-status">
+            <span>PEBBLE BEACH</span>
+            <span class="right"><span>14:32</span><span>87%</span></span>
+          </div>
+
+          <div class="p-hole">
+            <div class="h-l">
+              <div class="lab">Hole</div>
+              <div class="big">7</div>
+            </div>
+            <div class="h-r">
+              PAR <b>3</b><br>
+              109 YDS · SI 13
+            </div>
+          </div>
+
+          <div class="p-field focus">
+            <div class="cue">▸</div>
+            <div class="name">Strokes</div>
+            <div class="val">5</div>
+            <div class="toPar">+2</div>
+          </div>
+
+          <div class="p-field">
+            <div class="cue"></div>
+            <div class="name">Putts</div>
+            <div class="val">2</div>
+            <div class="toPar"></div>
+          </div>
+
+          <div class="p-field">
+            <div class="cue"></div>
+            <div class="name">Inside 100</div>
+            <div class="val">1</div>
+            <div class="toPar"></div>
+          </div>
+
+          <div class="p-totals">
+            <div><div class="k">Thru</div><div class="v">7</div></div>
+            <div><div class="k">Score</div><div class="v">34</div></div>
+            <div><div class="k">To par</div><div class="v">+5</div></div>
+          </div>
+
+          <div class="p-strip">
+            <table>
+              <thead>
+                <tr><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th><th>9</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>4</td><td>6</td><td>4</td><td>4</td><td>3</td><td>7</td>
+                  <td class="now">5</td><td class="none">·</td><td class="none">·</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="p-foot">
+            <div>↩ MENU</div>
+            <div>◂ ▸ HOLE</div>
+            <div>▴ ▾ COUNT</div>
+            <div>● FIELD</div>
+          </div>
+        </div>
+        <figcaption>
+          <b>Scoring — the primary screen</b>
+          The focused field is inverted and physically taller, so which counter Up/Down will move is
+          readable at arm's length in sunlight without hunting for a thin highlight. The front-nine
+          strip along the bottom is the paper-card habit: you glance down to see where you stand.
+        </figcaption>
+      </figure>
+
+      <figure>
+        <div class="panel">
+          <div class="p-status">
+            <span>SCORECARD</span>
+            <span class="right"><span>18 HOLES</span></span>
+          </div>
+
+          <div class="p-tabs">
+            <div class="on">Front 9</div>
+            <div>Back 9</div>
+            <div>Stats</div>
+          </div>
+
+          <div class="p-card">
+            <table>
+              <thead>
+                <tr>
+                  <th class="lbl">Hole</th>
+                  <th>1</th><th>2</th><th>3</th><th>4</th><th>5</th>
+                  <th>6</th><th>7</th><th>8</th><th>9</th><th>OUT</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="lbl">Par</td>
+                  <td>4</td><td>5</td><td>4</td><td>4</td><td>3</td>
+                  <td>5</td><td>3</td><td>4</td><td>4</td><td class="out">36</td>
+                </tr>
+                <tr class="tot">
+                  <td class="lbl">Score</td>
+                  <td>4</td><td>6</td><td>4</td><td>4</td><td>3</td>
+                  <td>7</td><td>5</td><td>5</td><td>4</td><td class="out">42</td>
+                </tr>
+                <tr>
+                  <td class="lbl">Putts</td>
+                  <td>2</td><td>2</td><td>1</td><td>2</td><td>2</td>
+                  <td>3</td><td>2</td><td>2</td><td>1</td><td class="out">17</td>
+                </tr>
+                <tr>
+                  <td class="lbl">In 100</td>
+                  <td>1</td><td>2</td><td>1</td><td>1</td><td>0</td>
+                  <td>2</td><td>1</td><td>1</td><td>1</td><td class="out">10</td>
+                </tr>
+                <tr>
+                  <td class="lbl">Long</td>
+                  <td>1</td><td>2</td><td>2</td><td>1</td><td>1</td>
+                  <td>2</td><td>2</td><td>2</td><td>2</td><td class="out">15</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="p-sum">
+            <div><div class="k">Score</div><div class="v">42 (+6)</div></div>
+            <div><div class="k">Putts</div><div class="v">17</div></div>
+            <div><div class="k">Inside 100</div><div class="v">10</div></div>
+            <div><div class="k">Long game</div><div class="v">15</div></div>
+          </div>
+
+          <div class="p-foot">
+            <div>↩ BACK</div>
+            <div>◂ ▸ TAB</div>
+            <div>▴ ▾ SCROLL</div>
+            <div>● FINISH</div>
+          </div>
+        </div>
+        <figcaption>
+          <b>Scorecard — review and finish</b>
+          Built from FreeInkUI's <code>table</code> and <code>tabBar</code>. The <em>Long</em> row is
+          computed, never entered — this is where the three-bucket model in §2 pays off, and it costs
+          the golfer nothing to get.
+        </figcaption>
+      </figure>
+    </div>
+
+    <h3>Button map</h3>
+    <div class="scroller">
+      <table>
+        <caption>Scoring screen bindings</caption>
+        <thead>
+          <tr><th style="width:22%">Button</th><th style="width:30%">Action</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><kbd>Up</kbd></td><td>+1 to focused counter</td><td>Hold repeats; repaints coalesce so the panel shows the latest value, not every step.</td></tr>
+          <tr><td><kbd>Down</kbd></td><td>−1 to focused counter</td><td>Floors at 0, and at <code>putts + in100</code> when strokes is focused.</td></tr>
+          <tr><td><kbd>Left</kbd></td><td>Previous hole</td><td>Wraps at hole 1 back to 18. Flushes state to SD.</td></tr>
+          <tr><td><kbd>Right</kbd></td><td>Next hole</td><td>Resets focus to Strokes. Flushes state to SD.</td></tr>
+          <tr><td><kbd>Confirm</kbd></td><td>Cycle focus</td><td>Strokes → Putts → Inside 100 → Strokes.</td></tr>
+          <tr><td><kbd>Back</kbd></td><td>Round menu</td><td>View card · Finish round · Settings · Abandon.</td></tr>
+          <tr><td><kbd>Power</kbd> hold</td><td>Sleep</td><td>CrossPoint's default behaviour, left untouched.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Presses per hole is the metric that matters</h3>
+    <p>
+      A par-4 where you make 5 with two putts and one wedge is the median hole. Entering it costs
+      <strong>7 presses</strong> — <kbd>Up</kbd>, <kbd>Confirm</kbd>, <kbd>Up</kbd>&nbsp;<kbd>Up</kbd>,
+      <kbd>Confirm</kbd>, <kbd>Up</kbd>, <kbd>Right</kbd> — which is about 130 presses over
+      18 holes. Without the pre-seed below it would be 11 presses and 200 for the round.
+    </p>
+
+    <h4>Pre-seeding to par</h4>
+    <p>
+      On first arrival at a hole, the strokes counter displays the hole's par in a lighter,
+      outlined style. The hole stays flagged <em>unentered</em> until you touch any counter — so a
+      hole you walked past without scoring stays blank on the card rather than silently recording a
+      par. A par costs zero presses; a bogey costs one. It is a setting
+      (<em>Start hole at par</em>), default on.
+    </p>
+
+    <h4>Refresh policy</h4>
+    <ul>
+      <li><strong>Counter or hole change</strong> → deferred <code>requestUpdate()</code>, painted
+        <code>FAST_REFRESH</code>. Deferred means multiple mutations in one loop pass produce one paint.</li>
+      <li><strong>Every 8th paint</strong> → promote to <code>HALF_REFRESH</code> to clear accumulated
+        ghosting, using <code>promoteNextRefresh()</code>.</li>
+      <li><strong>Entering the scorecard table</strong> → <code>HALF_REFRESH</code>. Dense grids are
+        where ghosting is most visible.</li>
+      <li><strong>Round summary on finish</strong> → <code>FULL_REFRESH</code>. It is a screen you
+        look at once, and it deserves a clean plate.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================ 5 -->
+<section class="doc">
+  <div class="rail">
+    <span class="idx">§ 5</span>
+    <span class="label">The full screen graph</span>
+  </div>
+  <div class="body">
+    <h2>Eight screens, one of which matters</h2>
+
+    <div class="flow">
+      <div class="node"><b>CrossPoint Home</b><span>One added menu row</span></div>
+      <div class="arrow">→</div>
+      <div class="node hot"><b>Golf Home</b><span>Resume · New · History · Courses</span></div>
+      <div class="arrow">→</div>
+      <div class="node"><b>Round Setup</b><span>Course, tees, 9/18, date</span></div>
+      <div class="arrow">→</div>
+      <div class="node hot"><b>Scoring</b><span>The screen from §4</span></div>
+    </div>
+    <div class="flow" style="margin-top:0.6rem">
+      <div class="node"><b>Round Menu</b><span>Back from Scoring</span></div>
+      <div class="arrow">→</div>
+      <div class="node"><b>Scorecard</b><span>Front / Back / Stats</span></div>
+      <div class="arrow">→</div>
+      <div class="node"><b>Finish &amp; Save</b><span>Writes round + index row</span></div>
+      <div class="arrow">→</div>
+      <div class="node"><b>History</b><span>From index.csv</span></div>
+      <div class="arrow">→</div>
+      <div class="node"><b>Round Detail</b><span>Card + bucket stats</span></div>
+    </div>
+
+    <h4>Notes on the ones that aren't obvious</h4>
+    <ul>
+      <li><strong>Golf Home</strong> shows <em>Resume round</em> as the first row only when
+        <code>/golf/state.json</code> holds an open round — and in that case the app skips straight
+        past it on wake (§6). The row exists for the case where you deliberately left the app.</li>
+      <li><strong>Round Setup</strong> is a list of courses read from <code>/golf/courses/</code>.
+        Picking one loads its pars and yardages. There is also <em>Quick round</em>, which assumes
+        par 4 everywhere and lets you fix pars as you go — the escape hatch for playing somewhere
+        you never entered.</li>
+      <li><strong>History</strong> reads <em>only</em> <code>/golf/rounds/index.csv</code>, never the
+        individual round files. Parsing a hundred JSON documents on a C3 to render a list would be
+        visibly slow; a single CSV scan is not.</li>
+      <li><strong>Course editor</strong> exists but is the last thing to build. Entering 18 pars and
+        18 yardages through <code>stepperRow</code>s is tedious; dropping a JSON file onto the device
+        over the existing webserver is not. Design for the upload path first.</li>
+    </ul>
+
+    <h4>Stats worth showing on Round Detail</h4>
+    <p>
+      All of these fall out of the three counters, and all are computable in a single pass over
+      18 small integers:
+    </p>
+    <ul>
+      <li>Score, score to par, front/back split</li>
+      <li>Putts total, putts per hole, count of 1-putts and 3-putts</li>
+      <li>Inside-100 shots total and per hole</li>
+      <li>The three-bucket breakdown — long / inside 100 / putting — as counts and as percentages</li>
+      <li>Worst holes by strokes over par</li>
+      <li>Across rounds: trend of score, putts, and bucket mix over the last <em>n</em> rounds</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================ 6 -->
+<section class="doc">
+  <div class="rail">
+    <span class="idx">§ 6</span>
+    <span class="label">Data model, files, persistence</span>
+  </div>
+  <div class="body">
+    <h2>170 bytes in RAM, JSON on the card</h2>
+
+    <h4>The in-memory round</h4>
+    <pre><code>struct GolfRound {
+  static constexpr uint8_t MAX_HOLES = 18;
+
+  char     courseName[40];
+  char     tees[12];
+  uint16_t dateYmd;               // (year-2000)&lt;&lt;9 | month&lt;&lt;5 | day
+  uint8_t  holeCount;             // 9 or 18
+  uint8_t  currentHole;           // 0-based
+
+  uint8_t  par[MAX_HOLES];
+  uint16_t yards[MAX_HOLES];
+  uint8_t  strokes[MAX_HOLES];    // 0 == hole not entered
+  uint8_t  putts[MAX_HOLES];
+  uint8_t  in100[MAX_HOLES];
+};                                // ~170 bytes, no heap</code></pre>
+    <p>
+      <code>strokes[i] == 0</code> is the not-entered sentinel — a hole can never legitimately
+      take zero strokes, so no parallel “entered” array is needed. Long game is never stored:
+      <code>long = strokes − putts − in100</code>, computed at render time.
+    </p>
+
+    <h4>On the SD card</h4>
+    <pre><code>/golf/
+  state.json                       open round — PersistableStore&lt;GolfRoundStore&gt;
+  courses/
+    pebble-beach.json
+    muirfield-village.json
+  rounds/
+    index.csv                      one row per round; the History screen's only input
+    2026-08-29-pebble-beach.json
+  export/
+    holes.csv                      generated on demand, pulled over the webserver</code></pre>
+
+    <h4>A course file</h4>
+    <pre><code>{
+  "v": 1,
+  "name": "Pebble Beach",
+  "tees": "Blue",
+  "holes": 18,
+  "par":   [4,5,4,4,3,5,3,4,4, 4,4,3,4,5,4,4,3,5],
+  "yards": [380,502,390,331,166,506,109,418,481,
+            446,373,201,392,573,396,401,208,543],
+  "si":    [7,11,3,15,17,9,13,1,5, 6,12,16,4,2,8,10,18,14]
+}</code></pre>
+
+    <h4>A completed round</h4>
+    <pre><code>{
+  "v": 1,
+  "date": "2026-08-29",
+  "course": "Pebble Beach",
+  "tees": "Blue",
+  "holes": 18,
+  "par":     [4,5,4,4,3,5,3,4,4, 4,4,3,4,5,4,4,3,5],
+  "strokes": [4,6,4,4,3,7,5,5,4, 5,4,4,5,6,4,5,3,6],
+  "putts":   [2,2,1,2,2,3,2,2,1, 2,2,2,2,2,1,2,1,2],
+  "in100":   [1,2,1,1,0,2,1,1,1, 1,1,1,2,1,1,1,1,2]
+}</code></pre>
+
+    <h4>The history index</h4>
+    <pre><code>date,course,holes,strokes,par,putts,in100,file
+2026-08-29,Pebble Beach,18,86,72,33,21,2026-08-29-pebble-beach.json
+2026-08-22,Muirfield Village,18,91,72,35,24,2026-08-22-muirfield-village.json</code></pre>
+
+    <h3>Write-through policy</h3>
+    <p>
+      Deep sleep destroys RAM, so an unwritten round is a lost round. But an SD write on every
+      button press is both slow and pointless wear. The rule is a dirty flag plus four flush
+      triggers:
+    </p>
+    <div class="scroller">
+      <table>
+        <caption>When state.json is written</caption>
+        <thead><tr><th style="width:32%">Trigger</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td>Hole change</td><td>The natural commit point. One write per hole, ~18 per round.</td></tr>
+          <tr><td>5 s idle after a change</td><td>Covers standing on the tee after scoring the last hole.</td></tr>
+          <tr><td><code>onExit()</code></td><td>Runs on both sleep paths — the auto-sleep timeout and the power-button hold both go through <code>goToSleep()</code>, which calls the activity's <code>onExit()</code>. This is the one that actually saves you.</td></tr>
+          <tr><td>Finish round</td><td>Writes the round file and appends the index row, then clears <code>state.json</code>.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      Worst case — the battery is physically pulled mid-hole — you lose the counters for the hole
+      you are standing on. That is an acceptable trade for 18 writes a round instead of 130.
+    </p>
+
+    <h4>Waking back into the round</h4>
+    <p>
+      Between holes the device sleeps. Waking is a cold boot through <code>BootActivity</code>, so
+      the app must recognise an open round in <code>state.json</code> and go
+      <em>straight to the scoring screen at <code>currentHole</code></em> — not to CrossPoint's home,
+      not to the golf menu. Press power, see your hole. Anything else makes the device feel worse
+      than the pencil it replaces.
+    </p>
+    <div class="callout">
+      <h4>Sleep timeout wants a round-mode value</h4>
+      <p>
+        CrossPoint's default auto-sleep is tuned for a book you are holding. During an open round a
+        longer timeout (10 minutes, say) trades a little battery for not cold-booting between the
+        tee and the green. Given the X4 idles for weeks, spending some of that on a four-hour
+        round is the right call — but it should be a setting, not a hardcode.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 7 -->
+<section class="doc">
+  <div class="rail">
+    <span class="idx">§ 7</span>
+    <span class="label">Firmware architecture and fork hygiene</span>
+  </div>
+  <div class="body">
+    <h2>Keep the diff small enough to rebase forever</h2>
+    <p>
+      CrossPoint's <code>develop</code> branch moves fast and just refactored the entire activity
+      system (the <code>ActivityManager</code> migration). A fork that scatters changes across
+      upstream files will be unmergeable within two months. So: <strong>all new code in new
+      directories, and exactly three upstream touchpoints.</strong>
+    </p>
+
+    <h4>New code</h4>
+    <pre><code>src/golf/
+  GolfRound.h              the struct above
+  GolfRoundStore.{h,cpp}   PersistableStore&lt;GolfRoundStore&gt; -&gt; /golf/state.json
+  CourseStore.{h,cpp}      enumerate + load /golf/courses/*.json
+  RoundArchive.{h,cpp}     write round file, append index.csv, read index
+  GolfStats.{h,cpp}        pure functions over GolfRound -&gt; derived figures
+
+src/activities/golf/
+  GolfHomeActivity.{h,cpp}        : UiListActivity
+  GolfSetupActivity.{h,cpp}       : UiListActivity  (course pick, then options)
+  GolfScoringActivity.{h,cpp}     : Activity + UiAppHost   &lt;- the one that matters
+  GolfCardActivity.{h,cpp}        : Activity + UiAppHost   (tabBar + table)
+  GolfHistoryActivity.{h,cpp}     : UiListActivity  (reads index.csv only)
+  GolfRoundDetailActivity.{h,cpp} : Activity + UiAppHost   (metricCards + table)
+  GolfCourseEditActivity.{h,cpp}  : UiListActivity  (stepperRows; built last)</code></pre>
+    <p>
+      <code>GolfScoringActivity</code> derives from <code>Activity</code> and uses
+      <code>UiAppHost</code> directly rather than <code>UiListActivity</code> — it is not a list, and
+      forcing it into the list protocol would fight the base class on every input.
+    </p>
+
+    <h4>Upstream files touched</h4>
+    <div class="scroller">
+      <table>
+        <thead><tr><th style="width:38%">File</th><th style="width:14%">Lines</th><th>Change</th></tr></thead>
+        <tbody>
+          <tr><td><code>src/activities/home/HomeActivity.cpp</code></td><td class="num">~4</td>
+            <td>One menu row, guarded by <code>#if CROSSPOINT_GOLF</code>.</td></tr>
+          <tr><td><code>platformio.ini</code></td><td class="num">~8</td>
+            <td>A <code>[env:golf]</code> that extends <code>default</code> and adds <code>-DCROSSPOINT_GOLF=1</code>.</td></tr>
+          <tr><td><code>src/activities/boot_sleep/BootActivity.cpp</code></td><td class="num">~6</td>
+            <td>Guarded check for an open round, routing straight to scoring on wake.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      Three files, under twenty lines, all behind one build flag. Rebasing onto upstream
+      <code>develop</code> becomes a routine operation rather than an archaeology project, and the
+      same tree can still build a stock reader by selecting <code>[env:default]</code>.
+    </p>
+
+    <h4>Rules inherited from CrossPoint's contributor guide</h4>
+    <ul>
+      <li><strong>No <code>xTaskCreate</code> inside activities.</strong> Their guide says so
+        explicitly, and nothing here needs a background task.</li>
+      <li><strong>Mutations that <code>render()</code> reads must be under a <code>RenderLock</code>.</strong>
+        <code>loop()</code> and <code>render()</code> run on different FreeRTOS tasks.</li>
+      <li><strong>Never hold a <code>RenderLock</code> across a blocking call</strong> — including
+        SD writes. Take the lock, mutate the counters, release, then flush.</li>
+      <li><strong>Justify every heap allocation.</strong> The golf path should add well under
+        4&nbsp;KB of heap; the round struct is static and the file I/O is streamed.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================ 8 -->
+<section class="doc">
+  <div class="rail">
+    <span class="idx">§ 8</span>
+    <span class="label">Risks, and the date problem</span>
+  </div>
+  <div class="body">
+    <h2>What could make this unpleasant</h2>
+
+    <div class="scroller">
+      <table>
+        <thead><tr><th style="width:26%">Risk</th><th style="width:10%">Severity</th><th>Mitigation</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>No clock on the X4</strong></td>
+            <td><span class="tag stop">High</span></td>
+            <td>Enter the date once at round setup, defaulted to the last round's date and
+              nudgeable with Up/Down — three or four presses. Optionally call
+              <code>syncFromNTP()</code> when Wi-Fi is reachable at setup time and skip the prompt.
+              The clock on the status bar is hidden entirely when no time is known, rather than
+              showing a lie.</td>
+          </tr>
+          <tr>
+            <td><strong>Refresh latency per press</strong></td>
+            <td><span class="tag">Medium</span></td>
+            <td>Measure <code>FAST_REFRESH</code> on the actual panel in milestone M0 before
+              committing to the input model. If it is slower than roughly 350&nbsp;ms, hold-to-repeat
+              becomes the primary entry mechanism and the pre-seed-to-par default matters even more.</td>
+          </tr>
+          <tr>
+            <td><strong>Upstream API drift</strong></td>
+            <td><span class="tag">Medium</span></td>
+            <td>The three-file touchpoint rule in §7. Rebase monthly rather than annually, so
+              conflicts stay small.</td>
+          </tr>
+          <tr>
+            <td><strong>Cold-boot wake feels slow</strong></td>
+            <td><span class="tag">Medium</span></td>
+            <td>Round-mode sleep timeout (§6), plus resuming directly into the scoring screen so the
+              boot lands somewhere useful.</td>
+          </tr>
+          <tr>
+            <td><strong>Entering a course by hand is miserable</strong></td>
+            <td><span class="tag">Low</span></td>
+            <td>Webserver upload is the primary path; a small script converts a scorecard into the
+              course JSON. <em>Quick round</em> covers turning up somewhere unplanned.</td>
+          </tr>
+          <tr>
+            <td><strong>Rain, gloves, cart vibration</strong></td>
+            <td><span class="tag">Low</span></td>
+            <td>Nothing the firmware can fix — but it argues for large targets and for never
+              requiring a precise or fast press. The X4 is not weather-sealed; that is a bag-and-pocket
+              reality, not a software one.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Open questions</h3>
+    <ol>
+      <li><strong>Does “inside 100” include putts?</strong> §2 assumes not. This is the one answer
+        that changes the data model.</li>
+      <li><strong>Portrait or landscape?</strong> The design above is portrait. If the device is
+        going to sit in a cart holder, landscape 800&nbsp;×&nbsp;480 gives a much better scorecard
+        table and a worse counter stack. <code>GfxRenderer</code> supports both.</li>
+      <li><strong>Nine-hole rounds and back-nine-only starts?</strong> Cheap to support at the data
+        level, but it adds rows to Round Setup.</li>
+      <li><strong>What is it called?</strong> The app needs a name for the home menu row.</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ============================================================ 9 -->
+<section class="doc">
+  <div class="rail">
+    <span class="idx">§ 9</span>
+    <span class="label">Build order</span>
+  </div>
+  <div class="body">
+    <h2>Playable by M1</h2>
+    <p>
+      The sequence is chosen so the app becomes genuinely usable on a real round as early as
+      possible, and everything after that is refinement of something you already carry.
+    </p>
+
+    <div class="miles">
+      <div class="mile">
+        <div class="m-id">M0</div>
+        <div class="m-b">
+          <h4>Skeleton and measurement</h4>
+          <p>
+            Fork, <code>[env:golf]</code> builds and flashes, home menu row appears, an empty
+            <code>GolfScoringActivity</code> renders on the device. Measure real
+            <code>FAST_REFRESH</code> and <code>HALF_REFRESH</code> timings and free heap. Those
+            numbers validate or revise §4.
+          </p>
+        </div>
+      </div>
+      <div class="mile">
+        <div class="m-id">M1</div>
+        <div class="m-b">
+          <h4>The core loop — playable</h4>
+          <p>
+            <code>GolfRound</code>, the counters and their invariant, the scoring screen, quick-round
+            setup, write-through persistence, and resume-into-round on wake. At the end of this
+            milestone you can keep score for 18 holes and not lose it. Everything after is optional.
+          </p>
+        </div>
+      </div>
+      <div class="mile">
+        <div class="m-id">M2</div>
+        <div class="m-b">
+          <h4>Card, finish, history</h4>
+          <p>
+            The scorecard table with front/back tabs, finish-and-save writing the round file and
+            index row, and the history list reading <code>index.csv</code>.
+          </p>
+        </div>
+      </div>
+      <div class="mile">
+        <div class="m-id">M3</div>
+        <div class="m-b">
+          <h4>Stats and export</h4>
+          <p>
+            Round detail with the three-bucket breakdown, cross-round trends, and CSV export
+            retrievable over the existing webserver.
+          </p>
+        </div>
+      </div>
+      <div class="mile">
+        <div class="m-id">M4</div>
+        <div class="m-b">
+          <h4>Courses</h4>
+          <p>
+            Course library, JSON upload path with a conversion script, and the on-device course
+            editor as the fallback.
+          </p>
+        </div>
+      </div>
+      <div class="mile">
+        <div class="m-id">M5</div>
+        <div class="m-b">
+          <h4>Whatever the first ten rounds ask for</h4>
+          <p>
+            Landscape mode, pace-of-play timing, nine-hole variants. Deliberately unspecified —
+            playing with M1 for a month will produce a better list than guessing now.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="end">
+  <p>
+    Hardware and firmware details are read from the CrossPoint Reader <code>develop</code> branch and
+    the FreeInk SDK's <code>XTEINK_X4</code> board profile as of August 2026 — specifically
+    <code>SCOPE.md</code>, <code>CLAUDE.md</code>, <code>docs/activity-manager.md</code>,
+    <code>platformio.ini</code>, <code>partitions.csv</code>, <code>lib/hal/</code>, and
+    <code>freeink-sdk/libs/hardware/BoardConfig/</code>.
+  </p>
+  <p>
+    Screen mockups are rendered at true 480 × 800 in pure black and white, matching what the panel
+    can actually display. StrokeInk is referenced as a product comparison only; nothing here is
+    derived from it.
+  </p>
+</footer>
+
+</div>

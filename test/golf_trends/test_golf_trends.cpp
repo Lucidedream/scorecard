@@ -95,14 +95,16 @@ TEST(GolfTrends, ParFreeRoundSuppressesOnlyToPar) {
   EXPECT_EQ(stats.puttsAverageTenths, 310u);
 }
 
-TEST(GolfTrends, BucketPercentagesSumSensiblyAndZeroStrokesDoesNotDivide) {
-  const GolfTrendStats stats = calculate(row(18, 80, 72, 30, 50, 30) + row(18, 80, 72, 30, 50, 30));
-  EXPECT_EQ(stats.longPercentTenths + stats.shortPercentTenths + stats.puttingPercentTenths, 1000u);
-
-  const GolfTrendStats zero = calculate(row(18, 0, 0, 0, 0, 0) + row(18, 0, 0, 0, 0, 0));
-  EXPECT_EQ(zero.longPercentTenths, 0u);
-  EXPECT_EQ(zero.shortPercentTenths, 0u);
-  EXPECT_EQ(zero.puttingPercentTenths, 0u);
+TEST(GolfTrends, MixPercentagesUseSharedPopulationAndSumToOneHundredPercent) {
+  const GolfTrendStats stats = calculate(penaltyRow(86, 72, 33, 52, 30, 2, 1) + penaltyRow(90, 72, 34, 54, 30, 4, 1) +
+                                         prePenaltyRow(200, 72, 100, 150, 50));
+  EXPECT_EQ(stats.penaltyRounds, 2);
+  EXPECT_EQ(
+      stats.longPercentTenths + stats.shortPercentTenths + stats.puttingPercentTenths + stats.penaltyPercentTenths,
+      1000u);
+  EXPECT_EQ(stats.longAverageTenths, 300u);
+  EXPECT_EQ(stats.shortAverageTenths, 195u);
+  EXPECT_EQ(stats.puttingAverageTenths, 335u);
 }
 
 TEST(GolfTrends, BestAndWorstHandleSingleRoundAndTies) {
@@ -153,6 +155,18 @@ TEST(GolfTrends, SuppressesPenaltyFiguresBelowTwoRecordedRounds) {
   EXPECT_FALSE(one.showsPenalties);
   EXPECT_EQ(one.penaltyRounds, 1);
   EXPECT_EQ(one.penaltyStrokesAverageTenths, 0u);
+  EXPECT_EQ(one.longPercentTenths + one.shortPercentTenths + one.puttingPercentTenths + one.penaltyPercentTenths, 0u);
+}
+
+TEST(GolfTrends, HeadlineAveragesStillIncludePrePenaltyRounds) {
+  const GolfTrendStats stats = calculate(penaltyRow(80, 72, 30, 50, 28, 1, 0) + penaltyRow(82, 72, 31, 51, 30, 1, 0) +
+                                         prePenaltyRow(98, 72, 40, 68, 30));
+  EXPECT_EQ(stats.rounds, 3);
+  EXPECT_EQ(stats.penaltyRounds, 2);
+  EXPECT_EQ(stats.scoringAverageTenths, 867u);
+  EXPECT_EQ(stats.puttsAverageTenths, 337u);
+  EXPECT_EQ(stats.best, 80);
+  EXPECT_EQ(stats.worst, 98);
 }
 
 TEST(GolfTrends, NineHolePenaltyRoundsDoNotCountTowardPenaltyFigures) {

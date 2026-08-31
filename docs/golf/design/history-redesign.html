@@ -1,0 +1,554 @@
+<title>History Redesign</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Libre+Franklin:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+:root {
+  --paper:#F1F4F1; --card:#FBFCFA; --ink:#13181A; --ink-2:#4C5654; --ink-3:#737E7A;
+  --rule:#D2D9D2; --rule-soft:#E3E8E2;
+  --accent:#1E5C3E; --accent-ink:#123A28; --accent-wash:#E2ECE4;
+  --flag:#A93826; --flag-wash:#F4E4E0;
+  --panel-bg:#FFFFFF; --panel-ink:#000000; --panel-edge:#98A29C;
+  --measure:68ch; --gutter:13rem;
+  --step--1:clamp(0.78rem,0.76rem + 0.10vw,0.84rem);
+  --step-0:clamp(1.00rem,0.97rem + 0.14vw,1.08rem);
+  --step-1:clamp(1.22rem,1.15rem + 0.32vw,1.42rem);
+  --step-2:clamp(1.55rem,1.40rem + 0.68vw,2.05rem);
+  --step-3:clamp(2.05rem,1.72rem + 1.55vw,3.30rem);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:#0F1412; --card:#161C19; --ink:#E6EBE6; --ink-2:#A3AEA8; --ink-3:#7B8681;
+    --rule:#29322D; --rule-soft:#1E2622;
+    --accent:#6FC08D; --accent-ink:#A5DCB9; --accent-wash:#17251D;
+    --flag:#E1745F; --flag-wash:#2A1A16;
+    --panel-bg:#E9EBE7; --panel-ink:#0B0E0C; --panel-edge:#3A433D;
+  }
+}
+:root[data-theme="dark"] {
+  --paper:#0F1412; --card:#161C19; --ink:#E6EBE6; --ink-2:#A3AEA8; --ink-3:#7B8681;
+  --rule:#29322D; --rule-soft:#1E2622;
+  --accent:#6FC08D; --accent-ink:#A5DCB9; --accent-wash:#17251D;
+  --flag:#E1745F; --flag-wash:#2A1A16;
+  --panel-bg:#E9EBE7; --panel-ink:#0B0E0C; --panel-edge:#3A433D;
+}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:"Libre Franklin",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:var(--step-0);line-height:1.62;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{font-family:Archivo,"Libre Franklin",system-ui,sans-serif;text-wrap:balance;margin:0;line-height:1.14;letter-spacing:-.014em}
+p{margin:0}
+code,.mono{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}
+.wrap{max-width:78rem;margin:0 auto;padding:0 clamp(1.15rem,4vw,3rem)}
+
+.masthead{padding:clamp(3rem,8vw,5.5rem) 0 clamp(2rem,4vw,3rem);border-bottom:2px solid var(--ink)}
+.eyebrow{font-family:Archivo,system-ui,sans-serif;font-size:var(--step--1);font-weight:600;
+  letter-spacing:.15em;text-transform:uppercase;color:var(--accent);margin-bottom:1.15rem}
+.masthead h1{font-size:var(--step-3);font-weight:700;letter-spacing:-.03em;max-width:18ch}
+.standfirst{margin-top:1.4rem;max-width:60ch;font-size:var(--step-1);line-height:1.5;color:var(--ink-2)}
+.meta-strip{margin-top:2.4rem;display:flex;flex-wrap:wrap;gap:0 2.5rem;row-gap:1.1rem;font-size:var(--step--1)}
+.meta-strip div{display:flex;flex-direction:column;gap:.2rem}
+.meta-strip .k{font-family:Archivo,system-ui,sans-serif;font-weight:600;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--ink-3);font-size:.72rem}
+.meta-strip .v{font-weight:500;color:var(--ink)}
+
+section.doc{display:grid;grid-template-columns:var(--gutter) minmax(0,1fr);gap:0 3rem;
+  padding:clamp(2.6rem,6vw,4.4rem) 0;border-bottom:1px solid var(--rule)}
+section.doc:last-of-type{border-bottom:0}
+.rail{position:sticky;top:1.5rem;align-self:start}
+.rail .idx{font-family:Archivo,system-ui,sans-serif;font-size:var(--step--1);font-weight:700;
+  letter-spacing:.12em;color:var(--accent);display:block;margin-bottom:.5rem}
+.rail .label{font-size:var(--step--1);color:var(--ink-3);line-height:1.4;max-width:15ch}
+.body>*+*{margin-top:1.35rem}
+.body h2{font-size:var(--step-2);font-weight:700;max-width:24ch}
+.body h3{font-size:var(--step-1);font-weight:600;margin-top:2.6rem}
+.body h4{font-family:Archivo,system-ui,sans-serif;font-size:var(--step--1);font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-top:2rem}
+.body p,.body li{max-width:var(--measure)}
+.body ul,.body ol{margin:0;padding-left:1.25rem}
+.body li+li{margin-top:.5rem}
+strong{font-weight:600}
+@media (max-width:860px){
+  section.doc{grid-template-columns:minmax(0,1fr);gap:1.2rem}
+  .rail{position:static;display:flex;align-items:baseline;gap:.85rem}
+  .rail .idx{margin-bottom:0}
+}
+
+.callout{border-left:3px solid var(--accent);background:var(--accent-wash);padding:1.05rem 1.3rem;
+  max-width:var(--measure);font-size:.96rem}
+.callout.warn{border-left-color:var(--flag);background:var(--flag-wash)}
+.callout h4{margin-top:0;color:var(--ink-2)}
+.callout>*+*{margin-top:.6rem}
+
+.scroller{overflow-x:auto;max-width:100%;padding-bottom:.4rem}
+table{border-collapse:collapse;width:100%;min-width:30rem;font-size:.93rem}
+caption{caption-side:top;text-align:left;font-family:Archivo,system-ui,sans-serif;font-size:var(--step--1);
+  font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);padding-bottom:.7rem}
+th,td{text-align:left;padding:.6rem 1rem .6rem 0;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+thead th{font-family:Archivo,system-ui,sans-serif;font-size:.74rem;font-weight:600;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--ink-3);border-bottom:1px solid var(--rule);white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+
+kbd{display:inline-block;border:1px solid var(--rule);border-bottom-width:2px;border-radius:3px;
+  background:var(--card);padding:.05em .42em;font-size:.8em;font-weight:500;white-space:nowrap;color:var(--ink)}
+:not(pre)>code{background:var(--rule-soft);padding:.1em .36em;font-size:.86em;border-radius:2px}
+
+/* ---- device mockups ---- */
+.mockrow{display:flex;gap:2rem;align-items:flex-start;overflow-x:auto;padding-bottom:.6rem}
+figure{margin:0}
+figcaption{margin-top:.85rem;font-size:var(--step--1);color:var(--ink-3);max-width:29rem}
+figcaption b{display:block;font-family:Archivo,system-ui,sans-serif;font-weight:600;letter-spacing:.09em;
+  text-transform:uppercase;font-size:.72rem;color:var(--ink-2);margin-bottom:.3rem}
+
+.panel{width:480px;height:800px;flex:none;background:var(--panel-bg);color:var(--panel-ink);
+  border:1px solid var(--panel-edge);display:flex;flex-direction:column;
+  font-family:Archivo,system-ui,sans-serif;overflow:hidden;position:relative}
+.p-status{display:flex;justify-content:space-between;align-items:center;padding:0 16px;height:46px;
+  border-bottom:2px solid var(--panel-ink);font-size:15px;font-weight:600;letter-spacing:.04em}
+
+/* list rows */
+.p-row{display:flex;align-items:center;gap:12px;padding:0 18px;height:88px;border-bottom:1px solid var(--panel-ink)}
+.p-row.sel{background:var(--panel-ink);color:var(--panel-bg)}
+.p-row .main{flex:1;min-width:0}
+.p-row .t{font-size:20px;font-weight:700;letter-spacing:.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.p-row .s{font-size:13px;font-weight:500;opacity:.7;margin-top:3px}
+.p-row .num{font-size:34px;font-weight:700;font-variant-numeric:tabular-nums;text-align:right}
+.p-row .topar{font-size:15px;font-weight:600;width:42px;text-align:right;font-variant-numeric:tabular-nums}
+
+/* menu rows */
+.p-menu{display:flex;align-items:center;padding:0 18px;height:82px;border-bottom:1px solid var(--panel-ink);
+  font-size:20px;font-weight:600;letter-spacing:.02em}
+.p-menu.sel{background:var(--panel-ink);color:var(--panel-bg)}
+.p-menu.danger{color:var(--panel-ink)}
+.p-menu .chev{margin-left:auto;font-size:18px;opacity:.55}
+
+/* hole review */
+.p-holehdr{padding:18px 18px 14px;border-bottom:2px solid var(--panel-ink);display:flex;justify-content:space-between;align-items:flex-end}
+.p-holehdr .lab{font-size:12px;font-weight:600;letter-spacing:.18em;text-transform:uppercase}
+.p-holehdr .big{font-size:56px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.p-holehdr .r{text-align:right;font-size:15px;font-weight:500;line-height:1.5;font-variant-numeric:tabular-nums}
+.p-holehdr .r b{font-weight:700}
+.p-score{display:flex;align-items:baseline;justify-content:center;gap:16px;padding:26px 0 22px;border-bottom:1px solid var(--panel-ink)}
+.p-score .n{font-size:110px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.p-score .tp{font-size:34px;font-weight:700;font-variant-numeric:tabular-nums}
+.p-line{display:flex;align-items:center;padding:0 20px;height:76px;border-bottom:1px solid var(--panel-ink);
+  font-size:17px;font-weight:600;letter-spacing:.12em;text-transform:uppercase}
+.p-line .v{margin-left:auto;font-size:36px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:0}
+.p-line .marks{margin-left:12px;font-family:"JetBrains Mono",monospace;font-size:15px;font-weight:700;letter-spacing:.06em}
+.p-line.pen{background:var(--panel-ink);color:var(--panel-bg)}
+
+/* clean card */
+.p-card{padding:10px 12px;flex:1}
+.p-card table{min-width:0;width:100%;font-family:Archivo,sans-serif}
+.p-card th,.p-card td{border:0;border-bottom:1px solid var(--panel-ink);padding:11px 1px;text-align:center;
+  font-size:17px;font-variant-numeric:tabular-nums;color:inherit}
+.p-card th{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;border-bottom:2px solid var(--panel-ink)}
+.p-card td.lbl,.p-card th.lbl{text-align:left;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;width:58px}
+.p-card tr.score td{font-weight:700;font-size:20px}
+.p-card td.out{font-weight:700}
+.p-card td sup{font-size:9px;font-weight:700}
+.p-tabs{display:flex;border-bottom:2px solid var(--panel-ink)}
+.p-tabs div{flex:1;text-align:center;padding:12px 0;font-size:13px;font-weight:600;letter-spacing:.12em;
+  text-transform:uppercase;border-right:1px solid var(--panel-ink)}
+.p-tabs div:last-child{border-right:0}
+.p-tabs div.on{background:var(--panel-ink);color:var(--panel-bg)}
+.p-tot{display:flex;border-top:2px solid var(--panel-ink)}
+.p-tot div{flex:1;padding:14px 16px;border-right:1px solid var(--panel-ink)}
+.p-tot div:last-child{border-right:0}
+.p-tot .k{font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase}
+.p-tot .v{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.2}
+
+/* stats page */
+.p-sect{padding:14px 18px 10px;font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;
+  border-bottom:1px solid var(--panel-ink)}
+.p-stat{display:flex;align-items:center;padding:0 18px;height:62px;border-bottom:1px solid var(--panel-ink);font-size:17px;font-weight:500}
+.p-stat .v{margin-left:auto;font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
+.p-stat .pct{width:64px;text-align:right;font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;opacity:.72}
+
+/* confirm sheet */
+.p-scrim{position:absolute;inset:0;background:var(--panel-ink);opacity:.3}
+.p-sheet{position:absolute;left:0;right:0;bottom:0;background:var(--panel-bg);border-top:3px solid var(--panel-ink)}
+.p-sheet .ttl{padding:18px 18px 8px;font-size:20px;font-weight:700}
+.p-sheet .sub{padding:0 18px 18px;font-size:14px;font-weight:500;opacity:.75;border-bottom:1px solid var(--panel-ink)}
+.p-opt{display:flex;align-items:center;padding:0 18px;height:84px;border-bottom:1px solid var(--panel-ink);
+  font-size:19px;font-weight:700}
+.p-opt.sel{background:var(--panel-ink);color:var(--panel-bg)}
+
+.p-foot{margin-top:auto;display:flex;border-top:2px solid var(--panel-ink);font-size:12px;font-weight:600}
+.p-foot div{flex:1;text-align:center;padding:13px 4px;border-right:1px solid var(--panel-ink)}
+.p-foot div:last-child{border-right:0}
+
+.flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:.6rem;max-width:var(--measure)}
+.node{border:1px solid var(--rule);background:var(--card);padding:.6rem .8rem;font-size:.83rem;line-height:1.35}
+.node b{display:block;font-family:Archivo,system-ui,sans-serif;font-weight:600;font-size:.86rem}
+.node span{color:var(--ink-3);font-size:.76rem}
+.node.hot{border-color:var(--accent);border-left-width:3px}
+.arrow{align-self:center;color:var(--ink-3);font-family:"JetBrains Mono",monospace}
+
+footer.end{padding:3.5rem 0 5rem;border-top:2px solid var(--ink);font-size:var(--step--1);color:var(--ink-3)}
+footer.end p{max-width:var(--measure)}
+footer.end p+p{margin-top:.8rem}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <div class="eyebrow">Design · Scorecard · History</div>
+  <h1>One hole at a time, not a spreadsheet</h1>
+  <p class="standfirst">
+    The scorecard works on the device because scoring shows one hole, large. Review should
+    do the same. This splits today's seven-row grid into a scannable card, a hole-by-hole
+    walk, and a stats page — and adds deleting a round.
+  </p>
+  <div class="meta-strip">
+    <div><span class="k">Card today</span><span class="v">7 rows × 10 cols</span></div>
+    <div><span class="k">Card after</span><span class="v">3 rows</span></div>
+    <div><span class="k">New screens</span><span class="v">Round menu · Holes · Stats</span></div>
+    <div><span class="k">New action</span><span class="v">Delete round</span></div>
+  </div>
+</header>
+
+<!-- ===================================================== 1 -->
+<section class="doc">
+  <div class="rail"><span class="idx">§ 1</span><span class="label">What is wrong now</span></div>
+  <div class="body">
+    <h2>The card is a spreadsheet on a 480 px panel</h2>
+    <p>
+      The scorecard currently draws <strong>seven rows across ten columns</strong> — Hole, Par,
+      Score, Putts, In 100, Out 100, Pen — which is seventy cells at roughly 17 px each. The
+      round summary adds eight more rows on its own screen. Both are readable in the sense
+      that the pixels resolve, and neither is <em>scannable</em>.
+    </p>
+    <p>
+      The scoring screen has never had this problem, and the reason is instructive: it shows
+      <strong>one hole at a time, very large</strong>. That is the shape this device is good at.
+      Review should borrow it rather than fight it.
+    </p>
+
+    <h4>What each screen is actually for</h4>
+    <div class="scroller">
+      <table>
+        <caption>One job per screen</caption>
+        <thead><tr><th style="width:26%">Screen</th><th style="width:30%">The one question it answers</th><th>Density</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Card</strong></td><td>"What did I shoot on each hole?"</td><td>3 rows — hole, par, score</td></tr>
+          <tr><td><strong>Holes</strong></td><td>"What happened on the 7th?"</td><td>1 hole, full detail</td></tr>
+          <tr><td><strong>Stats</strong></td><td>"Where did the shots go?"</td><td>Buckets and putting</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================== 2 -->
+<section class="doc">
+  <div class="rail"><span class="idx">§ 2</span><span class="label">The new shape</span></div>
+  <div class="body">
+    <h2>A round menu, not a jammed card</h2>
+    <p>
+      Selecting a round no longer drops you straight into the grid. It opens a small menu —
+      the same pattern the in-play round menu already uses, so there is nothing new to learn.
+    </p>
+
+    <div class="flow">
+      <div class="node"><b>History</b><span>list of rounds</span></div>
+      <div class="arrow">→</div>
+      <div class="node hot"><b>Round menu</b><span>Card · Holes · Stats · Delete</span></div>
+      <div class="arrow">→</div>
+      <div class="node"><b>Card</b><span>3 rows, scannable</span></div>
+    </div>
+    <div class="flow" style="margin-top:.6rem">
+      <div class="node"><b>Holes</b><span>one hole, ◂ ▸ to walk</span></div>
+      <div class="arrow">·</div>
+      <div class="node"><b>Stats</b><span>buckets, putting, penalties</span></div>
+      <div class="arrow">·</div>
+      <div class="node"><b>Delete</b><span>confirm sheet</span></div>
+    </div>
+
+    <div class="callout">
+      <h4>Why a menu rather than more tabs</h4>
+      <p>
+        Tabs make sense when the views are peers you flick between while comparing. These are
+        not: you open the card to scan, the holes to investigate one thing, the stats once at
+        the end. A menu also gives Delete somewhere to live that is not a hidden gesture.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================== 3 -->
+<section class="doc">
+  <div class="rail"><span class="idx">§ 3</span><span class="label">The screens</span></div>
+  <div class="body">
+    <h2>Four screens, 1:1</h2>
+    <p>480 × 800, pure black on white, as the panel renders.</p>
+
+    <div class="mockrow">
+      <figure>
+        <div class="panel">
+          <div class="p-status"><span>HISTORY</span><span>6 ROUNDS</span></div>
+          <div class="p-row sel">
+            <div class="main"><div class="t">Sanyang Golf Club</div><div class="s">18 holes · Blue</div></div>
+            <div class="num">86</div><div class="topar">+14</div>
+          </div>
+          <div class="p-row">
+            <div class="main"><div class="t">MoganShan Gowin</div><div class="s">18 holes · Blue</div></div>
+            <div class="num">91</div><div class="topar">+19</div>
+          </div>
+          <div class="p-row">
+            <div class="main"><div class="t">Sanyang Golf Club</div><div class="s">18 holes · White</div></div>
+            <div class="num">88</div><div class="topar">+16</div>
+          </div>
+          <div class="p-row">
+            <div class="main"><div class="t">Pebble Beach</div><div class="s">18 holes · Blue</div></div>
+            <div class="num">94</div><div class="topar">+22</div>
+          </div>
+          <div class="p-row">
+            <div class="main"><div class="t">Template course</div><div class="s">18 holes · no par</div></div>
+            <div class="num">89</div><div class="topar">—</div>
+          </div>
+          <div class="p-foot"><div>↩ BACK</div><div>● OPEN</div><div>▴ ▾ SCROLL</div></div>
+        </div>
+        <figcaption>
+          <b>History — unchanged, still index-only</b>
+          Rows already read well: course, holes, tees, score, to-par. A par-free round shows an
+          em dash rather than a fabricated to-par. This screen keeps its rule of reading
+          <code>index.csv</code> and nothing else.
+        </figcaption>
+      </figure>
+
+      <figure>
+        <div class="panel">
+          <div class="p-status"><span>SANYANG GOLF CLUB</span><span>86 (+14)</span></div>
+          <div class="p-menu sel">Scorecard<span class="chev">›</span></div>
+          <div class="p-menu">Hole by hole<span class="chev">›</span></div>
+          <div class="p-menu">Statistics<span class="chev">›</span></div>
+          <div class="p-menu danger">Delete round<span class="chev">›</span></div>
+          <div style="padding:20px 18px;font-size:14px;line-height:1.6;opacity:.72;border-top:1px solid var(--panel-ink)">
+            18 holes · Blue tees<br>33 putts · 5 penalty strokes
+          </div>
+          <div class="p-foot"><div>↩ BACK</div><div>● SELECT</div><div>▴ ▾ MOVE</div></div>
+        </div>
+        <figcaption>
+          <b>Round menu — the new hub</b>
+          Score and to-par sit in the status bar so they are visible from every child screen's
+          entry point. The footer band underneath carries the two figures worth knowing before
+          you choose where to go. Delete is a normal row, not a hidden long-press.
+        </figcaption>
+      </figure>
+    </div>
+
+    <div class="mockrow" style="margin-top:2rem">
+      <figure>
+        <div class="panel">
+          <div class="p-status"><span>SCORECARD</span><span>86 (+14)</span></div>
+          <div class="p-tabs"><div class="on">Front 9</div><div>Back 9</div></div>
+          <div class="p-card">
+            <table>
+              <thead><tr>
+                <th class="lbl">Hole</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th>
+                <th>6</th><th>7</th><th>8</th><th>9</th><th>OUT</th>
+              </tr></thead>
+              <tbody>
+                <tr><td class="lbl">Par</td><td>4</td><td>5</td><td>3</td><td>4</td><td>5</td><td>3</td><td>4</td><td>4</td><td>4</td><td class="out">36</td></tr>
+                <tr class="score"><td class="lbl">Score</td><td>4</td><td>6<sup>H</sup></td><td>3</td><td>4</td><td>5</td><td>7</td><td>9<sup>H</sup></td><td>5</td><td>4</td><td class="out">47</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="p-tot">
+            <div><div class="k">Out</div><div class="v">47</div></div>
+            <div><div class="k">To par</div><div class="v">+11</div></div>
+          </div>
+          <div class="p-foot"><div>↩ BACK</div><div>◂ ▸ NINE</div></div>
+        </div>
+        <figcaption>
+          <b>Card — three rows instead of seven</b>
+          Hole, Par, Score. Nothing else. Row height goes from ~17 px to 40 px and the score
+          row is set larger than par, so the numbers you came to read are the ones that carry
+          weight. A superscript marks a hole that had a penalty — enough to send you to the
+          hole view, not enough to clutter.
+        </figcaption>
+      </figure>
+
+      <figure>
+        <div class="panel">
+          <div class="p-status"><span>HOLE BY HOLE</span><span>SANYANG</span></div>
+          <div class="p-holehdr">
+            <div><div class="lab">Hole</div><div class="big">7</div></div>
+            <div class="r">PAR <b>4</b><br>425 YDS · SI 3</div>
+          </div>
+          <div class="p-score"><span class="n">9</span><span class="tp">+5</span></div>
+          <div class="p-line">Putts <span class="v">2</span></div>
+          <div class="p-line">Inside 100 <span class="v">2</span></div>
+          <div class="p-line">Scoring zone <span class="marks">H OB</span><span class="v">4</span></div>
+          <div class="p-line pen">Penalty <span class="v">+3</span></div>
+          <div class="p-foot"><div>↩ BACK</div><div>◂ ▸ HOLE</div></div>
+        </div>
+        <figcaption>
+          <b>Hole by hole — read-only, walked with ◂ ▸</b>
+          The scoring screen's proportions without the editing. The score is the largest thing
+          on the panel because it is what you came for; the breakdown sits under it in the same
+          order it was entered. Penalty markers appear beside the field they happened in, and
+          the penalty band only exists on holes that had one.
+        </figcaption>
+      </figure>
+    </div>
+
+    <div class="mockrow" style="margin-top:2rem">
+      <figure>
+        <div class="panel">
+          <div class="p-status"><span>STATISTICS</span><span>86 (+14)</span></div>
+          <div class="p-sect">Where the shots went</div>
+          <div class="p-stat">Long game <span class="v">41</span><span class="pct">47.7%</span></div>
+          <div class="p-stat">Short game <span class="v">7</span><span class="pct">8.1%</span></div>
+          <div class="p-stat">Putting <span class="v">33</span><span class="pct">38.4%</span></div>
+          <div class="p-stat">Penalties <span class="v">5</span><span class="pct">5.8%</span></div>
+          <div class="p-sect">Putting</div>
+          <div class="p-stat">One-putts <span class="v">4</span></div>
+          <div class="p-stat">Three-putts <span class="v">3</span></div>
+          <div class="p-sect">Penalties</div>
+          <div class="p-stat">Hazards <span class="v">3</span></div>
+          <div class="p-stat">Out of bounds <span class="v">1</span></div>
+          <div class="p-foot"><div>↩ BACK</div><div>▴ ▾ SCROLL</div></div>
+        </div>
+        <figcaption>
+          <b>Statistics — its own page at last</b>
+          Everything that was crammed into the card's third tab and the summary screen, given
+          room. Here the four buckets <em>do</em> share a denominator — one round, one set of
+          strokes — so percentages are meaningful, unlike the cross-round trends case where
+          they were not.
+        </figcaption>
+      </figure>
+
+      <figure>
+        <div class="panel">
+          <div class="p-status"><span>SANYANG GOLF CLUB</span><span>86 (+14)</span></div>
+          <div class="p-menu">Scorecard<span class="chev">›</span></div>
+          <div class="p-menu">Hole by hole<span class="chev">›</span></div>
+          <div class="p-menu">Statistics<span class="chev">›</span></div>
+          <div class="p-menu danger">Delete round<span class="chev">›</span></div>
+          <div class="p-scrim"></div>
+          <div class="p-sheet">
+            <div class="ttl">Delete this round?</div>
+            <div class="sub">Sanyang Golf Club · 86 (+14) · 18 holes<br>This cannot be undone.</div>
+            <div class="p-opt">Keep round</div>
+            <div class="p-opt sel">Delete</div>
+            <div class="p-foot" style="margin-top:0"><div>↩ BACK</div><div>● CONFIRM</div></div>
+          </div>
+        </div>
+        <figcaption>
+          <b>Delete — names what it is deleting</b>
+          The sheet repeats course, score and hole count, so a mis-navigation cannot destroy the
+          wrong round silently. <strong>Keep round is the default selection</strong> — the
+          destructive option never sits under the cursor when the sheet opens.
+        </figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================== 4 -->
+<section class="doc">
+  <div class="rail"><span class="idx">§ 4</span><span class="label">Deleting safely</span></div>
+  <div class="body">
+    <h2>Two files, one of them append-only</h2>
+    <p>
+      A round lives in two places: its JSON file under <code>/golf/rounds/</code>, and a row in
+      <code>index.csv</code>. Deleting means removing both, and the index is the awkward one —
+      it has been append-only by contract since the first milestone.
+    </p>
+
+    <h4>The order that cannot orphan data</h4>
+    <ol>
+      <li><strong>Rewrite the index first</strong>, to a staged <code>index.csv.new</code> with the
+        row removed, verified by row count, then renamed through <code>.bak</code> — the same
+        pattern the v2→v3 migration already uses and which is already tested.</li>
+      <li><strong>Then delete the round file.</strong></li>
+    </ol>
+    <p>
+      This order matters. If the index rewrite fails, nothing is lost and the round is still
+      listed. If the file deletion fails after the index succeeded, the worst case is an orphan
+      JSON that nothing references — invisible, harmless, and reclaimable later. The reverse
+      order risks a listed round whose file is gone, which is a broken entry the user can see
+      and cannot fix.
+    </p>
+
+    <div class="callout warn">
+      <h4>The rule this bends</h4>
+      <p>
+        CONTRACTS §5.3 says <code>index.csv</code> is appended to and never rewritten wholesale.
+        Delete cannot honour that literally. The concern behind the rule was <em>losing rounds
+        to a failed rewrite</em>, and the staged-verify-rename sequence already answers it —
+        the same reasoning that permitted the v3 migration.
+      </p>
+    </div>
+
+    <h4>What is deliberately not included</h4>
+    <ul>
+      <li><strong>No undo.</strong> A confirm sheet that names the round is the protection. An
+        undo buffer means keeping deleted rounds on disk, which is the opposite of what
+        deleting is for.</li>
+      <li><strong>No multi-select.</strong> Deleting rounds is rare; a checkbox mode on seven
+        buttons costs more than it saves.</li>
+      <li><strong>No editing.</strong> You asked for review without edit, and that is right:
+        an archived round is a record. Correcting a mis-scored hole belongs in the round while
+        it is still open.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ===================================================== 5 -->
+<section class="doc">
+  <div class="rail"><span class="idx">§ 5</span><span class="label">Build order</span></div>
+  <div class="body">
+    <h2>Three steps, cheapest risk first</h2>
+    <div class="scroller">
+      <table>
+        <thead><tr><th style="width:11%">Step</th><th style="width:42%">Scope</th><th>Verified by</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>H1</strong></td>
+            <td>Delete: the staged index rewrite and file removal, as pure logic plus the
+              storage sequence</td>
+            <td>Host tests. The rewrite is the same shape as the migration, so the tests are too.</td>
+          </tr>
+          <tr>
+            <td><strong>H2</strong></td>
+            <td>Round menu, and the card cut to three rows</td>
+            <td>Build and review. Removing rows is low-risk; the menu is a list like the others.</td>
+          </tr>
+          <tr>
+            <td><strong>H3</strong></td>
+            <td>Hole-by-hole view and the statistics page</td>
+            <td>Build, review, and your hands. Two new screens, no new data.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>One thing worth settling on the device</h4>
+    <p>
+      The card mock keeps <strong>Front 9 / Back 9</strong> as tabs. With only three rows, both
+      nines might fit on one screen as two stacked blocks — no tabs, no switching, the whole
+      round visible at once. That is either much better or too tight, and the honest way to
+      find out is to look at it on the panel rather than argue about it here.
+    </p>
+  </div>
+</section>
+
+<footer class="end">
+  <p>
+    Mockups render at true 480 × 800 in pure black and white, matching the panel. Figures are
+    illustrative; the course data is the owner's own.
+  </p>
+  <p>
+    Percentages appear on the per-round statistics page because a single round's buckets share
+    one denominator. They remain absent from cross-round trends, where the penalty fold covers
+    fewer rounds than the scoring fold.
+  </p>
+</footer>
+
+</div>

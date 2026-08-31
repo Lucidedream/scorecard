@@ -1,6 +1,7 @@
 add_executable(golf_trends_tests test_golf_trends.cpp
   ${REPO_ROOT}/src/golf/GolfCsv.cpp
   ${REPO_ROOT}/src/golf/GolfHistory.cpp
+  ${REPO_ROOT}/src/golf/GolfPaths.cpp
   ${REPO_ROOT}/src/golf/GolfTrends.cpp
 )
 target_link_libraries(golf_trends_tests PRIVATE GTest::gtest_main crosspoint_test_common)

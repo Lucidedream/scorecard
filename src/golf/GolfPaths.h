@@ -10,5 +10,8 @@ inline constexpr size_t GOLF_ROUND_FILENAME_BUFFER_SIZE = 64;
 bool golfSlug(const char* courseName, char* output, size_t outputSize);
 bool golfFormatDate(uint16_t dateYmd, char* output, size_t outputSize);
 bool golfParseDate(const char* date, uint16_t& dateYmd);
+// Converts a system-clock Unix timestamp to the packed local calendar date used
+// on disk. Years before 2020 are treated as an unset clock.
+bool golfDateFromTimestamp(int64_t timestamp, int16_t utcOffsetMinutes, uint16_t& dateYmd);
 bool golfRoundFilename(uint16_t roundSequence, const char* courseName, uint16_t collisionSuffix, char* output,
                        size_t outputSize);

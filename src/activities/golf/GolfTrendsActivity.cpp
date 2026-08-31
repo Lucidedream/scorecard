@@ -44,13 +44,9 @@ void GolfTrendsActivity::onEnter() {
   if (trends.enoughRounds()) {
     snprintf(subtitle, sizeof(subtitle), GolfStrings::AVERAGE_OVER_ROUNDS, trends.rounds);
     if (trends.showsPenalties) {
-      snprintf(message, sizeof(message), GolfStrings::PENALTY_SPLIT_FORMAT,
-               static_cast<unsigned long>(trends.hazardsAverageTenths / 10),
-               static_cast<unsigned long>(trends.hazardsAverageTenths % 10),
-               static_cast<unsigned long>(trends.obsAverageTenths / 10),
-               static_cast<unsigned long>(trends.obsAverageTenths % 10));
+      snprintf(message, sizeof(message), GolfStrings::MIX_OVER_ROUNDS, trends.penaltyRounds);
     } else {
-      snprintf(message, sizeof(message), GolfStrings::PENALTY_TRENDS_NEED_ROUNDS, trends.penaltyRounds);
+      snprintf(message, sizeof(message), GolfStrings::MIX_NEED_ROUNDS, trends.penaltyRounds);
     }
   } else {
     snprintf(message, sizeof(message), GolfStrings::TRENDS_NEED_ROUNDS, trends.rounds);
@@ -106,10 +102,9 @@ void GolfTrendsActivity::buildScreen(UiScreen& screen) {
     return;
   }
 
-  const char* labels[MAX_ROWS] = {GolfStrings::SCORING_AVERAGE, GolfStrings::AVERAGE_TO_PAR,
-                                  GolfStrings::BEST_WORST,      GolfStrings::PUTTS_PER_ROUND,
-                                  GolfStrings::LONG_GAME,       GolfStrings::SHORT_GAME,
-                                  GolfStrings::PUTTING,         GolfStrings::PENALTIES_PER_ROUND};
+  const char* labels[MAX_ROWS] = {GolfStrings::SCORING_AVERAGE, GolfStrings::AVERAGE_TO_PAR, GolfStrings::BEST_WORST,
+                                  GolfStrings::PUTTS_PER_ROUND, GolfStrings::LONG_GAME,      GolfStrings::SHORT_GAME,
+                                  GolfStrings::PUTTING,         GolfStrings::PENALTIES};
   const uint32_t averages[MAX_ROWS] = {trends.scoringAverageTenths,
                                        0,
                                        0,
@@ -118,10 +113,11 @@ void GolfTrendsActivity::buildScreen(UiScreen& screen) {
                                        trends.shortAverageTenths,
                                        trends.puttingAverageTenths,
                                        trends.penaltyStrokesAverageTenths};
-  const uint32_t percentages[3] = {trends.longPercentTenths, trends.shortPercentTenths, trends.puttingPercentTenths};
+  const uint32_t percentages[4] = {trends.longPercentTenths, trends.shortPercentTenths, trends.puttingPercentTenths,
+                                   trends.penaltyPercentTenths};
   uint8_t rowCount = MAX_ROWS;
   if (!trends.showsToPar) --rowCount;
-  if (!trends.showsPenalties) --rowCount;
+  if (!trends.showsPenalties) rowCount = static_cast<uint8_t>(rowCount - 4);
   for (uint8_t row = 0; row < rowCount; ++row) {
     const uint8_t dataRow = !trends.showsToPar && row > 0 ? static_cast<uint8_t>(row + 1) : row;
     snprintf(cells[row][0], sizeof(cells[row][0]), "%s", labels[dataRow]);
@@ -130,14 +126,10 @@ void GolfTrendsActivity::buildScreen(UiScreen& screen) {
       formatSignedTenths(trends.toParAverageTenths, cells[row][1], sizeof(cells[row][1]));
     } else if (dataRow == 2) {
       snprintf(cells[row][1], sizeof(cells[row][1]), GolfStrings::BEST_WORST_FORMAT, trends.best, trends.worst);
-    } else if (dataRow == 7) {
-      snprintf(cells[row][1], sizeof(cells[row][1]), GolfStrings::PENALTY_ROUND_VALUE_FORMAT,
-               static_cast<unsigned long>(averages[dataRow] / 10), static_cast<unsigned long>(averages[dataRow] % 10),
-               trends.penaltyRounds);
     } else {
       formatTenths(averages[dataRow], cells[row][1], sizeof(cells[row][1]));
     }
-    if (dataRow >= 4 && dataRow <= 6) {
+    if (dataRow >= 4 && dataRow <= 7) {
       formatPercent(percentages[dataRow - 4], cells[row][2], sizeof(cells[row][2]));
     }
   }

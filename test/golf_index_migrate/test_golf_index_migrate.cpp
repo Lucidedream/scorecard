@@ -38,6 +38,26 @@ GolfIndexMigrator migrate(const std::string& input, Sink& s) {
   return migrator;
 }
 
+GolfIndexMigrator rewriteDelete(const std::string& input, const char* filename, Sink& s) {
+  GolfIndexMigrator rewrite;
+  EXPECT_TRUE(rewrite.resetForDelete(filename));
+  for (size_t offset = 0; offset < input.size(); offset += 7) {
+    const size_t remaining = input.size() - offset;
+    if (!rewrite.feed(input.data() + offset, remaining < 7 ? remaining : 7, &sink, &s)) break;
+  }
+  rewrite.finish();
+  return rewrite;
+}
+
+bool simulatedAtomicDelete(std::string& live, const char* filename, const size_t allowBytes = SIZE_MAX) {
+  Sink staged;
+  staged.allowBytes = allowBytes;
+  const GolfIndexMigrator rewrite = rewriteDelete(live, filename, staged);
+  if (rewrite.aborted() || rewrite.deletedRows() != 1) return false;
+  live = staged.out;
+  return true;
+}
+
 std::string v2Row(const char* course, uint16_t strokes, uint16_t par, uint16_t putts, uint16_t in100, uint16_t out100,
                   const char* file) {
   char buf[192];
@@ -157,4 +177,40 @@ TEST(GolfIndexMigrate, RoundTripsThroughItsOwnOutputForVerification) {
   EXPECT_EQ(verifier.sourceVersion(), GolfIndexVersion::V3);
   EXPECT_EQ(verifier.dataRows(), writer.dataRows());
   EXPECT_TRUE(second.out.empty());
+}
+
+TEST(GolfIndexDelete, RemovesOnlyMatchingRowAndPreservesEveryOtherValue) {
+  const std::string first = ",Pebble,18,82,72,33,52,30,2,1,round-0001.json\r\n";
+  const std::string target = "2026-08-31,Sanyang,18,90,71,36,58,32,0,0,round-0002.json\r\n";
+  const std::string third = ",MoganShan,9,43,36,17,27,16,,,round-0003.json\r\n";
+  Sink staged;
+  const GolfIndexMigrator rewrite =
+      rewriteDelete(std::string(HEADER_V3) + first + target + third, "round-0002.json", staged);
+  ASSERT_FALSE(rewrite.aborted());
+  EXPECT_EQ(rewrite.deletedRows(), 1);
+  EXPECT_EQ(rewrite.dataRows(), 3u);
+  EXPECT_EQ(rewrite.outputRows(), 2u);
+
+  GolfIndexRow parsed{};
+  ASSERT_TRUE(golfParseIndexRow(first.c_str(), parsed));
+  EXPECT_NE(staged.out.find(first), std::string::npos);
+  ASSERT_TRUE(golfParseIndexRow(third.c_str(), parsed));
+  EXPECT_NE(staged.out.find(third), std::string::npos);
+  EXPECT_EQ(staged.out.find(target), std::string::npos);
+}
+
+TEST(GolfIndexDelete, FailedStagedWriteLeavesLiveIndexByteIdentical) {
+  std::string live = std::string(HEADER_V3) + ",Pebble,18,82,72,33,52,30,2,1,round-0001.json\r\n" +
+                     ",Sanyang,18,90,71,36,58,32,0,0,round-0002.json\r\n";
+  const std::string before = live;
+  EXPECT_FALSE(simulatedAtomicDelete(live, "round-0001.json", sizeof(HEADER_V3) + 4));
+  EXPECT_EQ(live, before);
+}
+
+TEST(GolfIndexDelete, DeletingOnlyRoundLeavesValidHeaderOnlyIndex) {
+  std::string live = std::string(HEADER_V3) + ",Pebble,18,82,72,33,52,30,2,1,round-0001.json\r\n";
+  ASSERT_TRUE(simulatedAtomicDelete(live, "round-0001.json"));
+  EXPECT_EQ(live, HEADER_V3);
+  EXPECT_EQ(golfIndexHeaderVersion("date,course,holes,strokes,par,putts,in100,out100,hazards,obs,file"),
+            GolfIndexVersion::V3);
 }

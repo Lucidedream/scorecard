@@ -17,6 +17,7 @@ class GolfHistoryActivity final : public UiListActivity {
   GolfHistoryReader history;
   freeink::ui::ListItem visibleRows[WINDOW_ROWS]{};
   char visibleValues[WINDOW_ROWS][20]{};
+  char visibleDates[WINDOW_ROWS][GOLF_DATE_BUFFER_SIZE]{};
   bool loadError = false;
 
   int listCount() const override { return history.count(); }
@@ -28,6 +29,6 @@ class GolfHistoryActivity final : public UiListActivity {
   // index.csv, per CONTRACTS-V2 §8) and loads it. Returns false — falling the
   // caller back to the CSV-only summary — when the row has no file, the file is
   // gone, or the file fails validation.
-  bool loadArchivedRound(uint8_t newestIndex, GolfRound& out);
+  bool loadArchivedRound(uint8_t newestIndex, GolfRound& out, char* filename, size_t filenameSize);
   static void logMalformed(uint32_t lineNumber, void* user);
 };

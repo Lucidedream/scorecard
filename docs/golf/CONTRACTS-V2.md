@@ -726,3 +726,69 @@ The diff there grows and will conflict on future rebases. Accepted deliberately:
 device the scorecard is the primary application, and reaching it should not cost a
 keypress every round. Keep the change as contained as possible — shift geometry, do not
 reorganise unrelated drawing.
+
+
+## 15. Dates, and percentages in trends (v4)
+
+### 15.1 Percentages return to the trends mix — supersedes §12.8
+
+§12.8 removed the penalty percentage because the scoring fold covered **all** 18-hole
+rounds while the penalty fold covered only rounds with `penaltiesRecorded`. Dividing one
+by the other compared different populations.
+
+**The fix is to make them the same population, not to drop the number.** Fold *every*
+bucket in the mix over the rounds that have penalty data:
+
+```
+mix rounds = 18-hole rounds with penaltiesRecorded
+long / short / putting / penalties  -> all folded over that same set
+```
+
+Now the four rows share one denominator and sum to 100%, and the percentage is
+meaningful. §12.8's reasoning was right; its conclusion was too pessimistic.
+
+**Label the mix with its own round count** — e.g. *"over 4 rounds"* — because it may
+cover fewer rounds than the headline scoring average above it. That gap closes on its
+own: rounds predating penalty tracking age out of the 50-round window, after which the
+two counts converge permanently.
+
+Suppress the whole mix when fewer than two rounds qualify, as §11 already does.
+
+### 15.2 Round dates without manual entry
+
+The owner will not type a date every round, and he should not have to.
+
+**Ordering already works and does not depend on dates.** History is newest-first through
+the ring-buffer reversal, and round files carry a monotonic `round-NNNN` sequence. Dates
+are for *display*, not sort order. Do not make sorting depend on them.
+
+**`HalClock` is a dead end on this device.** It requires a hardware RTC
+(`_sdkRtc.begin()`), which the X4 does not have, so `isAvailable()` is false and
+`syncFromNTP()` no-ops. Do not route through it.
+
+**Use the ESP32's own system clock instead.** The chip has an internal RTC that ESP-IDF
+keeps running across deep sleep, so a single successful sync survives sleeps and reboots
+without any hardware RTC:
+
+* On a successful Wi-Fi connection, run an SNTP sync that sets **system time**
+  (`configTzTime` + `time(nullptr)`), independent of `HalClock`.
+* Re-sync opportunistically whenever Wi-Fi connects — the owner already connects to
+  upload courses and firmware. No sync is ever forced, and none is required to play.
+* Stamp the date into the round **when it is archived**, not when it starts.
+
+**Unknown stays unknown.** If the clock has never been set, `time(nullptr)` returns a
+value near the 1970 epoch. Treat any year before 2020 as *no date* and display nothing —
+the same discipline as par-free rounds and unrecorded penalties. A fabricated date is
+worse than a blank.
+
+**Accuracy is adequate and must not be overstated.** Deep-sleep timekeeping runs off an
+internal RC oscillator with meaningful drift. That is fine for a date and useless for a
+timestamp: display the date only, never a time of day, and re-sync whenever Wi-Fi is
+available.
+
+### 15.3 Footers stay on the theme path
+
+Every new screen uses `mappedInput.mapLabels()` + `GUI.drawButtonHints()`, exactly as
+`UiListActivity::drawFooter()` and the v3.4 scoring screen do. **No screen hand-draws
+footer geometry.** Beyond matching the app's sizing, `mapLabels()` is what honours the
+owner's front-button remapping — a hand-drawn footer silently ignores it.

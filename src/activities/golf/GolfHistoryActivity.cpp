@@ -8,7 +8,7 @@
 
 #include <cstdio>
 
-#include "GolfCardActivity.h"
+#include "GolfHistoryRoundMenuActivity.h"
 #include "GolfRoundSummaryActivity.h"
 #include "GolfStrings.h"
 #include "components/UITheme.h"
@@ -65,7 +65,8 @@ const char* GolfHistoryActivity::headerTitle() const {
   return history.overflowed() ? GolfStrings::HISTORY_LATEST : GolfStrings::HISTORY;
 }
 
-bool GolfHistoryActivity::loadArchivedRound(const uint8_t newestIndex, GolfRound& out) {
+bool GolfHistoryActivity::loadArchivedRound(const uint8_t newestIndex, GolfRound& out, char* filename,
+                                            const size_t filenameSize) {
   if (!Storage.exists(INDEX_PATH)) return false;
   HalFile file;
   if (!Storage.openFileForRead("GOLF", INDEX_PATH, file)) return false;
@@ -79,6 +80,10 @@ bool GolfHistoryActivity::loadArchivedRound(const uint8_t newestIndex, GolfRound
     locator.feed(chunk, static_cast<size_t>(bytesRead));
   }
   if (!locator.finish()) return false;
+  if (filename == nullptr || filenameSize == 0 ||
+      snprintf(filename, filenameSize, "%s", locator.filename()) >= static_cast<int>(filenameSize)) {
+    return false;
+  }
 
   char path[sizeof("/golf/rounds/") + GOLF_ROUND_FILENAME_BUFFER_SIZE];
   snprintf(path, sizeof(path), "/golf/rounds/%s", locator.filename());
@@ -91,13 +96,17 @@ void GolfHistoryActivity::activateIndex(const int index) {
   const uint8_t newestIndex = static_cast<uint8_t>(index);
 
   GolfRound round{};
-  if (loadArchivedRound(newestIndex, round)) {
-    auto card = makeUniqueNoThrow<GolfCardActivity>(renderer, mappedInput, round);
-    if (!card) {
-      LOG_ERR("GOLF", "OOM: card activity");
+  char filename[GOLF_ROUND_FILENAME_BUFFER_SIZE]{};
+  if (loadArchivedRound(newestIndex, round, filename, sizeof(filename))) {
+    auto menu = makeUniqueNoThrow<GolfHistoryRoundMenuActivity>(renderer, mappedInput, round, filename);
+    if (!menu) {
+      LOG_ERR("GOLF", "OOM: history round menu activity");
       return;
     }
-    startActivityForResult(std::move(card), nullptr);
+    startActivityForResult(std::move(menu), [this](const ActivityResult&) {
+      loadHistory();
+      requestUpdate();
+    });
     return;
   }
 
@@ -123,7 +132,7 @@ void GolfHistoryActivity::buildScreen(UiScreen& screen) {
   props.count = history.count();
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;
-  syncListViewport(screen, props);
+  syncListViewport(screen, props, /*hasSubtitle=*/true);
   const uint16_t first = props.topIndex;
   const uint16_t remaining = static_cast<uint16_t>(history.count() - first);
   const uint16_t count = remaining < WINDOW_ROWS ? remaining : WINDOW_ROWS;
@@ -131,6 +140,10 @@ void GolfHistoryActivity::buildScreen(UiScreen& screen) {
     const GolfHistoryEntry& entry = history.newest(static_cast<uint8_t>(first + windowIndex));
     visibleRows[windowIndex] = {};
     visibleRows[windowIndex].label = entry.course;
+    visibleDates[windowIndex][0] = '\0';
+    if (golfFormatDate(entry.dateYmd, visibleDates[windowIndex], sizeof(visibleDates[windowIndex]))) {
+      visibleRows[windowIndex].subtitle = visibleDates[windowIndex];
+    }
     visibleRows[windowIndex].actionValue = static_cast<int16_t>(first + windowIndex);
     if (golfHistoryShowsToPar(entry)) {
       char toPar[8];
