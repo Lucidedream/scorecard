@@ -51,6 +51,10 @@ bool loadGolfRoundFile(const char* path, GolfRound& out) {
     LOG_ERR("GOLF", "Rejected invalid round arrays: %s", path);
     return false;
   }
+  if (version == 3 && !golfReadJsonPenalties(doc["penalties"], loaded, lengths.penalties)) {
+    LOG_ERR("GOLF", "Rejected invalid round penalties array: %s", path);
+    return false;
+  }
 
   GolfValidationResult validation{};
   const GolfRoundDecodeStatus status = golfCheckRound(loaded, version, holes, /*currentHole=*/0, lengths, validation);

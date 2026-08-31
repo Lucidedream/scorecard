@@ -16,10 +16,15 @@ inline constexpr char SCORING_AVERAGE[] = "Scoring average";
 inline constexpr char AVERAGE_TO_PAR[] = "Average to par";
 inline constexpr char BEST_WORST[] = "Best / worst";
 inline constexpr char PUTTS_PER_ROUND[] = "Putts per round";
+inline constexpr char PENALTIES_PER_ROUND[] = "Penalties per round";
+inline constexpr char PENALTY_ROUND_VALUE_FORMAT[] = "%lu.%lu over %u rounds";
+inline constexpr char PENALTY_SPLIT_FORMAT[] = "Penalty split · Hazard %lu.%lu · OB %lu.%lu";
+inline constexpr char PENALTY_TRENDS_NEED_ROUNDS[] = "Penalty trends need at least two tracked rounds. Found %u.";
 inline constexpr char DECIMAL_FORMAT[] = "%lu.%lu";
 inline constexpr char POSITIVE_DECIMAL_FORMAT[] = "+%lu.%lu";
 inline constexpr char NEGATIVE_DECIMAL_FORMAT[] = "-%lu.%lu";
 inline constexpr char PERCENT_FORMAT[] = "%lu.%lu%%";
+inline constexpr char WHOLE_PERCENT_FORMAT[] = "%u%%";
 inline constexpr char BEST_WORST_FORMAT[] = "%u / %u";
 inline constexpr char VIEW_CARD[] = "View card";
 inline constexpr char FRONT_NINE[] = "Front 9";
@@ -31,9 +36,13 @@ inline constexpr char TOTAL_SHORT[] = "TOT";
 inline constexpr char DOT[] = "·";
 inline constexpr char IN100_CARD[] = "In 100";
 inline constexpr char OUT100_CARD[] = "Out 100";
+inline constexpr char PEN_CARD[] = "Pen";
 inline constexpr char LONG_GAME[] = "Long game";
 inline constexpr char SHORT_GAME[] = "Short game";
 inline constexpr char PUTTING[] = "Putting";
+inline constexpr char PENALTIES[] = "Penalties";
+inline constexpr char TOTAL_PENALTIES[] = "Total penalties";
+inline constexpr char HAZARDS[] = "Hazards";
 inline constexpr char ONE_PUTTS[] = "1-putts";
 inline constexpr char THREE_PUTTS[] = "3-putts";
 inline constexpr char ROUND_SUMMARY[] = "Round summary";
@@ -86,4 +95,27 @@ inline constexpr char TO_PAR[] = "TO PAR";
 inline constexpr char EVEN[] = "E";
 inline constexpr char IN100_CARRY[] = "INSIDE 100 +1";
 inline constexpr char PUTTS_CARRY[] = "PUTTS -1";
+
+// Penalty tracking (CONTRACTS-V2 §12)
+inline constexpr char PENALTY[] = "PENALTY";
+inline constexpr char ADD_PENALTY[] = "ADD PENALTY";
+inline constexpr char HAZARD[] = "Hazard";
+inline constexpr char OB[] = "Out of bounds";
+inline constexpr char HAZARD_COST[] = "+1 stroke · water or penalty area";
+inline constexpr char OB_COST[] = "+2 strokes · local rule E-5";
+inline constexpr char HAZARD_TAG[] = "H";
+inline constexpr char OB_TAG[] = "OB";
+inline constexpr char HOLE_FULL[] = "HOLE IS FULL — 8 PENALTIES";
+
+// Penalty picker footer: one cell per front button (CONTRACTS-V2 §13.3).
+inline constexpr char PICK_BACK[] = "BACK";
+inline constexpr char PICK_CONFIRM[] = "CONFIRM";
+
+// Scoring-screen footer cells: one per front button (CONTRACTS-V2 §13.2).
+// Cell 2 names Confirm's live binding — PENALTY (above) when Power cycles the
+// field, otherwise the field-cycle itself (§12.6).
+inline constexpr char F_MENU[] = "MENU";
+inline constexpr char F_FIELD[] = "FIELD";
+inline constexpr char F_PREV[] = "PREV";
+inline constexpr char F_NEXT[] = "NEXT";
 }  // namespace GolfStrings

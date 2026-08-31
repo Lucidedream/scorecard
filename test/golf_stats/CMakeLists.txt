@@ -1,6 +1,8 @@
 add_executable(GolfStatsTest
   GolfStatsTest.cpp
   ${REPO_ROOT}/src/golf/GolfStats.cpp
+  ${REPO_ROOT}/src/golf/GolfPenalty.cpp
+  ${REPO_ROOT}/src/golf/GolfRules.cpp
 )
 
 target_compile_definitions(GolfStatsTest PRIVATE CROSSPOINT_GOLF=1)

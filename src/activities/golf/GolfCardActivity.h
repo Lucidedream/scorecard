@@ -21,7 +21,7 @@ class GolfCardActivity final : public Activity, protected UiAppHost {
   void render(RenderLock&&) override;
 
  private:
-  static constexpr uint8_t MAX_TABLE_ROWS = 6;
+  static constexpr uint8_t MAX_TABLE_ROWS = 7;
   static constexpr uint8_t MAX_TABLE_COLS = 12;
   static constexpr freeink::ui::ActionId ACTION_TAB = 1;
 

@@ -95,14 +95,32 @@ bool parseUnsigned(const char* value, uint16_t maximum, uint16_t& parsed) {
 
 }  // namespace
 
+GolfIndexVersion golfIndexHeaderVersion(const char* line) {
+  if (line == nullptr) {
+    return GolfIndexVersion::Unknown;
+  }
+  if (strcmp(line, GOLF_INDEX_HEADER_V3) == 0) {
+    return GolfIndexVersion::V3;
+  }
+  if (strcmp(line, GOLF_INDEX_HEADER_V2) == 0) {
+    return GolfIndexVersion::V2;
+  }
+  return GolfIndexVersion::Unknown;
+}
+
 bool golfFormatIndexRow(const GolfIndexRowView& row, char* output, size_t outputSize) {
   if (output == nullptr || outputSize == 0) {
     return false;
   }
   size_t written = 0;
-  char totals[64];
-  const int totalsLength = snprintf(totals, sizeof(totals), ",%u,%u,%u,%u,%u,%u,", row.holes, row.strokes, row.par,
-                                    row.putts, row.in100, row.out100);
+  char totals[72];
+  // A migrated pre-penalty round writes its hazards/obs cells empty (",,"): the
+  // data was never recorded, and an empty cell says so where a 0 would lie.
+  const int totalsLength = row.penaltiesRecorded
+                               ? snprintf(totals, sizeof(totals), ",%u,%u,%u,%u,%u,%u,%u,%u,", row.holes, row.strokes,
+                                          row.par, row.putts, row.in100, row.out100, row.hazards, row.obs)
+                               : snprintf(totals, sizeof(totals), ",%u,%u,%u,%u,%u,%u,,,", row.holes, row.strokes,
+                                          row.par, row.putts, row.in100, row.out100);
   if (totalsLength < 0 || static_cast<size_t>(totalsLength) >= sizeof(totals) ||
       !appendText(row.date, output, outputSize, written) || !appendChar(',', output, outputSize, written) ||
       !appendCourse(row.course, output, outputSize, written) || !appendText(totals, output, outputSize, written) ||
@@ -115,9 +133,9 @@ bool golfFormatIndexRow(const GolfIndexRowView& row, char* output, size_t output
 }
 
 bool golfFormatIndexRow(const GolfIndexRow& row, char* output, size_t outputSize) {
-  return golfFormatIndexRow(
-      {row.date, row.course, row.holes, row.strokes, row.par, row.putts, row.in100, row.out100, row.file}, output,
-      outputSize);
+  return golfFormatIndexRow({row.date, row.course, row.holes, row.strokes, row.par, row.putts, row.in100, row.out100,
+                             row.hazards, row.obs, row.penaltiesRecorded, row.file},
+                            output, outputSize);
 }
 
 bool golfParseIndexRow(const char* input, GolfIndexRow& row) {
@@ -141,8 +159,35 @@ bool golfParseIndexRow(const char* input, GolfIndexRow& row) {
       return false;
     }
   }
-  if (!parseField(current, parsed.file, sizeof(parsed.file))) {
+  char next[GOLF_ROUND_FILENAME_BUFFER_SIZE]{};
+  if (!parseField(current, next, sizeof(next))) {
     return false;
+  }
+  if (*current == ',') {
+    // v3 row: `next` is the hazards cell, then an obs cell, then the file. Both
+    // penalty cells empty is a migrated pre-penalty round (not recorded); both
+    // populated is a real v3 round; one of each is malformed.
+    ++current;
+    char obs[6]{};
+    if (!parseField(current, obs, sizeof(obs)) || *current++ != ',' ||
+        !parseField(current, parsed.file, sizeof(parsed.file))) {
+      return false;
+    }
+    const bool hazardsEmpty = next[0] == '\0';
+    const bool obsEmpty = obs[0] == '\0';
+    if (hazardsEmpty != obsEmpty) {
+      return false;
+    }
+    if (!hazardsEmpty) {
+      if (!parseUnsigned(next, std::numeric_limits<uint16_t>::max(), parsed.hazards) ||
+          !parseUnsigned(obs, std::numeric_limits<uint16_t>::max(), parsed.obs)) {
+        return false;
+      }
+      parsed.penaltiesRecorded = true;
+    }
+  } else {
+    // v2 row: `next` is the file column; penalties were never tracked.
+    memcpy(parsed.file, next, sizeof(parsed.file));
   }
   if (*current == '\r') {
     ++current;

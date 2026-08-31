@@ -10,6 +10,7 @@ struct GolfWorstHole {
 };
 
 uint8_t golfLongGame(const GolfRound& round, uint8_t hole);
+uint16_t golfPenaltyTotal(const GolfRound& round);
 uint16_t golfHoleScore(const GolfRound& round, uint8_t hole);
 uint16_t golfScore(const GolfRound& round);
 uint16_t golfParTotal(const GolfRound& round);

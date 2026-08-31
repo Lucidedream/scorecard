@@ -15,7 +15,7 @@ class GolfTrendsActivity final : public Activity, protected UiAppHost {
   void render(RenderLock&&) override;
 
  private:
-  static constexpr uint8_t MAX_ROWS = 7;
+  static constexpr uint8_t MAX_ROWS = 8;
   GolfHistoryReader history;
   GolfTrendStats trends{};
   char cells[MAX_ROWS][3][24]{};

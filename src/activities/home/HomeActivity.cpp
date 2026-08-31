@@ -28,9 +28,18 @@
 
 namespace {
 
-int getScorecardMenuIndex(const ThemeMetrics& metrics, const bool hasRecentBooks) {
-  return metrics.homeContinueReadingInMenu && hasRecentBooks ? 1 : 0;
-}
+// v3.2 (CONTRACTS-V2.md §14): Scorecard is its own row at the very top of home,
+// above the recent-book cover tile, and is selected on entry. It takes the
+// first selector slot; every recent-book tile and menu row below it is the
+// upstream home laid out kHomeSelectorShift slots lower. loop() and render()
+// both map a selector slot to its upstream position through
+// homeUpstreamSelector() — a result below zero is the Scorecard row — so two
+// sites can never resolve the same slot to different things. The earlier
+// off-by-one bugs in this file came from exactly that kind of duplicated
+// position arithmetic.
+constexpr int kHomeSelectorShift = 1;
+
+int homeUpstreamSelector(int selectorIndex) { return selectorIndex - kHomeSelectorShift; }
 
 }  // namespace
 #endif
@@ -44,7 +53,7 @@ int HomeActivity::getMenuItemCount() const {
     count++;
   }
 #if CROSSPOINT_GOLF
-  count++;  // Scorecard row, before File Browser
+  count++;  // Scorecard row (selector slot 0), above the cover tile
 #endif
   return count;
 }
@@ -137,7 +146,10 @@ void HomeActivity::onEnter() {
   const auto base = static_cast<int>(recentBooks.size());
   selectorIndex = initialMenuItem == HomeMenuItem::NONE ? 0 : base + menuItemToIndex(initialMenuItem, hasOpdsServers);
 #if CROSSPOINT_GOLF
-  if (initialMenuItem != HomeMenuItem::NONE) ++selectorIndex;
+  // Default (NONE) lands on selector slot 0 — the Scorecard row, selected on
+  // entry (CONTRACTS-V2.md §14). A targeted re-entry still wins: shift its
+  // upstream index past the Scorecard slot.
+  if (initialMenuItem != HomeMenuItem::NONE) selectorIndex += kHomeSelectorShift;
 #endif
 
   // Trigger first update
@@ -191,23 +203,24 @@ void HomeActivity::loop() {
   const int menuCount = getMenuItemCount();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  auto activateSelection = [this, &metrics] {
-    if (selectorIndex < recentBooks.size()) {
-      onSelectBook(recentBooks[selectorIndex].path);
-      return;
-    }
-    int menuIndex = selectorIndex - static_cast<int>(recentBooks.size());
 #if CROSSPOINT_GOLF
-    const int scorecardIndex = getScorecardMenuIndex(metrics, !recentBooks.empty());
-    const int renderedMenuIndex = metrics.homeContinueReadingInMenu ? selectorIndex : menuIndex;
-    // Scorecard precedes File Browser and has no HomeMenuItem enum value.
-    // (adding one would touch ActivityManager.h, a fifth upstream file).
-    if (renderedMenuIndex == scorecardIndex) {
+  auto activateSelection = [this] {
+    const int upstreamSelector = homeUpstreamSelector(selectorIndex);
+    if (upstreamSelector < 0) {
+      // Scorecard has no HomeMenuItem value; adding one would touch a further
+      // upstream file (ActivityManager.h).
       openGolfHome(activityManager, renderer, mappedInput);
       return;
     }
-    --menuIndex;
+#else
+  auto activateSelection = [this] {
+    const int upstreamSelector = selectorIndex;
 #endif
+    if (upstreamSelector < recentBooks.size()) {
+      onSelectBook(recentBooks[upstreamSelector].path);
+      return;
+    }
+    const int menuIndex = upstreamSelector - static_cast<int>(recentBooks.size());
     switch (indexToMenuItem(menuIndex, hasOpdsServers)) {
       case HomeMenuItem::FILE_BROWSER:
         onFileBrowserOpen();
@@ -259,14 +272,55 @@ void HomeActivity::loop() {
     return;
   }
 
+#if CROSSPOINT_GOLF
+  // v3.2 (CONTRACTS-V2.md §14): the Scorecard row occupies the band between the
+  // header and the cover tile; the tile and the menu below it shift down by its
+  // height. Same geometry the render() pass uses.
+  const int scorecardBandHeight = metrics.verticalSpacing + GUI.getMenuRowHeight(renderer) + metrics.menuSpacing;
+  const int coverTop = metrics.homeTopPadding + scorecardBandHeight;
+  {
+    int scorecardRow = -1;
+    const auto scorecardTouch = mappedInput.rowTouch(scorecardRow, metrics.homeTopPadding, scorecardBandHeight, 1, 0,
+                                                     INT32_MAX, scorecardBandHeight);
+    if (scorecardTouch == MappedInputManager::RowTouch::Down) {
+      if (selectorIndex != 0) {  // slot 0 is the Scorecard row
+        selectorIndex = 0;
+        requestUpdate();
+      }
+      return;
+    }
+    if (scorecardTouch == MappedInputManager::RowTouch::Tap) {
+      selectorIndex = 0;
+      activateSelection();
+      return;
+    }
+  }
+#endif
   const int coverColumnCount = std::max(1, metrics.homeRecentBooksCount);
   const int recentCount = std::min(static_cast<int>(recentBooks.size()), coverColumnCount);
   const int coverColumnWidth = (renderer.getScreenWidth() - 2 * metrics.contentSidePadding) / coverColumnCount;
   int touchedBook = -1;
+#if CROSSPOINT_GOLF
+  const auto coverTouch = mappedInput.colTouch(touchedBook, metrics.contentSidePadding, coverColumnWidth, recentCount,
+                                               coverTop, coverTop + metrics.homeCoverTileHeight, coverColumnWidth);
+#else
   const auto coverTouch = mappedInput.colTouch(touchedBook, metrics.contentSidePadding, coverColumnWidth, recentCount,
                                                metrics.homeTopPadding,
                                                metrics.homeTopPadding + metrics.homeCoverTileHeight, coverColumnWidth);
+#endif
   if (coverTouch != MappedInputManager::RowTouch::None) {
+#if CROSSPOINT_GOLF
+    const int bookSlot = touchedBook + kHomeSelectorShift;
+    if (coverTouch == MappedInputManager::RowTouch::Down) {
+      if (selectorIndex != bookSlot) {
+        selectorIndex = bookSlot;
+        requestUpdate();
+      }
+    } else {
+      selectorIndex = bookSlot;
+      activateSelection();
+    }
+#else
     if (coverTouch == MappedInputManager::RowTouch::Down) {
       if (selectorIndex != touchedBook) {
         selectorIndex = touchedBook;
@@ -276,14 +330,22 @@ void HomeActivity::loop() {
       selectorIndex = touchedBook;
       activateSelection();
     }
+#endif
     return;
   }
 
+#if CROSSPOINT_GOLF
+  const int menuTop = coverTop + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset;
+  const int renderedMenuCount = menuCount -
+                                (metrics.homeContinueReadingInMenu ? 0 : static_cast<int>(recentBooks.size())) -
+                                kHomeSelectorShift;  // Scorecard left the menu list for its own row
+#else
   const int menuTop = metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset;
   const int renderedMenuSelection =
       metrics.homeContinueReadingInMenu ? selectorIndex : selectorIndex - recentBooks.size();
   const int renderedMenuCount =
       menuCount - (metrics.homeContinueReadingInMenu ? 0 : static_cast<int>(recentBooks.size()));
+#endif
   int menuRow = -1;
   // Row height from the theme, not the metrics table: RoundedRaff draws
   // font-derived rows and the touch grid must match the visuals exactly.
@@ -291,8 +353,14 @@ void HomeActivity::loop() {
   const auto menuTouch = mappedInput.rowTouch(menuRow, menuTop, menuRowHeight + metrics.menuSpacing, renderedMenuCount,
                                               0, INT32_MAX, menuRowHeight);
   if (menuTouch != MappedInputManager::RowTouch::None) {
+#if CROSSPOINT_GOLF
+    const int touchedIndex =
+        (metrics.homeContinueReadingInMenu ? menuRow : menuRow + static_cast<int>(recentBooks.size())) +
+        kHomeSelectorShift;  // past the Scorecard slot
+#else
     const int touchedIndex =
         metrics.homeContinueReadingInMenu ? menuRow : menuRow + static_cast<int>(recentBooks.size());
+#endif
     if (menuTouch == MappedInputManager::RowTouch::Down) {
       if (selectorIndex != touchedIndex) {
         selectorIndex = touchedIndex;
@@ -315,6 +383,12 @@ void HomeActivity::render(RenderLock&&) {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
+#if CROSSPOINT_GOLF
+  const int upstreamSelector = homeUpstreamSelector(selectorIndex);
+  const int scorecardBandHeight = metrics.verticalSpacing + GUI.getMenuRowHeight(renderer) + metrics.menuSpacing;
+  const int coverTop = metrics.homeTopPadding + scorecardBandHeight;
+#endif
+
   renderer.clearScreen();
   bool bufferRestored = coverBufferStored && restoreCoverBuffer();
 
@@ -328,13 +402,31 @@ void HomeActivity::render(RenderLock&&) {
   // which sub-region of the framebuffer to snapshot. ~16 KB in Portrait
   // instead of the 48 KB full framebuffer the previous bind captured.
   coverRectX = 0;
+#if CROSSPOINT_GOLF
+  coverRectY = coverTop;
+#else
   coverRectY = metrics.homeTopPadding;
+#endif
   coverRectW = pageWidth;
   coverRectH = metrics.homeCoverTileHeight;
 
+#if CROSSPOINT_GOLF
+  GUI.drawRecentBookCover(renderer, Rect{0, coverTop, pageWidth, metrics.homeCoverTileHeight}, recentBooks,
+                          upstreamSelector, coverRendered, coverBufferStored, bufferRestored,
+                          std::bind(&HomeActivity::storeCoverBuffer, this));
+#else
   GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},
                           recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,
                           std::bind(&HomeActivity::storeCoverBuffer, this));
+#endif
+
+#if CROSSPOINT_GOLF
+  // v3.2 (CONTRACTS-V2.md §14): Scorecard is its own row in the band above the
+  // cover tile, highlighted when the selector is on it (upstream index < 0).
+  GUI.drawButtonMenu(
+      renderer, Rect{0, metrics.homeTopPadding, pageWidth, scorecardBandHeight}, 1, upstreamSelector < 0 ? 0 : -1,
+      [](int) { return std::string(GolfStrings::APP_TITLE); }, [](int) { return Scorecard; });
+#endif
 
   // Build menu items dynamically
   std::vector<const char*> menuItems;
@@ -357,11 +449,16 @@ void HomeActivity::render(RenderLock&&) {
   }
 
 #if CROSSPOINT_GOLF
-  const size_t scorecardIndex = getScorecardMenuIndex(metrics, !recentBooks.empty());
-  menuItems.insert(menuItems.begin() + scorecardIndex, GolfStrings::APP_TITLE);
-  menuIcons.insert(menuIcons.begin() + scorecardIndex, Scorecard);
-#endif
-
+  GUI.drawButtonMenu(
+      renderer,
+      Rect{0, coverTop + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset, pageWidth,
+           pageHeight - (metrics.headerHeight + coverTop + metrics.verticalSpacing + metrics.homeMenuTopOffset +
+                         metrics.buttonHintsHeight)},
+      static_cast<int>(menuItems.size()),
+      metrics.homeContinueReadingInMenu ? upstreamSelector : upstreamSelector - recentBooks.size(),
+      [&menuItems](int index) { return std::string(menuItems[index]); },
+      [&menuIcons](int index) { return menuIcons[index]; });
+#else
   GUI.drawButtonMenu(
       renderer,
       Rect{0, metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset, pageWidth,
@@ -371,6 +468,7 @@ void HomeActivity::render(RenderLock&&) {
       metrics.homeContinueReadingInMenu ? selectorIndex : selectorIndex - recentBooks.size(),
       [&menuItems](int index) { return std::string(menuItems[index]); },
       [&menuIcons](int index) { return menuIcons[index]; });
+#endif
 
   const auto labels = mappedInput.mapLabels(recentBooks.empty() ? "" : tr(STR_RESUME), tr(STR_SELECT), tr(STR_DIR_UP),
                                             tr(STR_DIR_DOWN));

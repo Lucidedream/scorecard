@@ -2,13 +2,17 @@
 
 #if defined(CROSSPOINT_GOLF)
 
+#include "GolfPenalty.h"
+
 namespace {
 
 uint8_t holesInRound(const GolfRound& round) {
   return round.holeCount < GolfRound::MAX_HOLES ? round.holeCount : GolfRound::MAX_HOLES;
 }
 
-bool isEntered(const GolfRound& round, uint8_t hole) { return golfHoleScore(round, hole) != 0; }
+bool isEntered(const GolfRound& round, uint8_t hole) {
+  return static_cast<uint16_t>(round.in100[hole]) + round.out100[hole] != 0;
+}
 
 }  // namespace
 
@@ -19,9 +23,11 @@ uint8_t golfLongGame(const GolfRound& round, uint8_t hole) {
   return round.out100[hole];
 }
 
+uint16_t golfPenaltyTotal(const GolfRound& round) { return golfPenaltyStrokesForRound(round); }
+
 uint16_t golfHoleScore(const GolfRound& round, uint8_t hole) {
   if (hole >= holesInRound(round)) return 0;
-  return static_cast<uint16_t>(round.in100[hole]) + round.out100[hole];
+  return static_cast<uint16_t>(round.in100[hole]) + round.out100[hole] + golfPenaltyStrokesForHole(round, hole);
 }
 
 uint16_t golfScore(const GolfRound& round) {

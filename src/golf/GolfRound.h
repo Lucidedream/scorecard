@@ -4,6 +4,7 @@
 
 struct GolfRound {
   static constexpr uint8_t MAX_HOLES = 18;
+  static constexpr uint8_t MAX_PENALTIES_PER_HOLE = 8;
 
   char courseName[40];
   char tees[12];
@@ -16,6 +17,8 @@ struct GolfRound {
   uint8_t putts[MAX_HOLES];
   uint8_t in100[MAX_HOLES];
   uint8_t out100[MAX_HOLES];
+  uint8_t penaltyCount[MAX_HOLES];
+  uint8_t penaltyEvents[MAX_HOLES][MAX_PENALTIES_PER_HOLE / 2];
 };
 
-static_assert(sizeof(GolfRound) == 164);
+static_assert(sizeof(GolfRound) == 254);

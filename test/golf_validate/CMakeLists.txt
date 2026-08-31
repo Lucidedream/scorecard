@@ -2,6 +2,7 @@ add_executable(golf_validate_tests
   test_golf_validate.cpp
   ${REPO_ROOT}/src/golf/GolfValidate.cpp
   ${REPO_ROOT}/src/golf/GolfRules.cpp
+  ${REPO_ROOT}/src/golf/GolfPenalty.cpp
 )
 target_link_libraries(golf_validate_tests PRIVATE GTest::gtest_main crosspoint_test_common)
 target_include_directories(golf_validate_tests PRIVATE ${REPO_ROOT}/src/golf)

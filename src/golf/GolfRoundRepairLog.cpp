@@ -15,6 +15,15 @@ void golfLogRoundRepairs(const GolfRound& round, const GolfValidationResult& res
     if (result.holeIn100Repaired(hole)) {
       LOG_ERR("GOLF", "Repaired hole %u in100 to %u", hole + 1, round.in100[hole]);
     }
+    if (result.holePenaltyCountRepaired(hole)) {
+      LOG_ERR("GOLF", "Repaired hole %u penalty count to %u", hole + 1, round.penaltyCount[hole]);
+    }
+    if (result.holePenaltyEventRepaired(hole)) {
+      LOG_ERR("GOLF", "Removed invalid penalty event on hole %u", hole + 1);
+    }
+    if (result.holePenaltyMarkerRepaired(hole)) {
+      LOG_ERR("GOLF", "Removed penalty marker exceeding shots on hole %u", hole + 1);
+    }
   }
 }
 

@@ -14,7 +14,13 @@ struct GolfHistoryEntry {
   uint16_t putts;
   uint16_t in100;
   uint16_t out100;
+  uint16_t hazards;
+  uint16_t obs;
   uint8_t holes;
+  // False when this round predates penalty tracking (v2 row, or a migrated v3
+  // row with empty hazards/obs). Trends exclude such rounds from penalty
+  // averages rather than counting an unrecorded round as a clean one.
+  bool penaltiesRecorded;
 };
 
 using GolfHistoryMalformedCallback = void (*)(uint32_t lineNumber, void* user);

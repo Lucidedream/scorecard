@@ -12,8 +12,8 @@
 namespace {
 
 GolfRoundColumnLengths lengths(const uint16_t count, const bool expectYards = false) {
-  return GolfRoundColumnLengths{count,      count, count, count, expectYards ? count : static_cast<uint16_t>(0),
-                                expectYards};
+  return GolfRoundColumnLengths{count, count,      count, count, expectYards ? count : static_cast<uint16_t>(0),
+                                0,     expectYards};
 }
 
 GolfRound roundWithHole(const uint8_t hole, const uint8_t putts, const uint8_t in100, const uint8_t out100) {
@@ -31,6 +31,24 @@ TEST(GolfRoundFile, RejectsVersionOne) {
   GolfRound out{};
   GolfValidationResult validation{};
   EXPECT_EQ(golfCheckRound(out, 1, 18, 0, lengths(18), validation), GolfRoundDecodeStatus::RejectedVersion);
+}
+
+TEST(GolfRoundFile, LoadsVersionTwoWithZeroPenalties) {
+  GolfRound out = roundWithHole(0, 2, 2, 2);
+  GolfValidationResult validation{};
+  EXPECT_EQ(golfCheckRound(out, 2, 18, 0, lengths(18), validation), GolfRoundDecodeStatus::Ok);
+  for (uint8_t hole = 0; hole < GolfRound::MAX_HOLES; ++hole) EXPECT_EQ(out.penaltyCount[hole], 0);
+  EXPECT_FALSE(validation.repaired());
+}
+
+TEST(GolfRoundFile, VersionThreeRequiresOnePenaltyArrayPerHole) {
+  GolfRound out = roundWithHole(0, 2, 2, 2);
+  GolfValidationResult validation{};
+  GolfRoundColumnLengths valid = lengths(18);
+  valid.penalties = 18;
+  EXPECT_EQ(golfCheckRound(out, 3, 18, 0, valid, validation), GolfRoundDecodeStatus::Ok);
+  valid.penalties = 17;
+  EXPECT_EQ(golfCheckRound(out, 3, 18, 0, valid, validation), GolfRoundDecodeStatus::RejectedArrayLength);
 }
 
 TEST(GolfRoundFile, RejectsMissingVersion) {

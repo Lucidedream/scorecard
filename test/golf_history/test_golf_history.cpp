@@ -7,12 +7,12 @@
 
 namespace {
 
-constexpr char HEADER[] = "date,course,holes,strokes,par,putts,in100,out100,file\r\n";
-static_assert(sizeof(GolfHistoryEntry) <= 56);
+constexpr char HEADER[] = "date,course,holes,strokes,par,putts,in100,out100,hazards,obs,file\r\n";
+static_assert(sizeof(GolfHistoryEntry) <= 60);
 
 std::string row(const int number, const uint16_t par = 72) {
   char output[160];
-  snprintf(output, sizeof(output), ",Course %d,18,%d,%u,32,54,32,round-%04d.json\r\n", number, 80 + number, par,
+  snprintf(output, sizeof(output), ",Course %d,18,%d,%u,32,54,32,1,2,round-%04d.json\r\n", number, 80 + number, par,
            number);
   return output;
 }
@@ -71,6 +71,25 @@ TEST(GolfHistory, ParFreeRowSuppressesToPar) {
 TEST(GolfHistory, EmptyAndHeaderOnlyYieldNoRows) {
   EXPECT_EQ(read("").count(), 0);
   EXPECT_EQ(read(HEADER).count(), 0);
+}
+
+TEST(GolfHistory, ReadsMixedV2AndV3RowsUnderEitherHeader) {
+  // A skipped or failed migration leaves the file with a v2 header and both row
+  // shapes; the reader must take each on its own terms.
+  const std::string input = std::string("date,course,holes,strokes,par,putts,in100,out100,file\r\n") +
+                            ",Old,18,85,72,33,52,30,round-0001.json\r\n" +         // v2 row: not recorded
+                            ",Migrated,18,88,72,34,54,30,,,round-0002.json\r\n" +  // widened, still not recorded
+                            ",New,18,90,72,35,55,30,2,1,round-0003.json\r\n";      // real v3 penalties
+  const GolfHistoryReader reader = read(input);
+  ASSERT_EQ(reader.count(), 3);
+  EXPECT_STREQ(reader.newest(2).course, "Old");
+  EXPECT_FALSE(reader.newest(2).penaltiesRecorded);
+  EXPECT_STREQ(reader.newest(1).course, "Migrated");
+  EXPECT_FALSE(reader.newest(1).penaltiesRecorded);
+  EXPECT_STREQ(reader.newest(0).course, "New");
+  EXPECT_TRUE(reader.newest(0).penaltiesRecorded);
+  EXPECT_EQ(reader.newest(0).hazards, 2);
+  EXPECT_EQ(reader.newest(0).obs, 1);
 }
 
 namespace {

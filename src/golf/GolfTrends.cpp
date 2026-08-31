@@ -6,11 +6,7 @@
 
 namespace {
 
-uint32_t averageTenths(const uint32_t sum, const uint8_t count) {
-  return count == 0 ? 0 : (sum * 10 + count / 2) / count;
-}
-
-int32_t signedAverageTenths(const int32_t sum, const uint8_t count) {
+int32_t averageTenths(const int32_t sum, const uint8_t count) {
   if (count == 0) return 0;
   return (sum * 10 + (sum < 0 ? -static_cast<int32_t>(count / 2) : count / 2)) / count;
 }
@@ -31,6 +27,8 @@ GolfTrendStats golfCalculateTrends(const GolfHistoryReader& history) {
   bool allHavePar = true;
   uint16_t best = std::numeric_limits<uint16_t>::max();
   uint16_t worst = 0;
+  uint32_t hazards = 0;
+  uint32_t obs = 0;
 
   for (uint8_t index = 0; index < history.count(); ++index) {
     const GolfHistoryEntry& entry = history.newest(index);
@@ -48,6 +46,11 @@ GolfTrendStats golfCalculateTrends(const GolfHistoryReader& history) {
     }
     if (entry.strokes < best) best = entry.strokes;
     if (entry.strokes > worst) worst = entry.strokes;
+    if (entry.penaltiesRecorded) {
+      ++result.penaltyRounds;
+      hazards += entry.hazards;
+      obs += entry.obs;
+    }
   }
 
   if (result.rounds == 0) return result;
@@ -55,7 +58,7 @@ GolfTrendStats golfCalculateTrends(const GolfHistoryReader& history) {
   result.best = best;
   result.worst = worst;
   result.scoringAverageTenths = averageTenths(strokes, result.rounds);
-  result.toParAverageTenths = allHavePar ? signedAverageTenths(toPar, result.rounds) : 0;
+  result.toParAverageTenths = allHavePar ? averageTenths(toPar, result.rounds) : 0;
   result.puttsAverageTenths = averageTenths(putts, result.rounds);
   result.longAverageTenths = averageTenths(longGame, result.rounds);
   result.shortAverageTenths = averageTenths(shortGame, result.rounds);
@@ -63,6 +66,14 @@ GolfTrendStats golfCalculateTrends(const GolfHistoryReader& history) {
   result.longPercentTenths = percentTenths(longGame, strokes);
   result.shortPercentTenths = percentTenths(shortGame, strokes);
   result.puttingPercentTenths = percentTenths(putts, strokes);
+
+  result.showsPenalties = result.penaltyRounds >= 2;
+  if (result.showsPenalties) {
+    result.hazardsAverageTenths = averageTenths(static_cast<int32_t>(hazards), result.penaltyRounds);
+    result.obsAverageTenths = averageTenths(static_cast<int32_t>(obs), result.penaltyRounds);
+    // strokes cost per CONTRACTS-V2 §12.2: hazard +1, OB +2.
+    result.penaltyStrokesAverageTenths = averageTenths(static_cast<int32_t>(hazards + obs * 2), result.penaltyRounds);
+  }
   return result;
 }
 

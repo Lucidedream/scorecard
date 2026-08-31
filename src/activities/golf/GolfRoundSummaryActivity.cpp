@@ -44,19 +44,22 @@ void GolfRoundSummaryActivity::buildScreen(UiScreen& screen) {
   screen.setContentMargin(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
                                       static_cast<int16_t>(metrics.buttonHintsHeight), 0});
   const bool hasPar = golfHistoryShowsToPar(entry);
-  const char* labels[] = {GolfStrings::SCORE, GolfStrings::TO_PAR, GolfStrings::PUTTS, GolfStrings::IN100_CARD,
-                          GolfStrings::LONG_GAME};
-  const uint16_t longGame = entry.strokes >= entry.in100 ? static_cast<uint16_t>(entry.strokes - entry.in100) : 0;
-  const uint16_t values[] = {entry.strokes, 0, entry.putts, entry.in100, longGame};
-  const uint8_t rows = hasPar ? 5 : 4;
-  for (uint8_t displayRow = 0; displayRow < rows; ++displayRow) {
-    const uint8_t dataRow = !hasPar && displayRow > 0 ? static_cast<uint8_t>(displayRow + 1) : displayRow;
-    snprintf(cells[displayRow][0], sizeof(cells[displayRow][0]), "%s", labels[dataRow]);
+  const char* labels[] = {GolfStrings::SCORE,      GolfStrings::TO_PAR,    GolfStrings::PUTTS,
+                          GolfStrings::IN100_CARD, GolfStrings::LONG_GAME, GolfStrings::TOTAL_PENALTIES,
+                          GolfStrings::HAZARDS,    GolfStrings::OB};
+  const uint16_t penaltyStrokes = static_cast<uint16_t>(entry.hazards + entry.obs * 2);
+  const uint16_t values[] = {entry.strokes, 0,        entry.putts, entry.in100, entry.out100, penaltyStrokes,
+                             entry.hazards, entry.obs};
+  uint8_t rows = 0;
+  for (uint8_t dataRow = 0; dataRow < 8; ++dataRow) {
+    if ((!hasPar && dataRow == 1) || (!entry.penaltiesRecorded && dataRow >= 5)) continue;
+    snprintf(cells[rows][0], sizeof(cells[rows][0]), "%s", labels[dataRow]);
     if (dataRow == 1) {
-      formatToPar(static_cast<int16_t>(entry.strokes) - entry.par, cells[displayRow][1], sizeof(cells[displayRow][1]));
+      formatToPar(static_cast<int16_t>(entry.strokes) - entry.par, cells[rows][1], sizeof(cells[rows][1]));
     } else {
-      snprintf(cells[displayRow][1], sizeof(cells[displayRow][1]), "%u", values[dataRow]);
+      snprintf(cells[rows][1], sizeof(cells[rows][1]), "%u", values[dataRow]);
     }
+    ++rows;
   }
 
   const fui::Rect body = screen.body();

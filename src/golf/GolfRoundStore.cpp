@@ -52,7 +52,7 @@ bool GolfRoundStore::markArchivedAs(const char* filename) {
 
 void GolfRoundStore::toJson(JsonDocument& doc) const {
   char date[GOLF_DATE_BUFFER_SIZE];
-  doc["v"] = 2;
+  doc["v"] = 3;
   if (golfFormatDate(round.dateYmd, date, sizeof(date))) {
     doc["date"] = date;
   } else {
@@ -67,6 +67,7 @@ void GolfRoundStore::toJson(JsonDocument& doc) const {
   addArray(doc, "putts", round.putts, round.holeCount);
   addArray(doc, "in100", round.in100, round.holeCount);
   addArray(doc, "out100", round.out100, round.holeCount);
+  golfAddJsonPenalties(doc, round);
   if (isArchived()) {
     doc["archivedAs"] = archivedFilename();
   }
@@ -110,6 +111,10 @@ bool GolfRoundStore::fromJson(JsonVariantConst doc) {
       !golfReadJsonHoleArray(doc["in100"], loaded.in100, GolfRound::MAX_HOLES, 99, lengths.in100) ||
       !golfReadJsonHoleArray(doc["out100"], loaded.out100, GolfRound::MAX_HOLES, 99, lengths.out100)) {
     LOG_ERR("GOLF", "Rejected invalid state arrays");
+    return false;
+  }
+  if (version == 3 && !golfReadJsonPenalties(doc["penalties"], loaded, lengths.penalties)) {
+    LOG_ERR("GOLF", "Rejected invalid state penalties array");
     return false;
   }
   GolfValidationResult validation{};

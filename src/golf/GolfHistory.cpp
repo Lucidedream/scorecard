@@ -6,7 +6,7 @@
 
 namespace {
 
-constexpr char INDEX_HEADER[] = "date,course,holes,strokes,par,putts,in100,out100,file";
+bool isIndexHeader(const char* line) { return golfIndexHeaderVersion(line) != GolfIndexVersion::Unknown; }
 
 }  // namespace
 
@@ -50,7 +50,7 @@ void GolfHistoryReader::finish(const GolfHistoryMalformedCallback malformedCallb
 
 void GolfHistoryReader::acceptLine(const GolfHistoryMalformedCallback malformedCallback, void* callbackUser) {
   line[lineLength] = '\0';
-  if (lineLength == 0 || (lineNumber == 1 && strcmp(line, INDEX_HEADER) == 0)) return;
+  if (lineLength == 0 || (lineNumber == 1 && isIndexHeader(line))) return;
 
   GolfIndexRow parsed{};
   if (lineOverflow || !golfParseIndexRow(line, parsed)) {
@@ -65,7 +65,10 @@ void GolfHistoryReader::acceptLine(const GolfHistoryMalformedCallback malformedC
   entry.putts = parsed.putts;
   entry.in100 = parsed.in100;
   entry.out100 = parsed.out100;
+  entry.hazards = parsed.hazards;
+  entry.obs = parsed.obs;
   entry.holes = parsed.holes;
+  entry.penaltiesRecorded = parsed.penaltiesRecorded;
   nextEntry = static_cast<uint8_t>((nextEntry + 1) % GOLF_HISTORY_CAPACITY);
   if (entryCount < GOLF_HISTORY_CAPACITY) ++entryCount;
   ++validRows;
@@ -123,7 +126,7 @@ bool GolfIndexFileLocator::finish() {
 
 void GolfIndexFileLocator::acceptLine() {
   line_[lineLength_] = '\0';
-  if (lineLength_ == 0 || (lineNumber_ == 1 && strcmp(line_, INDEX_HEADER) == 0)) return;
+  if (lineLength_ == 0 || (lineNumber_ == 1 && isIndexHeader(line_))) return;
 
   GolfIndexRow parsed{};
   if (lineOverflow_ || !golfParseIndexRow(line_, parsed)) return;

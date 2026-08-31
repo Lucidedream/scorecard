@@ -15,7 +15,7 @@ class GolfRoundSummaryActivity final : public Activity, protected UiAppHost {
 
  private:
   GolfHistoryEntry entry{};
-  char cells[5][2][20]{};
+  char cells[8][2][20]{};
 
   static void screenTrampoline(UiScreen& screen, void* user);
   void buildScreen(UiScreen& screen);

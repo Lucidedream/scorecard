@@ -73,3 +73,29 @@ TEST(GolfValidate, LeavesValidRoundUnchanged) {
   EXPECT_FALSE(result.repaired());
   EXPECT_EQ(memcmp(&round, &before, sizeof(round)), 0);
 }
+
+TEST(GolfValidate, RepairsAndReportsCorruptPenaltyRecords) {
+  GolfRound round = makeRound();
+  round.out100[0] = 1;
+  round.penaltyCount[0] = 10;
+  round.penaltyEvents[0][0] = 0x32;  // valid out100 hazard, then invalid field 3
+  round.penaltyEvents[0][1] = 0x22;  // two more out100 hazards exceed one out100 shot
+
+  const GolfValidationResult result = validateGolfRound(round);
+  EXPECT_TRUE(result.valid);
+  EXPECT_TRUE(result.repaired());
+  EXPECT_TRUE(result.holePenaltyCountRepaired(0));
+  EXPECT_TRUE(result.holePenaltyEventRepaired(0));
+  EXPECT_TRUE(result.holePenaltyMarkerRepaired(0));
+  EXPECT_EQ(round.penaltyCount[0], 1);
+  EXPECT_EQ(round.penaltyEvents[0][0] & 0x0f, 2);
+}
+
+TEST(GolfValidate, RemovesPenaltyOnlyHoleMarkers) {
+  GolfRound round = makeRound();
+  round.penaltyCount[0] = 1;
+  round.penaltyEvents[0][0] = 2;
+  const GolfValidationResult result = validateGolfRound(round);
+  EXPECT_TRUE(result.holePenaltyMarkerRepaired(0));
+  EXPECT_EQ(round.penaltyCount[0], 0);
+}

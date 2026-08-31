@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
 
+#include <utility>
+
+#include "GolfPenalty.h"
 #include "GolfStats.h"
 
 namespace {
@@ -78,5 +81,39 @@ TEST(GolfStats, WorstHolesAreSortedRelativeToPar) {
   EXPECT_EQ(worst[0].toPar, 2);
   EXPECT_EQ(worst[1].hole, 0);
   EXPECT_EQ(worst[1].toPar, 1);
+}
+
+TEST(GolfStats, EveryScoreFigureIncludesPenaltyStrokes) {
+  GolfRound round{};
+  round.holeCount = 18;
+  round.par[0] = 4;
+  round.in100[0] = 2;
+  round.out100[0] = 3;
+  const uint16_t scoreBefore = golfScore(round);
+  ASSERT_EQ(golfAppendPenalty(round, 0, GolfField::Out100, GolfPenaltyKind::Ob), GolfPenaltyMutationStatus::Changed);
+
+  EXPECT_EQ(golfHoleScore(round, 0), 8);
+  EXPECT_EQ(golfScore(round), scoreBefore + 3);  // one added field shot plus two OB strokes
+  EXPECT_EQ(golfToPar(round), 4);
+  EXPECT_EQ(golfPenaltyTotal(round), 2);
+  EXPECT_EQ(golfParTotal(round), 4);
+  EXPECT_EQ(golfThru(round), 1);
+  GolfWorstHole worst[GolfRound::MAX_HOLES]{};
+  ASSERT_EQ(golfWorstHoles(round, worst, GolfRound::MAX_HOLES), 1);
+  EXPECT_EQ(worst[0].toPar, 4);
+}
+
+TEST(GolfStats, WorkedPenaltyHolesUseDerivedStrokeArithmetic) {
+  for (const auto [kind, expected] : {std::pair{GolfPenaltyKind::Hazard, 6}, std::pair{GolfPenaltyKind::Ob, 7}}) {
+    GolfRound round{};
+    round.holeCount = 18;
+    round.par[0] = 4;
+    ASSERT_EQ(golfAppendPenalty(round, 0, GolfField::Out100, kind), GolfPenaltyMutationStatus::Changed);
+    ASSERT_TRUE(incrementGolfCounter(round, 0, GolfField::Out100).changed);
+    ASSERT_TRUE(incrementGolfCounter(round, 0, GolfField::Out100).changed);
+    ASSERT_TRUE(incrementGolfCounter(round, 0, GolfField::Putts).changed);
+    ASSERT_TRUE(incrementGolfCounter(round, 0, GolfField::Putts).changed);
+    EXPECT_EQ(golfHoleScore(round, 0), expected);
+  }
 }
 }  // namespace

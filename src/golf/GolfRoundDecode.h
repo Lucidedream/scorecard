@@ -15,12 +15,12 @@
 
 enum class GolfRoundDecodeStatus : uint8_t {
   Ok,
-  RejectedVersion,      // "v" is not 2 (a v1 file gets its own log line at the call site)
+  RejectedVersion,      // "v" is neither 2 nor 3 (a v1 file gets its own log line at the call site)
   RejectedHoleCount,    // holes is neither 9 nor 18
   RejectedArrayLength,  // a per-hole array length disagrees with holes
 };
 
-// Source lengths of the per-hole arrays, as decoded. A length that disagrees with
+// Source lengths of the per-hole arrays, as decoded. A required length that disagrees with
 // holes is a corrupt file (CONTRACTS §5.4) and is rejected rather than padded or
 // truncated. `yards` is ignored unless `expectYards` (the completed-round schema
 // omits it).
@@ -30,6 +30,7 @@ struct GolfRoundColumnLengths {
   uint16_t in100;
   uint16_t out100;
   uint16_t yards;
+  uint16_t penalties;
   bool expectYards;
 };
 

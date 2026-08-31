@@ -449,3 +449,280 @@ No handicap estimate. It needs a differential against course rating and slope, w
 course file carries and which the owner has not asked for. Reporting a number that looks
 like a handicap but is not one is the same class of error as the fabricated course data
 in v2.1 — plausible, authoritative-looking, and wrong.
+
+
+## 12. Penalty tracking (v3)
+
+*Added 2026-08-30. Replaces the on-device course editor as the next milestone. Design and
+UI mocks approved by the owner.*
+
+### 12.1 What a press does
+
+Power cycles the field, which frees Confirm. Confirm opens a two-option sheet —
+**Hazard** or **OB** — and picking one does three things atomically:
+
+1. Adds **one shot to the focused field** (the swing that was actually played).
+2. Adds the **penalty strokes**: Hazard `+1`, OB `+2`.
+3. Appends a **marker** (`H` or `OB`) to that field, in order.
+
+OB costs two because this follows **USGA Local Rule E-5** — two penalty strokes and a
+drop, taken instead of stroke-and-distance. It is the standard casual-play local rule, so
+the device agrees with what a group actually scores.
+
+**The picker never guesses a bucket.** It cannot know whether the swing came from the tee
+or from 80 yards, so the golfer puts the shot in the right field and the picker only adds
+the penalty. This is the same principle that keeps the three-bucket split truthful.
+
+### 12.2 Stroke arithmetic
+
+```
+strokes        = in100 + out100 + penaltyStrokes
+penaltyStrokes = (hazards x 1) + (OBs x 2)
+```
+
+The buckets stay disjoint and gain a fourth:
+
+```
+long game  = out100
+short game = in100 - putts
+putting    = putts
+penalties  = penaltyStrokes
+```
+
+This is a correctness improvement, not just a feature: penalties currently hide inside
+whichever field they were counted in and silently inflate it.
+
+`isEntered` remains `in100 + out100 != 0`. A hole whose only event is a penalty cannot
+occur — every penalty also adds a shot to a field.
+
+### 12.3 Storage
+
+```cpp
+static constexpr uint8_t MAX_PENALTIES_PER_HOLE = 8;
+
+// One nibble per event, two events per byte, in the order they happened.
+//   bits 0-1  field  (0 = putts, 1 = in100, 2 = out100)
+//   bit  2    kind   (0 = hazard, 1 = OB)
+//   bit  3    reserved, must be written 0
+uint8_t penaltyCount[MAX_HOLES];                               // 18 bytes
+uint8_t penaltyEvents[MAX_HOLES][MAX_PENALTIES_PER_HOLE / 2];  // 72 bytes
+```
+
+`GolfRound` grows 164 -> 254 bytes. RAM is not the constraint; the packing exists because
+the round is serialised to `state.json` on every flush and a compact struct keeps that
+write small.
+
+### 12.4 Add and remove
+
+* **Add** appends at `penaltyCount[hole]`, increments the field, and increments the count.
+* **At the cap (8)** the picker still opens but reports the hole is full. It must **never**
+  silently drop an event.
+* **Remove** is the exact inverse: `Down` on a field that has markers removes that field's
+  **most recent** marker, along with its shot and its penalty strokes. `Down` on a field
+  with no markers behaves exactly as it does today.
+* Removal must not disturb the order of the remaining events on other fields.
+
+### 12.5 File format v3
+
+`"v": 3`. Round files and `state.json` gain a `penalties` array per hole of
+`[field, kind]` pairs, in order. `index.csv` gains `hazards` and `obs` columns so trends
+remain a fold over the index with no round files opened.
+
+**v2 files are READ, not rejected.** Unlike the v1 -> v2 break, no existing field changes
+meaning — a v2 round simply has no penalties. Load it with zero penalties and upgrade on
+next write. Rejecting rounds the owner has already played would be gratuitous.
+
+v1 files stay rejected, as before.
+
+### 12.6 Button safety
+
+**Confirm takes the penalty role only while Power can cycle the field.** Power does not
+cycle when `SETTINGS.shortPwrBtn == SLEEP` (nor on X4 Pro under `PWR_CONFIRM`). If Confirm
+were bound unconditionally, that setting would leave **no field control at all** and the
+scoring screen would be stuck.
+
+When Power cannot cycle: Confirm keeps cycling the field, and the picker moves to a
+Confirm long-press. **The scoring screen must never reach a state with no field control.**
+
+**Confirm never advances the hole *while it is the penalty button*.** Advance belongs to
+whichever button is currently cycling the field (§10). A penalty is not a reason to leave
+a hole — it is usually added mid-hole with shots still to come.
+
+*Clarified 2026-08-30. P2 correctly read the original absolute wording as a contradiction
+and asked. In SLEEP mode Confirm **is** the field-cycle button, so it must carry the full
+§10 positional logic including advance-and-commit from Out100. Without that, a hole
+played to par could never be committed by cycling in that mode — the golfer would have to
+touch a counter to log it, which is exactly the lost-hole problem §6 and §10 were written
+to fix. The clause was only ever meant to stop the **penalty** button from advancing.*
+
+**Advance follows the field button, not a named button.** State it that way in code and in
+future contract text; naming Power invites this same contradiction the next time the
+binding moves.
+
+
+### 12.7 Migrating an existing index.csv
+
+*Ruling 2026-08-30, after P1 correctly identified that §12.5 and CONTRACTS.md §5.3
+conflict and refused to guess.*
+
+§5.3 says `index.csv` is appended to and never rewritten wholesale. §12.5 gives it two
+new columns. An existing v2 index has a 9-column header, so appending 11-column v3 rows
+produces a file whose header does not describe its rows.
+
+**Do the one-time migration.** A CSV whose header disagrees with its rows is a silent
+data-corruption trap: the owner downloads it, opens it in a spreadsheet, and every column
+after `putts` is misread with nothing on screen to indicate it. That is worse than the
+risk §5.3 was written to prevent.
+
+§5.3's actual concern was **losing rounds to a failed rewrite**, not rewriting as such. So
+migrate, but never with the live file as the only copy:
+
+1. Detect a v2 header on open.
+2. Write the full migrated content to `index.csv.new`, with the v3 header and every
+   existing row widened with empty `hazards` and `obs` fields.
+3. **Verify** the new file parses and yields the same row count as the original.
+4. Rename `index.csv` to `index.csv.bak`, then `index.csv.new` to `index.csv`.
+5. Delete `index.csv.bak` only after step 4 succeeds.
+
+If any step fails, leave the original in place and log it. A failed migration must be a
+no-op, never a partial file.
+
+Empty `hazards`/`obs` on a migrated row means *not recorded*, which is truthful — those
+rounds were played before penalties were tracked. It does not mean zero, and trends must
+not treat it as zero. **Keep the reader's mixed v2/v3 row tolerance**; it is what makes a
+failed or skipped migration harmless.
+
+Now is the cheapest possible moment to do this: the owner has very few archived rounds.
+
+
+### 12.8 Penalties are not a fourth row in the trends mix
+
+*Ruling 2026-08-30, after P3 identified a denominator mismatch the design mock did not
+account for. The mock shows penalties as a fourth bucket; that is wrong and the mock is
+superseded here.*
+
+The 'Where the shots go' mix presents its rows as shares of one whole. Long, short and
+putting fold over **all** 18-hole rounds. Penalty figures fold over only the rounds with
+`penaltiesRecorded` (§12.5). Putting them in one table implies a shared denominator that
+does not exist: with 6 rounds of which 2 recorded penalties, dividing a 2-round penalty
+average by a 6-round scoring average produces a number whose numerator and denominator
+describe different populations.
+
+**Therefore:**
+
+* The mix stays **three rows** — long, short, putting — over all 18-hole rounds.
+* Penalties appear as their **own figure outside the mix**: penalties per round with the
+  hazard and OB split, **no percentage**.
+* That figure is **labelled with its round count**, so it reads visibly as a different
+  population from the figures above it.
+
+Note what this exposed: since §12.2 made `strokes = in100 + out100 + penaltyStrokes`, the
+three existing rows now sum to `strokes - penalties` rather than to 100%. The gap is the
+penalty share — but the table is only coherent when every row spans the same rounds.
+
+**When this becomes easy:** once every round in the window carries penalty data,
+`penaltyRounds == rounds`, the denominators converge, and a four-row mix summing to 100%
+is both correct and trivial. Build it then. Do not build a conditional that changes the
+screen's shape based on data the owner cannot see.
+
+
+## 13. Fixes from the second on-device round (v3.1)
+
+### 13.1 Every mutation path must seed (BUG — data loss)
+
+`mutateCounter()` calls `seedGolfHoleAtPar()` before mutating; `applyPenaltyPick()` and
+`removeOrDecrement()` do not. On an unlogged hole the screen *displays* the pre-seeded par
+preview, but those values are not stored until something seeds them. Adding a penalty
+therefore makes the hole entered, the display switches from preview to real stored values,
+and the golfer's putts and inside-100 appear to be wiped.
+
+**Rule: seeding is a precondition of every path that mutates a hole, not a feature of one
+of them.** Any code that changes a counter, appends a penalty, or removes a penalty on a
+possibly-unlogged hole must seed first, exactly as `mutateCounter()` does.
+
+Put the seed inside a single shared helper that all three paths call. A rule enforced by
+remembering to call something in three places is a rule that will break again the next
+time a fourth path is added.
+
+### 13.2 The footer describes the four front buttons only
+
+The scoring footer showed five cells for four front buttons. The X4 has four front
+buttons (Back, Confirm, Left, Right), two side buttons (Up/Down), and Power. **Only the
+four front buttons get footer cells** — the side rocker and Power are found by feel, not
+by reading.
+
+Scoring screen footer, in this order, matching the physical layout:
+
+| Cell | Button | Label |
+| --- | --- | --- |
+| 1 | Back | Menu |
+| 2 | Confirm | Penalty |
+| 3 | Left | Prev |
+| 4 | Right | Next |
+
+Count (Up/Down) and Field (Power) are removed from the footer. They are not front buttons.
+
+### 13.3 The picker footer shows two cells
+
+Same rule. The penalty sheet showed three cells (Cancel / Choose / Add); Up/Down is the
+side rocker and does not belong there. Two cells:
+
+| Cell | Button | Label |
+| --- | --- | --- |
+| 1 | Back | Back |
+| 2 | Confirm | Confirm |
+
+*All three of these come from the owner's second round on the device. §13.2 and §13.3 are
+one principle stated twice: a footer cell is a promise about a front button.*
+
+
+## 14. Scorecard at the top of home (v3.2)
+
+*Owner request, 2026-08-30: "the current top menu is recent opened book, I need to toggle
+down to select scorecard."*
+
+### The layout
+
+Scorecard becomes its own row at the **very top** of the home screen, above the recent-book
+cover tile, and is **selected on entry**.
+
+```
+  [ Scorecard ]        <- own row, selector index 0, selected on entry
+  [ cover tile  ]      <- recent book(s), shifted down
+  [ Browse files ]     <- the rest of the menu, unchanged order
+  [ Recent books ]
+  [ File transfer]
+  [ Settings     ]
+```
+
+### The index mapping
+
+Scorecard leaves the menu list entirely. `getScorecardMenuIndex()` and its interleaving go
+away — the row is no longer *in* the menu, it is above it. The selector becomes:
+
+| Selector index | Meaning |
+| --- | --- |
+| `0` | Scorecard |
+| `1 .. recentBooks.size()` | recent book at `selectorIndex - 1` |
+| beyond | menu item at `selectorIndex - recentBooks.size() - 1` |
+
+This is simpler than what it replaces: one unconditional offset instead of a
+theme-dependent interleave. **Both `loop()` and `render()` must derive from this one
+mapping** — the earlier off-by-one bugs in this file came from two sites computing the
+same position differently.
+
+`getMenuItemCount()` still counts Scorecard, so navigation wraps correctly.
+
+### Selection on entry
+
+`selectorIndex` starts at `0`. Preserve the existing `initialMenuItem` behaviour: when
+home is re-entered targeting a specific menu item, that still wins — only the default
+changes.
+
+### The cost, accepted
+
+This restructures upstream's home layout inside `HomeActivity.cpp`, which is a touchpoint.
+The diff there grows and will conflict on future rebases. Accepted deliberately: on this
+device the scorecard is the primary application, and reaching it should not cost a
+keypress every round. Keep the change as contained as possible — shift geometry, do not
+reorganise unrelated drawing.

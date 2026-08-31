@@ -3,6 +3,7 @@ add_executable(golf_confirm_tests
   ${REPO_ROOT}/src/golf/GolfConfirm.cpp
   ${REPO_ROOT}/src/golf/GolfRules.cpp
   ${REPO_ROOT}/src/golf/GolfStats.cpp
+  ${REPO_ROOT}/src/golf/GolfPenalty.cpp
 )
 target_link_libraries(golf_confirm_tests PRIVATE GTest::gtest_main crosspoint_test_common)
 target_include_directories(golf_confirm_tests PRIVATE ${REPO_ROOT}/src/golf)
