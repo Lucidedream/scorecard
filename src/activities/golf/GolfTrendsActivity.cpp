@@ -50,14 +50,12 @@ GolfTrendsActivity::GolfTrendsActivity(GfxRenderer& renderer, MappedInputManager
 
 void GolfTrendsActivity::onEnter() {
   Activity::onEnter();
-  golfFormatPlayerLabel(playerSlot, fallbackName, tr(STR_GOLF_PLAYER_LABEL_FORMAT), playerLabel,
-                        sizeof(playerLabel));
+  golfFormatPlayerLabel(playerSlot, fallbackName, tr(STR_GOLF_PLAYER_LABEL_FORMAT), playerLabel, sizeof(playerLabel));
   activeState = &residentState;
   stagingOwner = makeUniqueNoThrow<TrendsStagingScratch>();
   stagingState = stagingOwner ? &stagingOwner->staging : nullptr;
   if (!stagingState) {
-    LOG_ERR("GOLF", "OOM: trends staging scratch (%u bytes)",
-            static_cast<unsigned>(sizeof(TrendsStagingScratch)));
+    LOG_ERR("GOLF", "OOM: trends staging scratch (%u bytes)", static_cast<unsigned>(sizeof(TrendsStagingScratch)));
     showStagingError();
   } else {
     loadHistory();
@@ -84,8 +82,7 @@ bool GolfTrendsActivity::streamIndex(TrendsState& state) {
       success = false;
       break;
     }
-    state.history.feed(stagingOwner->chunk, static_cast<size_t>(bytesRead),
-                       &GolfTrendsActivity::logMalformed, this);
+    state.history.feed(stagingOwner->chunk, static_cast<size_t>(bytesRead), &GolfTrendsActivity::logMalformed, this);
   }
   state.history.finish(&GolfTrendsActivity::logMalformed, this);
   return success;
@@ -167,12 +164,10 @@ void GolfTrendsActivity::buildScreen(UiScreen& screen) {
   const TrendsState& state = *activeState;
   const GolfTrendStats& trends = state.trends;
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding,
-                                            metrics.headerHeight);
+  const auto layout = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding);
   screen.setContentMargin(layout.contentMargins);
   if (state.loadError || !trends.enoughRounds()) {
-    screen.centeredText(state.loadError ? tr(STR_GOLF_TRENDS_ERROR) : state.message,
-                        screen.theme().bodyText);
+    screen.centeredText(state.loadError ? tr(STR_GOLF_TRENDS_ERROR) : state.message, screen.theme().bodyText);
     return;
   }
 
@@ -182,9 +177,8 @@ void GolfTrendsActivity::buildScreen(UiScreen& screen) {
   const int16_t gap = static_cast<int16_t>(metrics.verticalSpacing);
   screen.target().text(screen.takeTop(subtitleHeight, gap), state.subtitle, subtitleStyle);
 
-  const char* labels[MAX_ROWS] = {tr(STR_GOLF_SCORING_AVERAGE), tr(STR_GOLF_AVERAGE_TO_PAR),
-                                  tr(STR_GOLF_BEST_WORST),      tr(STR_GOLF_PUTTS_PER_ROUND),
-                                  tr(STR_GOLF_LONG_GAME),       tr(STR_GOLF_SHORT_GAME),
+  const char* labels[MAX_ROWS] = {tr(STR_GOLF_SCORING_AVERAGE), tr(STR_GOLF_AVERAGE_TO_PAR), tr(STR_GOLF_BEST_WORST),
+                                  tr(STR_GOLF_PUTTS_PER_ROUND), tr(STR_GOLF_LONG_GAME),      tr(STR_GOLF_SHORT_GAME),
                                   tr(STR_GOLF_PUTTING),         tr(STR_GOLF_PENALTIES)};
   const uint32_t averages[MAX_ROWS] = {trends.scoringAverageTenths,
                                        0,
@@ -194,8 +188,8 @@ void GolfTrendsActivity::buildScreen(UiScreen& screen) {
                                        trends.shortAverageTenths,
                                        trends.puttingAverageTenths,
                                        trends.penaltyStrokesAverageTenths};
-  const uint32_t percentages[4] = {trends.longPercentTenths, trends.shortPercentTenths,
-                                   trends.puttingPercentTenths, trends.penaltyPercentTenths};
+  const uint32_t percentages[4] = {trends.longPercentTenths, trends.shortPercentTenths, trends.puttingPercentTenths,
+                                   trends.penaltyPercentTenths};
   uint8_t rowCount = MAX_ROWS;
   if (!trends.showsToPar) --rowCount;
   if (!trends.showsPenalties) rowCount = static_cast<uint8_t>(rowCount - 4);
@@ -206,8 +200,8 @@ void GolfTrendsActivity::buildScreen(UiScreen& screen) {
     if (dataRow == 1) {
       formatSignedTenths(trends.toParAverageTenths, cells[row][1], sizeof(cells[row][1]));
     } else if (dataRow == 2) {
-      snprintf(cells[row][1], sizeof(cells[row][1]), tr(STR_GOLF_BEST_WORST_FORMAT),
-               static_cast<unsigned>(trends.best), static_cast<unsigned>(trends.worst));
+      snprintf(cells[row][1], sizeof(cells[row][1]), tr(STR_GOLF_BEST_WORST_FORMAT), static_cast<unsigned>(trends.best),
+               static_cast<unsigned>(trends.worst));
     } else {
       formatTenths(averages[dataRow], cells[row][1], sizeof(cells[row][1]));
     }
@@ -221,10 +215,10 @@ void GolfTrendsActivity::buildScreen(UiScreen& screen) {
   const int16_t noteHeight = screen.target().lineHeight(noteStyle.font);
   const int16_t bodyLine = screen.target().lineHeight(screen.theme().bodyText.font);
   const int requiredRows = rowCount * bodyLine;
-  const int16_t noteGap = screen.body().height > noteHeight + requiredRows
-                              ? golfui::minValue(gap, static_cast<int16_t>(screen.body().height - noteHeight -
-                                                                          requiredRows))
-                              : 0;
+  const int16_t noteGap =
+      screen.body().height > noteHeight + requiredRows
+          ? golfui::minValue(gap, static_cast<int16_t>(screen.body().height - noteHeight - requiredRows))
+          : 0;
   screen.target().text(screen.takeBottom(noteHeight, noteGap), state.message, noteStyle);
   const fui::Rect body = screen.body();
   for (uint8_t row = 0; row < rowCount; ++row) {
@@ -245,9 +239,8 @@ void GolfTrendsActivity::buildScreen(UiScreen& screen) {
 void GolfTrendsActivity::render(RenderLock&&) {
   renderer.clearScreen();
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding, metrics.headerHeight);
-  GUI.drawHeader(renderer, Rect{layout.header.x, layout.header.y, layout.header.width, layout.header.height},
-                 tr(STR_GOLF_TRENDS), playerLabel);
+  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding);
+  golfui::drawHeader(renderer, layout.header, tr(STR_GOLF_TRENDS), playerLabel);
   renderUi();
   const auto labels = mappedInput.mapLabels(tr(STR_GOLF_BUTTON_BACK), tr(STR_GOLF_BUTTON_BACK), "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

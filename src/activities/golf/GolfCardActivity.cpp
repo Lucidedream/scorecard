@@ -63,8 +63,8 @@ void GolfCardActivity::collectPlayers() {
   for (uint8_t slot = 0; slot < GolfRound::MAX_PLAYERS; ++slot) {
     if (!golfPlayerIsEnabled(round.players[slot])) continue;
     playerSlots[playerCount] = slot;
-    golfFormatPlayerLabel(slot, round.players[slot].name, tr(STR_GOLF_PLAYER_LABEL_FORMAT),
-                          playerLabels[playerCount], sizeof(playerLabels[playerCount]));
+    golfFormatPlayerLabel(slot, round.players[slot].name, tr(STR_GOLF_PLAYER_LABEL_FORMAT), playerLabels[playerCount],
+                          sizeof(playerLabels[playerCount]));
     ++playerCount;
   }
 }
@@ -123,12 +123,11 @@ void GolfCardActivity::loop() {
 
 void GolfCardActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto chrome = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding,
-                                            metrics.headerHeight);
+  const auto chrome = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding);
   screen.setContentMargin(chrome.contentMargins);
   const int16_t fontMinimum = screen.target().lineHeight(screen.theme().smallText.font);
   const auto layout = golfui::makeCardLayout(screen.body(), round.holeCount == 18, metrics.tabBarHeight,
-                                              metrics.verticalSpacing, playerCount, golfHasPar(round), fontMinimum);
+                                             metrics.verticalSpacing, playerCount, golfHasPar(round), fontMinimum);
   if (round.holeCount == 18) {
     segmentTabs[0] = {tr(STR_GOLF_FRONT_NINE), {}, {}, 0, activeTab == 0, true};
     segmentTabs[1] = {tr(STR_GOLF_BACK_NINE), {}, {}, 1, activeTab == 1, true};
@@ -162,8 +161,7 @@ void GolfCardActivity::buildCard(UiScreen& screen, const fui::Rect tableRect, co
   }
 
   for (uint8_t offset = 0; offset < 9; ++offset) {
-    snprintf(dataCells[0][offset], sizeof(dataCells[0][offset]), "%u",
-             static_cast<unsigned>(firstHole + offset + 1));
+    snprintf(dataCells[0][offset], sizeof(dataCells[0][offset]), "%u", static_cast<unsigned>(firstHole + offset + 1));
   }
   if (segmentLabel != nullptr) {
     snprintf(dataCells[0][9], sizeof(dataCells[0][9]), "%s", segmentLabel);
@@ -214,8 +212,8 @@ void GolfCardActivity::buildCard(UiScreen& screen, const fui::Rect tableRect, co
 
   tableTop = tableRect.y;
   tableHeight = tableRect.height;
-  const int16_t labelWidth = static_cast<int16_t>(
-      (static_cast<int32_t>(tableRect.width) * LABEL_COLUMN_UNITS) / (tableDataColumns + LABEL_COLUMN_UNITS));
+  const int16_t labelWidth = static_cast<int16_t>((static_cast<int32_t>(tableRect.width) * LABEL_COLUMN_UNITS) /
+                                                  (tableDataColumns + LABEL_COLUMN_UNITS));
   dataLeft = static_cast<int16_t>(tableRect.x + labelWidth);
   dataWidth = static_cast<int16_t>(tableRect.width - labelWidth);
 
@@ -223,11 +221,10 @@ void GolfCardActivity::buildCard(UiScreen& screen, const fui::Rect tableRect, co
     const fui::Rect rowRect = golfui::evenRow(tableRect, tableRows, row);
     const int16_t top = rowRect.y;
     const int16_t rowHeight = rowRect.height;
-    const char* rowLabel = row == 0                              ? tr(STR_GOLF_HOLE)
-                           : hasPar && row == 1                  ? tr(STR_GOLF_PAR)
-                           : row >= tableHeaderRows && playerCount > 0
-                               ? playerLabels[row - tableHeaderRows]
-                               : "";
+    const char* rowLabel = row == 0                                    ? tr(STR_GOLF_HOLE)
+                           : hasPar && row == 1                        ? tr(STR_GOLF_PAR)
+                           : row >= tableHeaderRows && playerCount > 0 ? playerLabels[row - tableHeaderRows]
+                                                                       : "";
 
     labelPointer[0] = rowLabel;
     tableProps = {};
@@ -255,15 +252,15 @@ void GolfCardActivity::drawPenaltyMarkers() const {
   for (uint8_t playerRow = 0; playerRow < playerCount; ++playerRow) {
     const GolfPlayerScore& score = round.players[playerSlots[playerRow]].score;
     const uint8_t displayRow = static_cast<uint8_t>(tableHeaderRows + playerRow);
-    const int16_t rowTop = static_cast<int16_t>(tableTop +
-                                                (static_cast<int32_t>(tableHeight) * displayRow) / tableRows);
+    const int16_t rowTop =
+        static_cast<int16_t>(tableTop + (static_cast<int32_t>(tableHeight) * displayRow) / tableRows);
     for (uint8_t offset = 0; offset < 9 && tableFirstHole + offset < round.holeCount; ++offset) {
       const uint8_t hole = static_cast<uint8_t>(tableFirstHole + offset);
       if (score.penaltyCount[hole] == 0 || !entered(round, score, hole)) continue;
-      const char* marker = golfObsForHole(score, hole) > 0 ? tr(STR_GOLF_OUT_OF_BOUNDS_SHORT_TAG)
-                                                            : tr(STR_GOLF_HAZARD_TAG);
-      const int16_t cellRight = static_cast<int16_t>(
-          dataLeft + (static_cast<int32_t>(dataWidth) * (offset + 1)) / tableDataColumns);
+      const char* marker =
+          golfObsForHole(score, hole) > 0 ? tr(STR_GOLF_OUT_OF_BOUNDS_SHORT_TAG) : tr(STR_GOLF_HAZARD_TAG);
+      const int16_t cellRight =
+          static_cast<int16_t>(dataLeft + (static_cast<int32_t>(dataWidth) * (offset + 1)) / tableDataColumns);
       const int markerWidth = renderer.getTextWidth(SMALL_FONT_ID, marker, EpdFontFamily::BOLD);
       renderer.drawText(SMALL_FONT_ID, cellRight - markerWidth - 2, rowTop + 2, marker, true, EpdFontFamily::BOLD);
     }
@@ -272,19 +269,17 @@ void GolfCardActivity::drawPenaltyMarkers() const {
 
 void GolfCardActivity::drawFooter() const {
   const bool hasTabs = round.holeCount == 18;
-  const auto labels = mappedInput.mapLabels(tr(STR_GOLF_BUTTON_BACK),
-                                            hasTabs ? tr(STR_GOLF_NEXT_TAB) : "",
-                                            hasTabs ? tr(STR_GOLF_PREVIOUS_TAB) : "",
-                                            hasTabs ? tr(STR_GOLF_NEXT_TAB) : "");
+  const auto labels =
+      mappedInput.mapLabels(tr(STR_GOLF_BUTTON_BACK), hasTabs ? tr(STR_GOLF_NEXT_TAB) : "",
+                            hasTabs ? tr(STR_GOLF_PREVIOUS_TAB) : "", hasTabs ? tr(STR_GOLF_NEXT_TAB) : "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void GolfCardActivity::render(RenderLock&&) {
   renderer.clearScreen();
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding, metrics.headerHeight);
-  GUI.drawHeader(renderer, Rect{layout.header.x, layout.header.y, layout.header.width, layout.header.height},
-                 tr(STR_GOLF_APP_TITLE), round.courseName);
+  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding);
+  golfui::drawHeader(renderer, layout.header, tr(STR_GOLF_APP_TITLE), round.courseName);
   renderUi();
   drawPenaltyMarkers();
   drawFooter();

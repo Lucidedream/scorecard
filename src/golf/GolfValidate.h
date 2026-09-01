@@ -12,8 +12,8 @@ struct GolfPlayerValidationResult {
   uint32_t penaltyMarkerRepaired;
 
   bool repaired() const {
-    return puttsRepaired != 0 || in100Repaired != 0 || penaltyCountRepaired != 0 ||
-           penaltyEventRepaired != 0 || penaltyMarkerRepaired != 0;
+    return puttsRepaired != 0 || in100Repaired != 0 || penaltyCountRepaired != 0 || penaltyEventRepaired != 0 ||
+           penaltyMarkerRepaired != 0;
   }
   bool holePuttsRepaired(uint8_t hole) const { return (puttsRepaired & (1UL << hole)) != 0; }
   bool holeIn100Repaired(uint8_t hole) const { return (in100Repaired & (1UL << hole)) != 0; }
@@ -26,10 +26,11 @@ struct GolfValidationResult {
   bool valid;
   bool currentHoleReset;
   bool currentPlayerReset;
+  bool firstPlayerEnabled;
   GolfPlayerValidationResult players[GolfRound::MAX_PLAYERS];
 
   bool repaired() const {
-    if (currentHoleReset || currentPlayerReset) return true;
+    if (currentHoleReset || currentPlayerReset || firstPlayerEnabled) return true;
     for (const GolfPlayerValidationResult& player : players) {
       if (player.repaired()) return true;
     }

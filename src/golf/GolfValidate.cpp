@@ -51,9 +51,8 @@ GolfPlayerValidationResult validateGolfPlayerScore(GolfPlayerScore& score, const
     if (score.in100[hole] != oldIn100) result.in100Repaired |= 1UL << hole;
 
     const uint8_t originalCount = score.penaltyCount[hole];
-    const uint8_t readableCount = originalCount < GolfRound::MAX_PENALTIES_PER_HOLE
-                                      ? originalCount
-                                      : GolfRound::MAX_PENALTIES_PER_HOLE;
+    const uint8_t readableCount =
+        originalCount < GolfRound::MAX_PENALTIES_PER_HOLE ? originalCount : GolfRound::MAX_PENALTIES_PER_HOLE;
     if (originalCount > GolfRound::MAX_PENALTIES_PER_HOLE) result.penaltyCountRepaired |= 1UL << hole;
 
     uint8_t fieldMarkers[3]{};
@@ -91,8 +90,12 @@ GolfValidationResult validateGolfRound(GolfRound& round) {
     }
     if (golfPlayerIsEnabled(player)) ++enabledPlayers;
   }
-  if (enabledPlayers == 0) result.valid = false;
   if (!result.valid) return result;
+
+  if (enabledPlayers == 0) {
+    round.players[0].tee = TeeSelection::Blue;
+    result.firstPlayerEnabled = true;
+  }
 
   if (round.currentHole >= round.holeCount) {
     round.currentHole = 0;

@@ -1,0 +1,492 @@
+<title>Multiplayer Setup Flow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Libre+Franklin:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+:root {
+  --paper:#F1F4F1; --card:#FBFCFA; --ink:#13181A; --ink-2:#4C5654; --ink-3:#737E7A;
+  --rule:#D2D9D2; --rule-soft:#E3E8E2;
+  --accent:#1E5C3E; --accent-ink:#123A28; --accent-wash:#E2ECE4;
+  --flag:#A93826; --flag-wash:#F4E4E0;
+  --panel-bg:#FFFFFF; --panel-ink:#000000; --panel-edge:#98A29C;
+  --measure:68ch; --gutter:13rem;
+  --step--1:clamp(0.78rem,0.76rem + 0.10vw,0.84rem);
+  --step-0:clamp(1.00rem,0.97rem + 0.14vw,1.08rem);
+  --step-1:clamp(1.22rem,1.15rem + 0.32vw,1.42rem);
+  --step-2:clamp(1.55rem,1.40rem + 0.68vw,2.05rem);
+  --step-3:clamp(2.05rem,1.72rem + 1.55vw,3.30rem);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:#0F1412; --card:#161C19; --ink:#E6EBE6; --ink-2:#A3AEA8; --ink-3:#7B8681;
+    --rule:#29322D; --rule-soft:#1E2622;
+    --accent:#6FC08D; --accent-ink:#A5DCB9; --accent-wash:#17251D;
+    --flag:#E1745F; --flag-wash:#2A1A16;
+    --panel-bg:#E9EBE7; --panel-ink:#0B0E0C; --panel-edge:#3A433D;
+  }
+}
+:root[data-theme="dark"] {
+  --paper:#0F1412; --card:#161C19; --ink:#E6EBE6; --ink-2:#A3AEA8; --ink-3:#7B8681;
+  --rule:#29322D; --rule-soft:#1E2622;
+  --accent:#6FC08D; --accent-ink:#A5DCB9; --accent-wash:#17251D;
+  --flag:#E1745F; --flag-wash:#2A1A16;
+  --panel-bg:#E9EBE7; --panel-ink:#0B0E0C; --panel-edge:#3A433D;
+}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:"Libre Franklin",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:var(--step-0);line-height:1.62;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{font-family:Archivo,"Libre Franklin",system-ui,sans-serif;text-wrap:balance;margin:0;line-height:1.14;letter-spacing:-.014em}
+p{margin:0}
+code,.mono{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}
+.wrap{max-width:78rem;margin:0 auto;padding:0 clamp(1.15rem,4vw,3rem)}
+
+.masthead{padding:clamp(3rem,8vw,5.5rem) 0 clamp(2rem,4vw,3rem);border-bottom:2px solid var(--ink)}
+.eyebrow{font-family:Archivo,system-ui,sans-serif;font-size:var(--step--1);font-weight:600;
+  letter-spacing:.15em;text-transform:uppercase;color:var(--accent);margin-bottom:1.15rem}
+.masthead h1{font-size:var(--step-3);font-weight:700;letter-spacing:-.03em;max-width:18ch}
+.standfirst{margin-top:1.4rem;max-width:60ch;font-size:var(--step-1);line-height:1.5;color:var(--ink-2)}
+.meta-strip{margin-top:2.4rem;display:flex;flex-wrap:wrap;gap:0 2.5rem;row-gap:1.1rem;font-size:var(--step--1)}
+.meta-strip div{display:flex;flex-direction:column;gap:.2rem}
+.meta-strip .k{font-family:Archivo,system-ui,sans-serif;font-weight:600;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--ink-3);font-size:.72rem}
+.meta-strip .v{font-weight:500;color:var(--ink)}
+
+section.doc{display:grid;grid-template-columns:var(--gutter) minmax(0,1fr);gap:0 3rem;
+  padding:clamp(2.6rem,6vw,4.4rem) 0;border-bottom:1px solid var(--rule)}
+section.doc:last-of-type{border-bottom:0}
+.rail{position:sticky;top:1.5rem;align-self:start}
+.rail .idx{font-family:Archivo,system-ui,sans-serif;font-size:var(--step--1);font-weight:700;
+  letter-spacing:.12em;color:var(--accent);display:block;margin-bottom:.5rem}
+.rail .label{font-size:var(--step--1);color:var(--ink-3);line-height:1.4;max-width:15ch}
+.body>*+*{margin-top:1.35rem}
+.body h2{font-size:var(--step-2);font-weight:700;max-width:24ch}
+.body h3{font-size:var(--step-1);font-weight:600;margin-top:2.6rem}
+.body h4{font-family:Archivo,system-ui,sans-serif;font-size:var(--step--1);font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-top:2rem}
+.body p,.body li{max-width:var(--measure)}
+.body ul,.body ol{margin:0;padding-left:1.25rem}
+.body li+li{margin-top:.5rem}
+strong{font-weight:600}
+@media (max-width:860px){
+  section.doc{grid-template-columns:minmax(0,1fr);gap:1.2rem}
+  .rail{position:static;display:flex;align-items:baseline;gap:.85rem}
+  .rail .idx{margin-bottom:0}
+}
+
+.callout{border-left:3px solid var(--accent);background:var(--accent-wash);padding:1.05rem 1.3rem;
+  max-width:var(--measure);font-size:.96rem}
+.callout.warn{border-left-color:var(--flag);background:var(--flag-wash)}
+.callout h4{margin-top:0;color:var(--ink-2)}
+.callout>*+*{margin-top:.6rem}
+
+.scroller{overflow-x:auto;max-width:100%;padding-bottom:.4rem}
+table{border-collapse:collapse;width:100%;min-width:30rem;font-size:.93rem}
+caption{caption-side:top;text-align:left;font-family:Archivo,system-ui,sans-serif;font-size:var(--step--1);
+  font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);padding-bottom:.7rem}
+th,td{text-align:left;padding:.6rem 1rem .6rem 0;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+thead th{font-family:Archivo,system-ui,sans-serif;font-size:.74rem;font-weight:600;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--ink-3);border-bottom:1px solid var(--rule);white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+td.num,th.num{font-family:"JetBrains Mono",monospace;font-variant-numeric:tabular-nums}
+
+kbd{display:inline-block;border:1px solid var(--rule);border-bottom-width:2px;border-radius:3px;
+  background:var(--card);padding:.05em .42em;font-size:.8em;font-weight:500;white-space:nowrap;color:var(--ink)}
+:not(pre)>code{background:var(--rule-soft);padding:.1em .36em;font-size:.86em;border-radius:2px}
+
+.mockrow{display:flex;gap:2rem;align-items:flex-start;overflow-x:auto;padding-bottom:.6rem}
+figure{margin:0}
+figcaption{margin-top:.85rem;font-size:var(--step--1);color:var(--ink-3);max-width:29rem}
+figcaption b{display:block;font-family:Archivo,system-ui,sans-serif;font-weight:600;letter-spacing:.09em;
+  text-transform:uppercase;font-size:.72rem;color:var(--ink-2);margin-bottom:.3rem}
+
+.panel{width:480px;height:800px;flex:none;background:var(--panel-bg);color:var(--panel-ink);
+  border:1px solid var(--panel-edge);display:flex;flex-direction:column;
+  font-family:Archivo,system-ui,sans-serif;overflow:hidden;position:relative}
+
+/* header variants */
+.hdr{display:flex;justify-content:space-between;align-items:center;padding:0 16px;
+  border-bottom:2px solid var(--panel-ink);font-size:15px;font-weight:600;letter-spacing:.04em;flex:none}
+.hdr.now{height:84px}
+.hdr.fix{height:46px}
+.hdr .batt{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600}
+.hdr .cell{display:inline-block;width:22px;height:12px;border:2px solid var(--panel-ink);position:relative}
+.hdr .cell::after{content:"";position:absolute;right:-4px;top:3px;width:2px;height:4px;background:var(--panel-ink)}
+.hdr .cell i{position:absolute;left:1px;top:1px;bottom:1px;width:62%;background:var(--panel-ink)}
+.ghost{background:repeating-linear-gradient(45deg,transparent,transparent 5px,var(--panel-edge) 5px,var(--panel-edge) 6px);
+  flex:none;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--panel-ink);opacity:.55}
+
+/* big count picker */
+.count-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px}
+.count-wrap .q{font-size:19px;font-weight:600;letter-spacing:.02em}
+.count-n{font-size:190px;font-weight:700;line-height:.92;font-variant-numeric:tabular-nums}
+.count-wrap .u{font-size:20px;font-weight:600;letter-spacing:.14em;text-transform:uppercase}
+.count-wrap .hint{margin-top:14px;font-size:14px;font-weight:500;opacity:.7;text-align:center;line-height:1.6}
+.pips{display:flex;gap:10px;margin-top:20px}
+.pips span{width:15px;height:15px;border:2px solid var(--panel-ink);border-radius:50%}
+.pips span.on{background:var(--panel-ink)}
+
+/* roster rows */
+.p-row{display:flex;align-items:center;gap:12px;padding:0 18px;height:92px;
+  border-bottom:1px solid var(--panel-ink);flex:none}
+.p-row.sel{background:var(--panel-ink);color:var(--panel-bg)}
+.p-row .idx{font-size:13px;font-weight:700;letter-spacing:.1em;width:26px}
+.p-row .main{flex:1;min-width:0}
+.p-row .t{font-size:23px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.p-row .s{font-size:13px;font-weight:500;opacity:.7;margin-top:3px;letter-spacing:.06em;text-transform:uppercase}
+.p-row .chev{font-size:17px;opacity:.55}
+.p-add{display:flex;align-items:center;justify-content:center;height:74px;flex:none;
+  border-bottom:1px solid var(--panel-ink);font-size:17px;font-weight:600;letter-spacing:.06em;opacity:.72}
+
+/* scoring screen */
+.s-hole{display:flex;align-items:flex-end;justify-content:space-between;padding:10px 18px 12px;
+  border-bottom:1px solid var(--panel-ink);flex:none}
+.s-hole .lab{font-size:12px;font-weight:700;letter-spacing:.18em;text-transform:uppercase}
+.s-hole .big{font-size:54px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.s-hole .r{text-align:right;font-size:14px;font-weight:500;line-height:1.5;font-variant-numeric:tabular-nums}
+.s-hole .r b{font-weight:700}
+.s-ctr{display:flex;align-items:center;padding:0 20px;border-bottom:1px solid var(--panel-ink);
+  font-size:17px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;flex:none;height:74px}
+.s-ctr.focus{background:var(--panel-ink);color:var(--panel-bg);height:96px}
+.s-ctr .v{margin-left:auto;font-size:38px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:0}
+.s-ctr .marks{margin-left:12px;font-family:"JetBrains Mono",monospace;font-size:15px;font-weight:700;letter-spacing:.06em}
+.s-pen{display:flex;align-items:center;justify-content:space-between;padding:0 20px;height:36px;
+  border-bottom:1px solid var(--panel-ink);font-size:14px;font-weight:700;letter-spacing:.12em;
+  text-transform:uppercase;flex:none}
+.s-tot{display:flex;border-bottom:1px solid var(--panel-ink);flex:none}
+.s-tot div{flex:1;padding:9px 0 11px;text-align:center;border-right:1px solid var(--panel-ink)}
+.s-tot div:last-child{border-right:0}
+.s-tot .k{font-size:11px;font-weight:700;letter-spacing:.15em;text-transform:uppercase}
+.s-tot .v{font-size:32px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.15}
+.s-nine{display:flex;flex:none;border-bottom:1px solid var(--panel-ink)}
+.s-nine div{flex:1;text-align:center;padding:6px 0 8px;border-right:1px solid var(--panel-edge);font-variant-numeric:tabular-nums}
+.s-nine div:last-child{border-right:0}
+.s-nine .h{font-size:10px;font-weight:600;opacity:.65}
+.s-nine .v{font-size:17px;font-weight:700}
+.s-nine div.on{background:var(--panel-ink);color:var(--panel-bg)}
+
+.p-foot{margin-top:auto;display:flex;border-top:2px solid var(--panel-ink);font-size:12px;font-weight:600;flex:none}
+.p-foot div{flex:1;text-align:center;padding:13px 4px;border-right:1px solid var(--panel-ink)}
+.p-foot div:last-child{border-right:0}
+
+.flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:.6rem;max-width:var(--measure)}
+.node{border:1px solid var(--rule);background:var(--card);padding:.6rem .8rem;font-size:.83rem;line-height:1.35}
+.node b{display:block;font-family:Archivo,system-ui,sans-serif;font-weight:600;font-size:.86rem}
+.node span{color:var(--ink-3);font-size:.76rem}
+.node.hot{border-color:var(--accent);border-left-width:3px}
+.arrow{align-self:center;color:var(--ink-3);font-family:"JetBrains Mono",monospace}
+
+footer.end{padding:3.5rem 0 5rem;border-top:2px solid var(--ink);font-size:var(--step--1);color:var(--ink-3)}
+footer.end p{max-width:var(--measure)}
+footer.end p+p{margin-top:.8rem}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <div class="eyebrow">Design · Scorecard · Multiplayer</div>
+  <h1>Ask how many, then get out of the way</h1>
+  <p class="standfirst">
+    Three fixes on the multiplayer branch: a header that stopped matching the app, a
+    player-count step that should take two presses for a solo round, and a totals row
+    where the score and to-par collide.
+  </p>
+  <div class="meta-strip">
+    <div><span class="k">Branch</span><span class="v">qiliu4/multiplayer</span></div>
+    <div><span class="k">Header now</span><span class="v">84 px on Lyra</span></div>
+    <div><span class="k">Header after</span><span class="v">46 px, fixed</span></div>
+    <div><span class="k">Solo round</span><span class="v">2 presses to tee off</span></div>
+  </div>
+</header>
+
+<!-- ================================================= 1 -->
+<section class="doc">
+  <div class="rail"><span class="idx">§ 1</span><span class="label">The header</span></div>
+  <div class="body">
+    <h2>It inherits the book reader's header, and that was never right</h2>
+    <p>
+      The golf screens size their header from <code>metrics.headerHeight</code> — the same
+      metric the e-reader uses for a book's title bar. That metric is not a constant:
+    </p>
+
+    <div class="scroller">
+      <table>
+        <caption>Golf header height, by whichever theme the reader happens to be on</caption>
+        <thead><tr><th style="width:34%">Theme</th><th class="num" style="width:22%">headerHeight</th><th>Effect on the scorecard</th></tr></thead>
+        <tbody>
+          <tr><td>Classic</td><td class="num">45 px</td><td>About right</td></tr>
+          <tr><td>RoundedRaff</td><td class="num">45 px</td><td>About right</td></tr>
+          <tr><td><strong>Lyra</strong></td><td class="num"><strong>84 px</strong></td><td><strong>Nearly double — the band dominates</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      A book header wants height: it carries a title, progress, and page counts. A scorecard
+      header carries a name, a course, and the time. Borrowing the book metric means the
+      scorecard's chrome changes size when you change reading themes, which is a coupling
+      nobody asked for.
+    </p>
+
+    <div class="callout">
+      <h4>The fix</h4>
+      <p>
+        Golf screens get their own fixed header height — <strong>46 px</strong>, the compact
+        status strip from the earlier design, sized so the band is the battery indicator plus
+        its padding and nothing more. It stops tracking the reading theme entirely.
+      </p>
+    </div>
+
+    <div class="mockrow">
+      <figure>
+        <div class="panel">
+          <div class="hdr now"><span>NOAH · SANYANG</span>
+            <span class="batt"><span class="cell"><i></i></span>62%</span></div>
+          <div class="ghost" style="height:84px">84 px of header</div>
+          <div class="s-hole" style="padding-top:14px">
+            <div><div class="lab">Hole</div><div class="big">7</div></div>
+            <div class="r">PAR <b>4</b><br>425 YDS · SI 3</div>
+          </div>
+          <div class="s-ctr">Putts <span class="v">2</span></div>
+          <div class="s-ctr focus">Inside 100 <span class="v">2</span></div>
+          <div class="s-ctr">Scoring zone <span class="v">4</span></div>
+          <div class="s-tot">
+            <div><div class="k">Thru</div><div class="v">7</div></div>
+            <div><div class="k">Score</div><div class="v">34</div></div>
+            <div><div class="k">To par</div><div class="v">+6</div></div>
+          </div>
+          <div class="p-foot"><div>MENU</div><div>PENALTY</div><div>PREV</div><div>NEXT</div></div>
+        </div>
+        <figcaption>
+          <b>Now — Lyra, 84 px</b>
+          The header takes more vertical space than any counter row, and every band below is
+          squeezed to pay for it. The hatched block is the header's own height drawn again
+          for comparison — that is how much of the panel it is claiming.
+        </figcaption>
+      </figure>
+
+      <figure>
+        <div class="panel">
+          <div class="hdr fix"><span>NOAH · SANYANG</span>
+            <span class="batt"><span class="cell"><i></i></span>62%</span></div>
+          <div class="s-hole">
+            <div><div class="lab">Hole</div><div class="big">7</div></div>
+            <div class="r">PAR <b>4</b><br>425 YDS · SI 3</div>
+          </div>
+          <div class="s-ctr">Putts <span class="v">2</span></div>
+          <div class="s-ctr focus">Inside 100 <span class="v">2</span></div>
+          <div class="s-ctr">Scoring zone <span class="marks">H</span><span class="v">4</span></div>
+          <div class="s-pen"><span>Penalty</span><span>+1</span></div>
+          <div class="s-tot">
+            <div><div class="k">Thru</div><div class="v">7</div></div>
+            <div><div class="k">To par</div><div class="v">+6</div></div>
+          </div>
+          <div class="s-nine">
+            <div><div class="h">1</div><div class="v">4</div></div>
+            <div><div class="h">2</div><div class="v">6</div></div>
+            <div><div class="h">3</div><div class="v">3</div></div>
+            <div><div class="h">4</div><div class="v">4</div></div>
+            <div><div class="h">5</div><div class="v">5</div></div>
+            <div><div class="h">6</div><div class="v">7</div></div>
+            <div class="on"><div class="h">7</div><div class="v">9</div></div>
+            <div><div class="h">8</div><div class="v">—</div></div>
+            <div><div class="h">9</div><div class="v">—</div></div>
+          </div>
+          <div class="p-foot"><div>MENU</div><div>PENALTY</div><div>PREV</div><div>NEXT</div></div>
+        </div>
+        <figcaption>
+          <b>After — fixed 46 px</b>
+          38 px comes back to the scoring bands. The focused counter gets its emphasis, the
+          penalty band and the nine strip both fit, and the header is the height of the
+          battery it contains. Same on every reading theme.
+        </figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================= 2 -->
+<section class="doc">
+  <div class="rail"><span class="idx">§ 2</span><span class="label">How many players</span></div>
+  <div class="body">
+    <h2>A solo round should cost two presses</h2>
+    <p>
+      Most rounds are one player. The count step must not tax that case to serve the rare
+      foursome, so it opens on <strong>1</strong> with Confirm already the right answer.
+    </p>
+
+    <div class="flow">
+      <div class="node"><b>Choose a course</b><span>existing</span></div>
+      <div class="arrow">→</div>
+      <div class="node hot"><b>How many players?</b><span>opens on 1</span></div>
+      <div class="arrow">→</div>
+      <div class="node"><b>Roster</b><span>skipped when count is 1</span></div>
+      <div class="arrow">→</div>
+      <div class="node"><b>Hole 1</b></div>
+    </div>
+
+    <p>
+      The roster screen is <strong>skipped entirely for a solo round</strong>. One player
+      means one name and one tee, both already defaulted, so there is nothing on that screen
+      to decide. Confirm on the count goes straight to the first hole.
+    </p>
+
+    <div class="mockrow">
+      <figure>
+        <div class="panel">
+          <div class="hdr fix"><span>SANYANG GOLF CLUB</span>
+            <span class="batt"><span class="cell"><i></i></span>62%</span></div>
+          <div class="count-wrap">
+            <div class="q">How many players?</div>
+            <div class="count-n">1</div>
+            <div class="u">Player</div>
+            <div class="pips"><span class="on"></span><span></span><span></span><span></span></div>
+            <div class="hint">Up / Down or Prev / Next to change<br>Maximum four</div>
+          </div>
+          <div class="p-foot"><div>BACK</div><div>START</div><div>−</div><div>+</div></div>
+        </div>
+        <figcaption>
+          <b>Count — opens on 1, Confirm starts the round</b>
+          Both input habits work: the side rocker and the front Prev/Next both step the
+          number, because on this hardware people reach for whichever is under their thumb.
+          The four pips make the ceiling visible without a sentence explaining it. The
+          Confirm cell reads <em>Start</em>, not <em>Next</em> — at one player it really is
+          the last press.
+        </figcaption>
+      </figure>
+
+      <figure>
+        <div class="panel">
+          <div class="hdr fix"><span>SANYANG GOLF CLUB</span>
+            <span class="batt"><span class="cell"><i></i></span>62%</span></div>
+          <div class="p-row sel">
+            <div class="idx">1</div>
+            <div class="main"><div class="t">Noah</div><div class="s">Blue tees · 6,466 yds</div></div>
+            <div class="chev">&rsaquo;</div>
+          </div>
+          <div class="p-row">
+            <div class="idx">2</div>
+            <div class="main"><div class="t">Player 2</div><div class="s">Blue tees · 6,466 yds</div></div>
+            <div class="chev">&rsaquo;</div>
+          </div>
+          <div class="p-row">
+            <div class="idx">3</div>
+            <div class="main"><div class="t">Player 3</div><div class="s">Blue tees · 6,466 yds</div></div>
+            <div class="chev">&rsaquo;</div>
+          </div>
+          <div style="padding:18px;font-size:14px;line-height:1.6;opacity:.72;
+                      border-bottom:1px solid var(--panel-ink)">
+            Select a player to rename them or change their tee.<br>Everyone starts on blue.
+          </div>
+          <div class="p-foot"><div>BACK</div><div>EDIT</div><div>UP</div><div>DOWN</div></div>
+        </div>
+        <figcaption>
+          <b>Roster — only when the count is 2 or more</b>
+          Player 1 is Noah on blue; the rest are Player 2, Player 3, Player 4, all on blue.
+          Every one of them is playable as-is, so this screen is a <em>review</em> step, not
+          a form to fill in — Back tees off immediately if the defaults are fine.
+        </figcaption>
+      </figure>
+    </div>
+
+    <h4>Why the names are numbered from 2</h4>
+    <p>
+      The round already ships defaults of <code>Noah</code>, <code>Player&nbsp;B</code>,
+      <code>Player&nbsp;C</code>, <code>Player&nbsp;D</code>. Letters and numbers read as two
+      different schemes when slot 1 is a name, so the letters become
+      <strong>Player&nbsp;2 / 3 / 4</strong> — matching the row index beside them. Slot 1 keeps
+      its name, because it is a person, not a slot.
+    </p>
+
+    <div class="callout warn">
+      <h4>One thing this design deliberately does not do</h4>
+      <p>
+        There is no "add player" row on the roster. The count is chosen once, on its own
+        screen, and the roster only reflects it. Two places to change the same number is how
+        the home screen's off-by-one bugs happened — one owner for a value, always.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================= 3 -->
+<section class="doc">
+  <div class="rail"><span class="idx">§ 3</span><span class="label">The totals row</span></div>
+  <div class="body">
+    <h2>Three numbers in a row built for two</h2>
+    <p>
+      The totals band splits into three equal cells — <em>Thru</em>, <em>Score</em>,
+      <em>To par</em> — each a third of 480 px minus padding. At a 12 pt bold face, a
+      two-digit score and a signed to-par run out of room and collide.
+    </p>
+
+    <p>
+      Dropping <strong>Score</strong> is the right cut, because to-par already contains it:
+      with par known, <code>score = par-so-far + to-par</code>. Thru and to-par together are
+      what a golfer actually says out loud — <em>"seven through, six over."</em>
+    </p>
+
+    <div class="scroller">
+      <table>
+        <caption>What the band shows</caption>
+        <thead><tr><th style="width:30%">Course</th><th style="width:34%">Cells</th><th>Reason</th></tr></thead>
+        <tbody>
+          <tr><td>Has par</td><td><strong>Thru · To par</strong></td><td>Two cells, no collision; score is implied</td></tr>
+          <tr><td><strong>Par-free</strong></td><td><strong>Thru · Score</strong></td><td>To par cannot exist, so score returns to fill the slot</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout">
+      <h4>The par-free case is not an afterthought</h4>
+      <p>
+        The Template course has no par, and today the third cell simply renders empty. If we
+        drop Score outright, a par-free round would show <em>Thru</em> and a blank — losing
+        the only running total it has. So the rule is positional: the second cell is to-par
+        when par exists and score when it does not. Never both, never blank.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================= 4 -->
+<section class="doc">
+  <div class="rail"><span class="idx">§ 4</span><span class="label">Build order</span></div>
+  <div class="body">
+    <h2>Three steps, each independently testable</h2>
+    <div class="scroller">
+      <table>
+        <thead><tr><th style="width:10%">Step</th><th style="width:44%">Scope</th><th>Verified by</th></tr></thead>
+        <tbody>
+          <tr><td><strong>M1</strong></td><td>Fixed 46 px golf header; stop reading
+            <code>metrics.headerHeight</code></td><td>Build, and the layout header tests already in <code>golf_layout</code></td></tr>
+          <tr><td><strong>M2</strong></td><td>Totals band: two cells, positional second cell</td>
+            <td>Host tests — par and par-free both</td></tr>
+          <tr><td><strong>M3</strong></td><td>Player-count screen; roster skipped at one player;
+            names renumbered</td><td>Host tests on the count/skip policy, then your hands</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      M1 and M2 are small and touch code that already has host tests around it. M3 is the
+      real work, and it is last so the screens it leads into are already correct when you
+      first walk the flow.
+    </p>
+  </div>
+</section>
+
+<footer class="end">
+  <p>
+    Mockups render at true 480 × 800 in pure black and white, matching the panel. The hatched
+    block in §1 is a measuring device, not a UI element.
+  </p>
+  <p>
+    Course figures are the owner's own Sanyang data. Battery and clock values are illustrative.
+  </p>
+</footer>
+
+</div>

@@ -42,14 +42,12 @@ void GolfRoundSummaryActivity::loop() {
 
 void GolfRoundSummaryActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding,
-                                            metrics.headerHeight);
+  const auto layout = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding);
   screen.setContentMargin(layout.contentMargins);
   const bool hasPar = golfHistoryShowsToPar(entry);
-  const char* labels[] = {tr(STR_GOLF_SCORE),         tr(STR_GOLF_TO_PAR),
-                          tr(STR_GOLF_PUTTS),         tr(STR_GOLF_INSIDE_100_CARD),
-                          tr(STR_GOLF_LONG_GAME),     tr(STR_GOLF_TOTAL_PENALTIES),
-                          tr(STR_GOLF_HAZARDS),       tr(STR_GOLF_OUT_OF_BOUNDS)};
+  const char* labels[] = {tr(STR_GOLF_SCORE),           tr(STR_GOLF_TO_PAR),       tr(STR_GOLF_PUTTS),
+                          tr(STR_GOLF_INSIDE_100_CARD), tr(STR_GOLF_LONG_GAME),    tr(STR_GOLF_TOTAL_PENALTIES),
+                          tr(STR_GOLF_HAZARDS),         tr(STR_GOLF_OUT_OF_BOUNDS)};
   const uint16_t penaltyStrokes = static_cast<uint16_t>(entry.hazards + entry.obs * 2);
   const uint16_t values[] = {entry.strokes, 0,        entry.putts, entry.in100, entry.out100, penaltyStrokes,
                              entry.hazards, entry.obs};
@@ -95,9 +93,8 @@ void GolfRoundSummaryActivity::buildScreen(UiScreen& screen) {
 void GolfRoundSummaryActivity::render(RenderLock&&) {
   renderer.clearScreen();
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding, metrics.headerHeight);
-  GUI.drawHeader(renderer, Rect{layout.header.x, layout.header.y, layout.header.width, layout.header.height},
-                 playerLabel, entry.course);
+  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding);
+  golfui::drawHeader(renderer, layout.header, playerLabel, entry.course);
   renderUi();
   const auto labels = mappedInput.mapLabels(tr(STR_GOLF_BUTTON_BACK), tr(STR_GOLF_BUTTON_BACK), "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

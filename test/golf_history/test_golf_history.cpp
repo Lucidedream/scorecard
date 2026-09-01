@@ -7,14 +7,13 @@
 
 namespace {
 
-constexpr char HEADER[] =
-    "date,course,holes,playerSlot,playerName,strokes,par,putts,in100,out100,hazards,obs,file\r\n";
+constexpr char HEADER[] = "date,course,holes,playerSlot,playerName,strokes,par,putts,in100,out100,hazards,obs,file\r\n";
 static_assert(sizeof(GolfHistoryEntry) <= 96);
 
 std::string row(const int number, const uint8_t slot = 0, const char* name = "Noah", const uint16_t par = 72) {
   char output[GOLF_CSV_ROW_BUFFER_SIZE];
-  snprintf(output, sizeof(output), ",Course %d,18,%u,%s,%d,%u,32,54,32,1,2,round-%04d.json\r\n", number, slot,
-           name, 80 + number, par, number);
+  snprintf(output, sizeof(output), ",Course %d,18,%u,%s,%d,%u,32,54,32,1,2,round-%04d.json\r\n", number, slot, name,
+           80 + number, par, number);
   return output;
 }
 
@@ -158,8 +157,7 @@ TEST(GolfPlayerNamesReader, FindsFirstPresentStableSlotForInitialSelection) {
   const GolfPlayerNamesReader none = readNames(HEADER);
   EXPECT_EQ(none.firstPresent(), GolfRound::NO_PLAYER);
 
-  const GolfPlayerNamesReader laterSlots =
-      readNames(std::string(HEADER) + row(1, 3, "Fourth") + row(2, 1, "Second"));
+  const GolfPlayerNamesReader laterSlots = readNames(std::string(HEADER) + row(1, 3, "Fourth") + row(2, 1, "Second"));
   EXPECT_EQ(laterSlots.firstPresent(), 1);
 }
 
@@ -171,7 +169,7 @@ TEST(GolfPlayerNamesReader, KeepsLatestSnapshotPerStableSlotWithDefaults) {
   EXPECT_TRUE(names.present(2));
   EXPECT_FALSE(names.present(1));
   EXPECT_STREQ(names.name(0), "New Noah");
-  EXPECT_STREQ(names.name(1), "Player B");
+  EXPECT_STREQ(names.name(1), "Player 2");
   EXPECT_STREQ(names.name(2), "Latest Guest");
-  EXPECT_STREQ(names.name(3), "Player D");
+  EXPECT_STREQ(names.name(3), "Player 4");
 }

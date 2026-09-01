@@ -53,8 +53,8 @@ void GolfStatisticsActivity::drawSection(const freeink::ui::Rect rect, const cha
   renderer.drawText(UI_10_FONT_ID, rect.x + padding, textY, label, true, EpdFontFamily::BOLD);
   if (rightLabel != nullptr) {
     const int right = rect.x + rect.width - padding;
-    renderer.drawText(UI_10_FONT_ID, right - renderer.getTextWidth(UI_10_FONT_ID, rightLabel), textY, rightLabel,
-                      true, EpdFontFamily::BOLD);
+    renderer.drawText(UI_10_FONT_ID, right - renderer.getTextWidth(UI_10_FONT_ID, rightLabel), textY, rightLabel, true,
+                      EpdFontFamily::BOLD);
   }
   renderer.drawLine(rect.x, rect.y + rect.height - 1, rect.x + rect.width - 1, rect.y + rect.height - 1);
 }
@@ -67,12 +67,11 @@ void GolfStatisticsActivity::drawStat(const freeink::ui::Rect rect, const char* 
   renderer.drawText(UI_12_FONT_ID, rect.x + padding, labelY, label);
   char count[8];
   snprintf(count, sizeof(count), "%u", static_cast<unsigned>(value));
-  const int valueFont = rect.height >= renderer.getLineHeight(NOTOSANS_18_FONT_ID) ? NOTOSANS_18_FONT_ID
-                                                                                   : UI_12_FONT_ID;
+  const int valueFont =
+      rect.height >= renderer.getLineHeight(NOTOSANS_18_FONT_ID) ? NOTOSANS_18_FONT_ID : UI_12_FONT_ID;
   const int countRight = withPercent ? right - 80 : right;
   renderer.drawText(valueFont, countRight - renderer.getTextWidth(valueFont, count, EpdFontFamily::BOLD),
-                    rect.y + (rect.height - renderer.getLineHeight(valueFont)) / 2, count, true,
-                    EpdFontFamily::BOLD);
+                    rect.y + (rect.height - renderer.getLineHeight(valueFont)) / 2, count, true, EpdFontFamily::BOLD);
   if (withPercent) {
     char percent[12];
     golfFormatReviewPercent(value, golfScore(round, selectedPlayer().score), tr(STR_GOLF_PERCENT_FORMAT), percent,
@@ -92,12 +91,11 @@ void GolfStatisticsActivity::drawFooter() const {
 void GolfStatisticsActivity::render(RenderLock&&) {
   renderer.clearScreen();
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto chrome = golfui::chromeLayout(renderer, metrics.topPadding, metrics.headerHeight);
+  const auto chrome = golfui::chromeLayout(renderer, metrics.topPadding);
   const auto layout = golfui::makeStatisticsLayout(chrome.body, renderer.getLineHeight(UI_10_FONT_ID));
   const GolfPlayer& player = selectedPlayer();
   const GolfPlayerScore& score = player.score;
-  GUI.drawHeader(renderer, Rect{chrome.header.x, chrome.header.y, chrome.header.width, chrome.header.height},
-                 playerLabel, roundStatus);
+  golfui::drawHeader(renderer, chrome.header, playerLabel, roundStatus);
   drawSection(layout.rows[0], tr(STR_GOLF_WHERE_SHOTS_WENT), teeLabel(player.tee));
   drawStat(layout.rows[1], tr(STR_GOLF_LONG_GAME), golfLongTotal(round, score), true);
   drawStat(layout.rows[2], tr(STR_GOLF_SHORT_GAME), golfShortTotal(round, score), true);

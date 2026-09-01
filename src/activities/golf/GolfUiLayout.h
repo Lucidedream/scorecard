@@ -10,6 +10,10 @@ namespace golfui {
 
 namespace fui = freeink::ui;
 
+inline constexpr int GOLF_HEADER_HEIGHT = 46;
+inline constexpr int SCORING_HOLE_DIGIT_MAX_HEIGHT = 48;
+inline constexpr int SCORING_HOLE_DIGIT_RULE_GAP = 12;
+
 constexpr int minValue(const int a, const int b) { return a < b ? a : b; }
 constexpr int maxValue(const int a, const int b) { return a > b ? a : b; }
 constexpr int16_t clampValue(const int value, const int minimum, const int maximum) {
@@ -55,8 +59,8 @@ constexpr fui::Insets relativeInsets(const fui::Rect frame, const fui::Rect cont
 enum class HintEdge : uint8_t { Top, Right, Bottom, Left };
 
 constexpr fui::Rect reserveHintEdge(const fui::Rect screen, const HintEdge edge, const int16_t amount) {
-  const int16_t reserve = clampValue(amount, 0, edge == HintEdge::Top || edge == HintEdge::Bottom ? screen.height
-                                                                                                  : screen.width);
+  const int16_t reserve =
+      clampValue(amount, 0, edge == HintEdge::Top || edge == HintEdge::Bottom ? screen.height : screen.width);
   switch (edge) {
     case HintEdge::Top:
       return fui::Rect{screen.x, static_cast<int16_t>(screen.y + reserve), screen.width,
@@ -67,8 +71,8 @@ constexpr fui::Rect reserveHintEdge(const fui::Rect screen, const HintEdge edge,
       return fui::Rect{screen.x, screen.y, screen.width, static_cast<int16_t>(screen.height - reserve)};
     case HintEdge::Left:
     default:
-      return fui::Rect{static_cast<int16_t>(screen.x + reserve), screen.y,
-                       static_cast<int16_t>(screen.width - reserve), screen.height};
+      return fui::Rect{static_cast<int16_t>(screen.x + reserve), screen.y, static_cast<int16_t>(screen.width - reserve),
+                       screen.height};
   }
 }
 
@@ -90,10 +94,9 @@ constexpr ChromeLayout makeChromeLayout(const fui::Rect frameSafe, const fui::Re
   const int16_t availableAfterPad = static_cast<int16_t>(result.safe.height - topPad);
   const int16_t header = clampValue(headerHeight, 0, availableAfterPad);
   result.header = fui::Rect{result.safe.x, static_cast<int16_t>(result.safe.y + topPad), result.safe.width, header};
-  const fui::Rect rawBody{result.safe.x, static_cast<int16_t>(result.header.y + result.header.height),
-                          result.safe.width,
-                          static_cast<int16_t>(result.safe.y + result.safe.height - result.header.y -
-                                               result.header.height)};
+  const fui::Rect rawBody{
+      result.safe.x, static_cast<int16_t>(result.header.y + result.header.height), result.safe.width,
+      static_cast<int16_t>(result.safe.y + result.safe.height - result.header.y - result.header.height)};
   result.body = inset(rawBody, bodyPadding);
   result.contentMargins = relativeInsets(frameSafe, result.body);
   return result;
@@ -102,16 +105,37 @@ constexpr ChromeLayout makeChromeLayout(const fui::Rect frameSafe, const fui::Re
 // Runtime adapters obtain both sources of hardware clearance. The first form
 // uses a FreeInkUI frame-safe rect; the second derives the bezel-safe rect
 // directly from GfxRenderer for legacy/raw drawing screens.
-ChromeLayout chromeLayout(const GfxRenderer& renderer, fui::Rect frameSafe, int topPadding, int headerHeight,
+ChromeLayout chromeLayout(const GfxRenderer& renderer, fui::Rect frameSafe, int topPadding,
                           fui::Insets bodyPadding = {});
-ChromeLayout chromeLayout(const GfxRenderer& renderer, int topPadding, int headerHeight,
-                          fui::Insets bodyPadding = {});
+ChromeLayout chromeLayout(const GfxRenderer& renderer, int topPadding, fui::Insets bodyPadding = {});
+void drawHeader(const GfxRenderer& renderer, fui::Rect rect, const char* title, const char* rightLabel = nullptr);
+
+constexpr int scoringDigitHeight(const int rowHeight, const bool focused) {
+  const int preferred = focused ? 100 : 66;
+  const int maximum = maxValue(rowHeight - 24, 1);
+  return clampValue(preferred, 1, maximum);
+}
+
+constexpr int scoringHoleDigitHeight(const int rowHeight, const int lineHeight) {
+  return clampValue(rowHeight - lineHeight - 16, 24, SCORING_HOLE_DIGIT_MAX_HEIGHT);
+}
+
+constexpr int scoringHoleDigitTop(const fui::Rect rect, const int digitHeight) {
+  return rect.y + rect.height - digitHeight - SCORING_HOLE_DIGIT_RULE_GAP;
+}
 
 constexpr fui::Rect evenRow(const fui::Rect rect, const uint8_t count, const uint8_t index) {
   if (count == 0 || index >= count) return {};
   const int top = rect.y + (static_cast<int32_t>(rect.height) * index) / count;
   const int bottom = rect.y + (static_cast<int32_t>(rect.height) * (index + 1)) / count;
   return fui::Rect{rect.x, static_cast<int16_t>(top), rect.width, static_cast<int16_t>(bottom - top)};
+}
+
+constexpr fui::Rect totalsCell(const fui::Rect rect, const uint8_t index) {
+  if (index >= 3) return {};
+  const int left = rect.x + static_cast<int32_t>(rect.width) * index / 3;
+  const int right = rect.x + static_cast<int32_t>(rect.width) * (index + 1) / 3;
+  return fui::Rect{static_cast<int16_t>(left), rect.y, static_cast<int16_t>(right - left), rect.height};
 }
 
 struct CardLayout {
@@ -122,9 +146,8 @@ struct CardLayout {
   bool valid = false;
 };
 
-constexpr CardLayout makeCardLayout(const fui::Rect content, const bool hasTabs, const int tabHeight,
-                                    const int tabGap, const uint8_t playerCount, const bool hasPar,
-                                    const int fontMinimumRowHeight) {
+constexpr CardLayout makeCardLayout(const fui::Rect content, const bool hasTabs, const int tabHeight, const int tabGap,
+                                    const uint8_t playerCount, const bool hasPar, const int fontMinimumRowHeight) {
   CardLayout result{};
   result.tabs = fui::Rect{content.x, content.y, content.width, 0};
   const uint8_t players = playerCount > 4 ? 4 : playerCount;
@@ -140,16 +163,16 @@ constexpr CardLayout makeCardLayout(const fui::Rect content, const bool hasTabs,
     result.tabs = fui::Rect{content.x, static_cast<int16_t>(cursor), content.width, static_cast<int16_t>(height)};
     cursor += height;
     remaining -= height;
-    const int appliedGap = remaining > requiredTable ? minValue(static_cast<int16_t>(gap),
-                                                                 static_cast<int16_t>(remaining - requiredTable))
-                                                     : 0;
+    const int appliedGap = remaining > requiredTable
+                               ? minValue(static_cast<int16_t>(gap), static_cast<int16_t>(remaining - requiredTable))
+                               : 0;
     cursor += appliedGap;
     remaining -= appliedGap;
   }
   result.table = fui::Rect{content.x, static_cast<int16_t>(cursor), content.width,
                            static_cast<int16_t>(remaining > 0 ? remaining : 0)};
-  result.valid = result.rowCount > 0 && result.table.width > 0 &&
-                 result.table.height >= result.rowCount * result.minimumRowHeight;
+  result.valid =
+      result.rowCount > 0 && result.table.width > 0 && result.table.height >= result.rowCount * result.minimumRowHeight;
   return result;
 }
 
@@ -173,8 +196,8 @@ constexpr MenuInfoLayout makeMenuInfoLayout(const fui::Rect body, const uint8_t 
   if (infoHeight > maximumInfo) infoHeight = maximumInfo > 0 ? maximumInfo : 0;
   const int menuHeight = body.height - infoHeight;
   result.menu = fui::Rect{body.x, body.y, body.width, static_cast<int16_t>(menuHeight)};
-  result.info = fui::Rect{body.x, static_cast<int16_t>(body.y + menuHeight), body.width,
-                          static_cast<int16_t>(infoHeight)};
+  result.info =
+      fui::Rect{body.x, static_cast<int16_t>(body.y + menuHeight), body.width, static_cast<int16_t>(infoHeight)};
   result.rowHeight = static_cast<int16_t>(menuHeight / rowCount);
   result.valid = body.width > 0 && infoHeight >= infoMinimum && result.rowHeight >= rowMinimum;
   return result;
@@ -191,17 +214,13 @@ struct ScoringLayout {
   bool valid = false;
 };
 
-constexpr ScoringLayout makeScoringLayout(const fui::Rect safe, const int topPadding, const int preferredHeaderHeight,
-                                          const uint8_t focusedCounter, const bool hasPenalty,
-                                          const int fontMinimumRowHeight) {
+constexpr ScoringLayout makeScoringLayout(const fui::Rect safe, const int topPadding, const uint8_t focusedCounter,
+                                          const bool hasPenalty, const int fontMinimumRowHeight) {
   ScoringLayout result{};
   result.safe = safe;
   const int fontMin = maxValue(static_cast<int16_t>(fontMinimumRowHeight), 1);
   const int topPad = clampValue(topPadding, 0, safe.height);
-  const bool compact = safe.width >= safe.height;
-  const int headerFloor = fontMin + 8 > 36 ? fontMin + 8 : 36;
-  const int headerCap = compact ? (fontMin + 28 > 56 ? fontMin + 28 : 56) : preferredHeaderHeight;
-  const int header = clampValue(preferredHeaderHeight, headerFloor, headerCap > headerFloor ? headerCap : headerFloor);
+  constexpr int header = GOLF_HEADER_HEIGHT;
   const int hole = fontMin + 28 > 52 ? fontMin + 28 : 52;
   const int counter = fontMin + 28 > 52 ? fontMin + 28 : 52;
   const int penalty = hasPenalty ? (fontMin + 10 > 32 ? fontMin + 10 : 32) : 0;
@@ -222,7 +241,7 @@ constexpr ScoringLayout makeScoringLayout(const fui::Rect safe, const int topPad
   int cursor = safe.y + topPad;
   int cumulativeWeight = 0;
   int assignedExtra = 0;
-  fui::Rect* bands[8] = {&result.header,      &result.hole,   &result.counters[0], &result.counters[1],
+  fui::Rect* bands[8] = {&result.header,      &result.hole,    &result.counters[0], &result.counters[1],
                          &result.counters[2], &result.penalty, &result.totals,      &result.nineStrip};
   for (uint8_t index = 0; index < 8; ++index) {
     int height = 0;
@@ -235,8 +254,8 @@ constexpr ScoringLayout makeScoringLayout(const fui::Rect safe, const int topPad
       height = available * minima[index] / minimumTotal;
     }
     if (index == 7) height = safe.y + safe.height - cursor;
-    *bands[index] = fui::Rect{safe.x, static_cast<int16_t>(cursor), safe.width,
-                              static_cast<int16_t>(height > 0 ? height : 0)};
+    *bands[index] =
+        fui::Rect{safe.x, static_cast<int16_t>(cursor), safe.width, static_cast<int16_t>(height > 0 ? height : 0)};
     cursor += height;
   }
   result.valid = safe.width > 0 && fitsMinimum;
@@ -255,12 +274,10 @@ constexpr HoleReviewLayout makeHoleReviewLayout(const fui::Rect body, const bool
                                                 const int fontMinimumRowHeight) {
   HoleReviewLayout result{};
   const int fontMin = maxValue(static_cast<int16_t>(fontMinimumRowHeight), 1);
-  const int minima[6] = {fontMin * 2 + 12 > 60 ? fontMin * 2 + 12 : 60,
-                         fontMin * 2 + 16 > 64 ? fontMin * 2 + 16 : 64,
-                         fontMin + 18 > 42 ? fontMin + 18 : 42,
-                         fontMin + 18 > 42 ? fontMin + 18 : 42,
-                         fontMin + 18 > 42 ? fontMin + 18 : 42,
-                         hasPenalty ? (fontMin + 10 > 32 ? fontMin + 10 : 32) : 0};
+  const int minima[6] = {
+      fontMin * 2 + 12 > 60 ? fontMin * 2 + 12 : 60, fontMin * 2 + 16 > 64 ? fontMin * 2 + 16 : 64,
+      fontMin + 18 > 42 ? fontMin + 18 : 42,         fontMin + 18 > 42 ? fontMin + 18 : 42,
+      fontMin + 18 > 42 ? fontMin + 18 : 42,         hasPenalty ? (fontMin + 10 > 32 ? fontMin + 10 : 32) : 0};
   constexpr int weights[6] = {2, 3, 1, 1, 1, 1};
   int minimumTotal = 0;
   int weightTotal = 0;
@@ -286,8 +303,8 @@ constexpr HoleReviewLayout makeHoleReviewLayout(const fui::Rect body, const bool
       height = body.height * minima[index] / minimumTotal;
     }
     if (index == 5) height = body.y + body.height - cursor;
-    *bands[index] = fui::Rect{body.x, static_cast<int16_t>(cursor), body.width,
-                              static_cast<int16_t>(height > 0 ? height : 0)};
+    *bands[index] =
+        fui::Rect{body.x, static_cast<int16_t>(cursor), body.width, static_cast<int16_t>(height > 0 ? height : 0)};
     cursor += height;
   }
   result.valid = body.width > 0 && fitsMinimum;
@@ -306,7 +323,7 @@ struct StatisticsLayout {
 constexpr StatisticsLayout makeStatisticsLayout(const fui::Rect body, const int fontMinimumRowHeight) {
   StatisticsLayout result{};
   constexpr bool sections[StatisticsLayout::ROW_COUNT] = {true,  false, false, false, false, true,
-                                                           false, false, true,  false, false};
+                                                          false, false, true,  false, false};
   const int fontMin = maxValue(static_cast<int16_t>(fontMinimumRowHeight), 1);
   result.minimumSectionHeight = static_cast<int16_t>(fontMin > 24 ? fontMin : 24);
   result.minimumStatHeight = static_cast<int16_t>(fontMin + 6 > 32 ? fontMin + 6 : 32);
@@ -335,8 +352,8 @@ constexpr StatisticsLayout makeStatisticsLayout(const fui::Rect body, const int 
       height = body.height * minimum / minimumTotal;
     }
     if (index + 1 == StatisticsLayout::ROW_COUNT) height = body.y + body.height - cursor;
-    result.rows[index] = fui::Rect{body.x, static_cast<int16_t>(cursor), body.width,
-                                   static_cast<int16_t>(height > 0 ? height : 0)};
+    result.rows[index] =
+        fui::Rect{body.x, static_cast<int16_t>(cursor), body.width, static_cast<int16_t>(height > 0 ? height : 0)};
     cursor += height;
   }
   result.valid = body.width > 0 && fitsMinimum;

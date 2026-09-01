@@ -43,8 +43,7 @@ void GolfRoundMenuActivity::activateIndex(const int index) {
 
 void GolfRoundMenuActivity::confirmAction(const PendingAction action) {
   pendingAction = action;
-  const char* heading =
-      action == PendingAction::Finish ? tr(STR_GOLF_FINISH_ROUND) : tr(STR_GOLF_ABANDON_ROUND);
+  const char* heading = action == PendingAction::Finish ? tr(STR_GOLF_FINISH_ROUND) : tr(STR_GOLF_ABANDON_ROUND);
   const char* body = action == PendingAction::Finish ? tr(STR_GOLF_FINISH_PROMPT) : tr(STR_GOLF_ABANDON_PROMPT);
   auto confirmation = makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, heading, body);
   if (!confirmation) {
@@ -95,8 +94,7 @@ void GolfRoundMenuActivity::completeAction(const bool confirmed) {
 
 void GolfRoundMenuActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding,
-                                            metrics.headerHeight);
+  const auto layout = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding);
   screen.setContentMargin(layout.contentMargins);
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
   listProps = {};
@@ -110,9 +108,8 @@ void GolfRoundMenuActivity::buildScreen(UiScreen& screen) {
 
 void GolfRoundMenuActivity::drawChrome() {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding, metrics.headerHeight);
-  GUI.drawHeader(renderer,
-                 Rect{layout.header.x, layout.header.y, layout.header.width, layout.header.height}, headerTitle());
+  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding);
+  golfui::drawHeader(renderer, layout.header, headerTitle());
 }
 
 #endif

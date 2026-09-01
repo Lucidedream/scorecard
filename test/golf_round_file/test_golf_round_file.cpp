@@ -46,10 +46,8 @@ class GolfRoundDecodeTest : public ::testing::Test {
 
 TEST_F(GolfRoundDecodeTest, RejectsVersionOneAndMissingVersion) {
   prepareLegacy();
-  EXPECT_EQ(golfCheckRound(round, 1, 18, 0, 0, legacyLengths(18), validation),
-            GolfRoundDecodeStatus::RejectedVersion);
-  EXPECT_EQ(golfCheckRound(round, 0, 18, 0, 0, legacyLengths(18), validation),
-            GolfRoundDecodeStatus::RejectedVersion);
+  EXPECT_EQ(golfCheckRound(round, 1, 18, 0, 0, legacyLengths(18), validation), GolfRoundDecodeStatus::RejectedVersion);
+  EXPECT_EQ(golfCheckRound(round, 0, 18, 0, 0, legacyLengths(18), validation), GolfRoundDecodeStatus::RejectedVersion);
 }
 
 TEST_F(GolfRoundDecodeTest, LegacyTeeMappingUsesExactTokensAndBlueFallback) {
@@ -92,8 +90,7 @@ TEST_F(GolfRoundDecodeTest, VersionThreeRequiresOnePenaltyArrayPerHole) {
   valid.player[0].penalties = 18;
   EXPECT_EQ(golfCheckRound(round, 3, 18, 0, 0, valid, validation), GolfRoundDecodeStatus::Ok);
   valid.player[0].penalties = 17;
-  EXPECT_EQ(golfCheckRound(round, 3, 18, 0, 0, valid, validation),
-            GolfRoundDecodeStatus::RejectedArrayLength);
+  EXPECT_EQ(golfCheckRound(round, 3, 18, 0, 0, valid, validation), GolfRoundDecodeStatus::RejectedArrayLength);
 }
 
 TEST_F(GolfRoundDecodeTest, V4AcceptsExactlyFourOrderedPlayers) {
@@ -113,19 +110,18 @@ TEST_F(GolfRoundDecodeTest, V4RejectsPlayerCountAndAnyPerPlayerLengthMismatch) {
   prepareV4();
   GolfRoundColumnLengths lengths = v4Lengths(18);
   lengths.players = 3;
-  EXPECT_EQ(golfCheckRound(round, 4, 18, 0, 0, lengths, validation),
-            GolfRoundDecodeStatus::RejectedPlayerCount);
+  EXPECT_EQ(golfCheckRound(round, 4, 18, 0, 0, lengths, validation), GolfRoundDecodeStatus::RejectedPlayerCount);
   lengths = v4Lengths(18);
   lengths.player[3].yards = 17;
-  EXPECT_EQ(golfCheckRound(round, 4, 18, 0, 0, lengths, validation),
-            GolfRoundDecodeStatus::RejectedArrayLength);
+  EXPECT_EQ(golfCheckRound(round, 4, 18, 0, 0, lengths, validation), GolfRoundDecodeStatus::RejectedArrayLength);
 }
 
-TEST_F(GolfRoundDecodeTest, V4RejectsRoundWithNoEnabledPlayers) {
+TEST_F(GolfRoundDecodeTest, V4RepairsRoundWithNoEnabledPlayers) {
   prepareV4();
   round.players[0].tee = TeeSelection::NotPlay;
-  EXPECT_EQ(golfCheckRound(round, 4, 18, 0, 0, v4Lengths(18), validation),
-            GolfRoundDecodeStatus::RejectedRound);
+  EXPECT_EQ(golfCheckRound(round, 4, 18, 0, 0, v4Lengths(18), validation), GolfRoundDecodeStatus::Ok);
+  EXPECT_TRUE(validation.firstPlayerEnabled);
+  EXPECT_EQ(round.players[0].tee, TeeSelection::Blue);
 }
 
 TEST_F(GolfRoundDecodeTest, V4RejectsNonZeroPayloadForDisabledPlayer) {
@@ -141,14 +137,12 @@ TEST_F(GolfRoundDecodeTest, V4ValidatesSharedStrokeIndexSnapshot) {
   for (uint8_t hole = 0; hole < GolfRound::MAX_HOLES; ++hole) round.si[hole] = static_cast<uint8_t>(hole + 1);
   EXPECT_EQ(golfCheckRound(round, 4, 18, 0, 0, v4Lengths(18), validation), GolfRoundDecodeStatus::Ok);
   round.si[1] = round.si[0];
-  EXPECT_EQ(golfCheckRound(round, 4, 18, 0, 0, v4Lengths(18), validation),
-            GolfRoundDecodeStatus::RejectedSharedData);
+  EXPECT_EQ(golfCheckRound(round, 4, 18, 0, 0, v4Lengths(18), validation), GolfRoundDecodeStatus::RejectedSharedData);
 
   prepareV4();
   round.hasSi = false;
   round.si[0] = 7;
-  EXPECT_EQ(golfCheckRound(round, 4, 18, 0, 0, v4Lengths(18), validation),
-            GolfRoundDecodeStatus::RejectedSharedData);
+  EXPECT_EQ(golfCheckRound(round, 4, 18, 0, 0, v4Lengths(18), validation), GolfRoundDecodeStatus::RejectedSharedData);
 }
 
 TEST_F(GolfRoundDecodeTest, V4RepairsDisabledCurrentPlayerToFirstEnabled) {
@@ -166,8 +160,7 @@ TEST_F(GolfRoundDecodeTest, RejectsUnsupportedHoleCountAndArrayMismatch) {
             GolfRoundDecodeStatus::RejectedHoleCount);
   GolfRoundColumnLengths mismatched = legacyLengths(18);
   mismatched.player[0].putts = 17;
-  EXPECT_EQ(golfCheckRound(round, 2, 18, 0, 0, mismatched, validation),
-            GolfRoundDecodeStatus::RejectedArrayLength);
+  EXPECT_EQ(golfCheckRound(round, 2, 18, 0, 0, mismatched, validation), GolfRoundDecodeStatus::RejectedArrayLength);
 }
 
 TEST_F(GolfRoundDecodeTest, RepairsAndReportsOnlyOwningPlayer) {
@@ -191,8 +184,7 @@ TEST_F(GolfRoundDecodeTest, LegacyYardsLengthIsRequiredOnlyForState) {
 
   GolfRoundColumnLengths state = legacyLengths(18, true);
   state.player[0].yards = 3;
-  EXPECT_EQ(golfCheckRound(round, 2, 18, 0, 0, state, validation),
-            GolfRoundDecodeStatus::RejectedArrayLength);
+  EXPECT_EQ(golfCheckRound(round, 2, 18, 0, 0, state, validation), GolfRoundDecodeStatus::RejectedArrayLength);
 }
 
 }  // namespace

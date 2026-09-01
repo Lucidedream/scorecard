@@ -1085,3 +1085,251 @@ are current accounting, not a net-saving claim. History preserves its selected-s
 second-pass locator and post-deletion reload. Trends folds only its already filtered
 reader and keeps the rounds-count subtitle in content while the header identifies the
 selected player.
+
+
+## 16. Multiplayer UX pass (M1-M3)
+
+Design with 1:1 mocks: `docs/golf/design/multiplayer-ux.html`.
+
+### 16.1 The golf header is a fixed height (M1)
+
+Golf screens currently size their header from `metrics.headerHeight`, which is the
+**e-reader's book title bar** metric. It is not a constant: 45 px on Classic and
+RoundedRaff, **84 px on Lyra**. The scorecard's chrome therefore changes size when the
+owner changes reading themes.
+
+A book header carries a title, progress and page counts and wants that height. A
+scorecard header carries a player, a course and the time. Golf screens take their own
+fixed **46 px** — the compact strip sized to the battery indicator plus its padding —
+and stop reading `metrics.headerHeight` entirely.
+
+The 38 px recovered on Lyra goes back to the scoring bands, which are the screens the
+owner actually reads.
+
+### 16.2 The totals band shows two cells, not three (M2)
+
+The band splits into three equal cells — Thru, Score, To par — each a third of the panel
+width. At the bold 12 pt face a two-digit score and a signed to-par collide.
+
+Drop **Score**: to-par already contains it, since `score = par-so-far + to-par` whenever
+par is known. Thru and to-par are also what a golfer says out loud.
+
+**The second cell is positional, not fixed:**
+
+| Course | Cells |
+| --- | --- |
+| Has par | **Thru · To par** |
+| Par-free | **Thru · Score** |
+
+The par-free case is not an afterthought. The Template course has no par, so dropping
+Score outright would leave it showing Thru and a blank — losing the only running total it
+has. Never both, never blank.
+
+### 16.3 Player count is chosen once, on its own screen (M3)
+
+After the course is chosen, ask how many are playing. The screen opens on **1** with
+Confirm already the right answer, because most rounds are solo and the common case must
+not be taxed to serve the rare foursome.
+
+* Both the side rocker and the front Prev/Next step the count; people reach for whichever
+  is under their thumb.
+* Range is 1 to `GOLF_MAX_PLAYERS` (4). Show the ceiling as pips rather than a sentence.
+* The Confirm hint reads **Start** at a count of 1, because it really is the last press.
+
+**The roster screen is skipped entirely at one player.** One player means one name and
+one tee, both already defaulted, so that screen has nothing to decide.
+
+**Defaults.** Slot 1 is `Noah` on the blue tee. Slots 2-4 become **`Player 2`,
+`Player 3`, `Player 4`**, replacing today's `Player B/C/D`: letters and numbers read as
+two schemes when slot 1 is a name, and the numbers now match the row index beside them.
+Slot 1 keeps a name because it is a person, not a slot. Every player is playable as-is,
+so the roster is a review step, not a form.
+
+**The count has exactly one owner.** There is no "add player" row on the roster; the
+roster only reflects the count screen. Two places editing one value is how the home
+screen's off-by-one bugs happened.
+
+
+## 17. Scoring screen polish (v4.1)
+
+Owner feedback after flashing the M1-M3 build. All three are presentation-only; no scoring
+behaviour changes.
+
+### 17.1 The header is not bold and not highlighted
+
+The scoring header currently renders emphasised. It is chrome, not content: the player and
+course name orient you, they are not the thing being read. Draw the header text at regular
+weight, with no inverted or filled band behind it.
+
+### 17.2 "Score zone", and no running total in that field
+
+`STR_GOLF_ENTER_SCORING_ZONE` becomes **"SCORE ZONE"**. "Enter scoring zone" read as an
+instruction — a button you press — when it is a label for a count.
+
+The third counter row also draws a right-hand badge reading `TOTAL 4 E` (via
+`STR_GOLF_TOTAL_TO_PAR_FORMAT`). **Remove it.** The totals band directly beneath already
+carries Thru and To par, so the badge repeated a number the eye finds two rows lower, and
+it competed with the counter value that row exists to show.
+
+### 17.3 Counter digits follow the main-branch treatment
+
+`main` draws each counter value at a fixed size with a downward nudge:
+
+```
+const int digitHeight = focused ? 100 : 66;
+golfDrawLargeNumber(renderer, screenWidth / 2, top + (height - digitHeight) / 2 + 12, ...)
+```
+
+The multiplayer branch kept the same preferred 100/66 but clamped it to `rect.height - 10`
+and dropped the `+ 12`, so on a short band the digit silently shrinks and sits higher. The
+owner reads that as the number being too small.
+
+Restore the main-branch look: the full 100/66 and the downward nudge whenever the band has
+room. Keep a clamp only as an overflow guard for genuinely short bands — the clamp was not
+wrong, it was just doing its work far more often than intended. §16.1 gave the counters
+38 px back on Lyra, so there is now room the branch's clamp was written before.
+
+
+## 18. The totals band carries THRU, HOLE and TOTAL (v4.2)
+
+Supersedes §16.2. The two-cell band was right to drop the collision, but it dropped the
+wrong things: the owner lost per-hole feedback when the `TOTAL 4 E` badge was removed from
+the scoring-zone row in §17.2, and the band never showed a gross score.
+
+Three cells:
+
+| Cell | Shows | Scope |
+| --- | --- | --- |
+| **THRU** | holes completed | round |
+| **HOLE** | to-par on the current hole, e.g. `+1`, `+2`, `E` | **this hole** |
+| **TOTAL** | strokes shot so far | round |
+
+`HOLE` is the one that moves while you are scoring: editing any counter on the current
+hole changes it immediately, and it is the feedback the removed badge used to give —
+now in the band where totals belong, instead of competing with the counter value in
+its own row.
+
+`TOTAL` is a stroke count, not a to-par. Sitting beside a signed `HOLE` value, an
+unsigned total reads unambiguously as the gross score.
+
+The round's cumulative to-par no longer appears on the scoring screen. It remains on
+the scorecard, the round summary and trends, which are the screens for reviewing a
+round rather than playing one.
+
+### 18.1 Par-free courses
+
+`HOLE` is a to-par and cannot exist without par. On a par-free course that cell shows
+the **hole's stroke count** instead, with its label unchanged. Same positional
+discipline as §16.2's second cell: never blank, never a fabricated `E`.
+
+### 18.2 On the three-cell width
+
+§16.2 removed a cell because the owner reported score and to-par colliding. That
+crowding was at least partly the `TOTAL 4 E` badge drawn on the counter row directly
+above, which §17.2 has since removed. Three cells are therefore expected to fit —
+but measure the rendered widths at the bold 12 pt face before committing, and report
+them. If they genuinely do not fit, stop and ask rather than silently dropping a cell.
+
+
+## 19. HOLE reads the seeded score; the hole number gets breathing room (v4.3)
+
+### 19.1 Bug: HOLE shows minus-par on an untouched hole
+
+On an unentered hole the counters **display** seeded values — `2` putts, `2` inside 100,
+`par - 2` in the scoring zone — which sum to par. But `drawTotals` reads
+`golfHoleScore(round, score, hole)`, which returns the **stored** score, still `0`. So the
+HOLE cell renders `0 - par`: `-3` on a par 3, `-4` on a par 4, `-5` on a par 5.
+
+The screen contradicts itself — the counters show a par score while HOLE claims you are par
+under it. The correct reading on an untouched hole is **`E`**.
+
+**Root cause: two places compute the hole's score independently.** `drawCounters` derives
+seeded values inline; `drawTotals` reads storage. §18 specified HOLE as "to-par on the
+current hole" without saying which of those two it meant, and that gap is mine.
+
+**Fix the class, not the instance.** Extract the seeded-or-stored decision into one shared
+helper — the same discipline that `golfui::totalsSecondCell` and `golfCountConfirmLabel`
+already follow — and have both the counters and the totals band read it. Any future band
+that needs the current hole's score reads the same helper. Two independent derivations of
+one value is the shape that produced this bug and the home-screen off-by-ones before it.
+
+Seeded score is `in100 + out100` = `2 + (par - 2)` = `par`, so to-par is `0`. That falls out
+of the helper rather than being special-cased.
+
+The seeding precondition stays as it is (`par >= 3`): on a par-free course there is nothing
+to seed, and §18.1 already governs that cell.
+
+### 19.2 The hole number needs clearance
+
+The hole number is bottom-aligned in its band at `rect.y + rect.height - digitHeight - 4`,
+leaving four pixels above the rule beneath it, and sized up to 58 px. It crowds the line.
+
+Reduce the digit size and lift it: the number should read as sitting *in* its band rather
+than resting on the rule. Presentation only — the band's own height does not change, and
+nothing below it moves.
+
+### 19.3 Label rename: "SCORE ZONE" becomes "TO SCORE ZONE"
+
+`STR_GOLF_SCORING_ZONE` becomes **"TO SCORE ZONE"**. Measured against the built-in
+`ubuntu_10_bold` face, the new label is 162 px against 129 px for the old one. On the
+scoring-zone counter row, focused, in portrait (the narrowest orientation), the space
+between the label's left edge and the big digit's left edge is 193 px in normal play
+(a single-digit `out100`) but only 160 px in the rare case `out100` reaches double
+digits — 2 px short of the new label.
+
+The fix recovers clearance from the row's own left padding rather than from the label
+or the digit: all three counter rows share one `padding = minValue(20, rect.width / 8)`
+at `GolfScoringActivity.cpp`, reduced to `minValue(16, rect.width / 8)`. That buys 4 px
+of clearance against the 2 px deficit, worst case, without making the label reflow as
+the counter crosses from one digit to two — a second place deriving a presentation
+decision from the counter value would repeat the shape of the §19.1 bug.
+
+
+## 20. Tees are applied where the count is set (v4.4)
+
+### 20.1 The bug: a solo round cannot be archived
+
+`validateGolfRound` fails a round with no enabled player (`tee != NotPlay`), so
+`RoundArchive::archive` returns `FailedBeforeCommit` and the finish shows
+*"Archive failed. The open round was preserved."*
+
+Tees are only ever applied by `golfApplyPlayerCount`, called from two places:
+
+* `stepPlayerCount()` — guarded by `if (next == playerCount) return;`, so it runs only
+  when the count actually **changes**;
+* `showPlayers()` — the roster phase, which §16.3 **skips at one player**.
+
+`playerCount` starts at `1`, and the confirm handler routes a count of 1 to
+`completeRound()`, which never applies tees. So accepting the default and pressing
+Confirm leaves every tee at `NotPlay`. The round scores normally — nothing during play
+reads a tee — and fails only at the finish.
+
+This lands on the **default path**: the solo round §16.3 optimised to two presses.
+Stepping to 2 and back to 1 masks it completely, because that fires `stepPlayerCount`,
+which is why it survived review.
+
+**The cause is a spec error in §16.3.** Telling the worker to skip the roster was right;
+leaving the tee application inside the screen being skipped was not. Same shape as §19.1:
+one value, two owners, and a path where neither runs.
+
+### 20.2 Prevention: the count owns the tees
+
+Apply the player count wherever `playerCount` is **established** — including its initial
+value — not where the roster happens to render. After that, no route through setup can
+reach `completeRound()` with unapplied tees, whether the roster is shown or skipped.
+
+Do not fix this by adding a second `golfApplyPlayerCount` call inside `completeRound()`.
+That leaves three call sites for one value and preserves the shape that caused the bug.
+
+### 20.3 Recovery: an unarchivable round repairs to player 1
+
+Rounds already on the owner's device carry zero enabled players and cannot be finished.
+Refusing them permanently is the wrong outcome for data the owner actually played.
+
+`validateGolfRound` **repairs** zero-enabled to player 1 enabled on the default tee, and
+reports it like the existing `currentPlayerReset` repair, rather than failing the round.
+The owner has authorised this explicitly: the stuck round is his, and it should archive
+under `Noah`.
+
+Repair, not silent acceptance: the round stays valid only because it was fixed, and the
+repair is logged through `golfLogRoundRepairs` like every other.

@@ -3,6 +3,7 @@
 #include <utility>
 
 #include "GolfPenalty.h"
+#include "GolfScoringDisplay.h"
 #include "GolfStats.h"
 
 namespace {
@@ -64,6 +65,65 @@ TEST_F(GolfStatsTest, ParFreeRoundKeepsScoresWithoutParStatistics) {
   EXPECT_EQ(golfWorstHoles(round, score(), worst, GolfRound::MAX_HOLES), 0);
 }
 
+TEST_F(GolfStatsTest, ScoringHoleCellUsesCurrentHoleToParAndTracksCounterChanges) {
+  round.currentHole = 0;
+  score().in100[0] = 2;
+  score().out100[0] = 3;
+  EXPECT_EQ(static_cast<int16_t>(golfHoleScore(round, score(), round.currentHole)) - round.par[round.currentHole], 1);
+
+  ASSERT_TRUE(incrementGolfCounter(score(), round.currentHole, GolfField::Out100).changed);
+  EXPECT_EQ(static_cast<int16_t>(golfHoleScore(round, score(), round.currentHole)) - round.par[round.currentHole], 2);
+}
+
+TEST_F(GolfStatsTest, ScoringHoleCellUsesStrokeCountWhenCurrentHoleHasNoPar) {
+  for (uint8_t hole = 0; hole < round.holeCount; ++hole) round.par[hole] = 0;
+  round.currentHole = 0;
+  score().in100[0] = 3;
+  score().out100[0] = 2;
+
+  EXPECT_EQ(round.par[round.currentHole], 0);
+  EXPECT_EQ(golfHoleScore(round, score(), round.currentHole), 5);
+}
+
+TEST_F(GolfStatsTest, ScoringDisplaySeedsUntouchedParHolesAndKeepsCountersAndHoleCellAligned) {
+  for (const uint8_t par : {3, 4, 5}) {
+    round.par[0] = par;
+    const GolfScoringHoleDisplay display = golfScoringHoleDisplay(round, score(), 0);
+
+    EXPECT_TRUE(display.seeded);
+    EXPECT_EQ(display.counters[0], 2);
+    EXPECT_EQ(display.counters[1], 2);
+    EXPECT_EQ(display.counters[2], par - 2);
+    EXPECT_EQ(display.score, par);
+    EXPECT_EQ(static_cast<int16_t>(display.score) - par, 0);
+  }
+}
+
+TEST_F(GolfStatsTest, ScoringDisplayUsesStoredCountersAfterEntry) {
+  ASSERT_TRUE(seedGolfHoleAtPar(score(), 0, round.par[0]));
+  ASSERT_TRUE(incrementGolfCounter(score(), 0, GolfField::Out100).changed);
+
+  const GolfScoringHoleDisplay display = golfScoringHoleDisplay(round, score(), 0);
+  EXPECT_FALSE(display.seeded);
+  EXPECT_EQ(display.counters[0], score().putts[0]);
+  EXPECT_EQ(display.counters[1], score().in100[0]);
+  EXPECT_EQ(display.counters[2], score().out100[0]);
+  EXPECT_EQ(display.score, golfHoleScore(round, score(), 0));
+  EXPECT_EQ(static_cast<int16_t>(display.score) - round.par[0], 1);
+}
+
+TEST_F(GolfStatsTest, ScoringDisplayLeavesUntouchedParFreeHoleUnseeded) {
+  round.par[0] = 0;
+  const GolfScoringHoleDisplay display = golfScoringHoleDisplay(round, score(), 0);
+
+  EXPECT_FALSE(display.seeded);
+  EXPECT_EQ(display.counters[0], 0);
+  EXPECT_EQ(display.counters[1], 0);
+  EXPECT_EQ(display.counters[2], 0);
+  EXPECT_EQ(display.score, 0);
+  EXPECT_EQ(display.score, golfHoleScore(round, score(), 0));
+}
+
 TEST_F(GolfStatsTest, BucketIdentityHoldsPerEnteredHole) {
   fillPartialRound();
   for (uint8_t hole = 0; hole < round.holeCount; ++hole) {
@@ -113,8 +173,7 @@ TEST_F(GolfStatsTest, EveryScoreFigureIncludesPenaltyStrokes) {
   score().in100[0] = 2;
   score().out100[0] = 3;
   const uint16_t scoreBefore = golfScore(round, score());
-  ASSERT_EQ(golfAppendPenalty(score(), 0, GolfField::Out100, GolfPenaltyKind::Ob),
-            GolfPenaltyMutationStatus::Changed);
+  ASSERT_EQ(golfAppendPenalty(score(), 0, GolfField::Out100, GolfPenaltyKind::Ob), GolfPenaltyMutationStatus::Changed);
 
   EXPECT_EQ(golfHoleScore(round, score(), 0), 8);
   EXPECT_EQ(golfScore(round, score()), scoreBefore + 3);

@@ -9,6 +9,7 @@ void golfLogRoundRepairs(const GolfRound& round, const GolfValidationResult& res
   if (result.currentPlayerReset) {
     LOG_ERR("GOLF", "Repaired current player to slot %u", static_cast<unsigned>(round.currentPlayer));
   }
+  if (result.firstPlayerEnabled) LOG_ERR("GOLF", "Repaired player 1 tee to Blue");
   for (uint8_t slot = 0; slot < GolfRound::MAX_PLAYERS; ++slot) {
     const GolfPlayerScore& score = round.players[slot].score;
     const GolfPlayerValidationResult& repaired = result.players[slot];
@@ -20,8 +21,7 @@ void golfLogRoundRepairs(const GolfRound& round, const GolfValidationResult& res
         LOG_ERR("GOLF", "Repaired player %u hole %u in100 to %u", slot, hole + 1, score.in100[hole]);
       }
       if (repaired.holePenaltyCountRepaired(hole)) {
-        LOG_ERR("GOLF", "Repaired player %u hole %u penalty count to %u", slot, hole + 1,
-                score.penaltyCount[hole]);
+        LOG_ERR("GOLF", "Repaired player %u hole %u penalty count to %u", slot, hole + 1, score.penaltyCount[hole]);
       }
       if (repaired.holePenaltyEventRepaired(hole)) {
         LOG_ERR("GOLF", "Removed invalid penalty event for player %u hole %u", slot, hole + 1);

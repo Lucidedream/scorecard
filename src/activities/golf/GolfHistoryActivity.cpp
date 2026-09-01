@@ -38,14 +38,12 @@ GolfHistoryActivity::GolfHistoryActivity(GfxRenderer& renderer, MappedInputManag
 }
 
 void GolfHistoryActivity::onEnter() {
-  golfFormatPlayerLabel(playerSlot, fallbackName, tr(STR_GOLF_PLAYER_LABEL_FORMAT), playerLabel,
-                        sizeof(playerLabel));
+  golfFormatPlayerLabel(playerSlot, fallbackName, tr(STR_GOLF_PLAYER_LABEL_FORMAT), playerLabel, sizeof(playerLabel));
   activeState = &residentState;
   lookupOwner = makeUniqueNoThrow<HistoryLookupScratch>();
   stagingState = lookupOwner ? &lookupOwner->staging : nullptr;
   if (!stagingState) {
-    LOG_ERR("GOLF", "OOM: history lookup scratch (%u bytes)",
-            static_cast<unsigned>(sizeof(HistoryLookupScratch)));
+    LOG_ERR("GOLF", "OOM: history lookup scratch (%u bytes)", static_cast<unsigned>(sizeof(HistoryLookupScratch)));
     showStagingError();
   } else {
     loadHistory();
@@ -70,8 +68,7 @@ bool GolfHistoryActivity::streamIndex(HistoryState& state) {
       success = false;
       break;
     }
-    state.history.feed(lookupOwner->chunk, static_cast<size_t>(bytesRead), &GolfHistoryActivity::logMalformed,
-                       this);
+    state.history.feed(lookupOwner->chunk, static_cast<size_t>(bytesRead), &GolfHistoryActivity::logMalformed, this);
   }
   state.history.finish(&GolfHistoryActivity::logMalformed, this);
   return success;
@@ -154,8 +151,8 @@ void GolfHistoryActivity::activateIndex(const int index) {
   const GolfHistoryEntry& selectedEntry = activeState->history.newest(newestIndex);
 
   if (loadArchivedRound(newestIndex)) {
-    auto menu = makeUniqueNoThrow<GolfHistoryRoundMenuActivity>(
-        renderer, mappedInput, lookupOwner->round, lookupOwner->filename, playerSlot);
+    auto menu = makeUniqueNoThrow<GolfHistoryRoundMenuActivity>(renderer, mappedInput, lookupOwner->round,
+                                                                lookupOwner->filename, playerSlot);
     if (!menu) {
       LOG_ERR("GOLF", "OOM: history round menu activity");
       return;
@@ -177,8 +174,7 @@ void GolfHistoryActivity::activateIndex(const int index) {
 
 void GolfHistoryActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding,
-                                            metrics.headerHeight);
+  const auto layout = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding);
   screen.setContentMargin(layout.contentMargins);
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
   if (activeState->loadError || activeState->history.count() == 0) {
@@ -206,8 +202,8 @@ void GolfHistoryActivity::buildScreen(UiScreen& screen) {
     if (golfHistoryShowsToPar(entry)) {
       char toPar[8];
       formatToPar(static_cast<int16_t>(entry.strokes) - entry.par, toPar, sizeof(toPar));
-      snprintf(visibleValues[windowIndex], sizeof(visibleValues[windowIndex]),
-               tr(STR_GOLF_SCORE_TO_PAR_COMPACT_FORMAT), static_cast<unsigned>(entry.strokes), toPar);
+      snprintf(visibleValues[windowIndex], sizeof(visibleValues[windowIndex]), tr(STR_GOLF_SCORE_TO_PAR_COMPACT_FORMAT),
+               static_cast<unsigned>(entry.strokes), toPar);
     } else {
       snprintf(visibleValues[windowIndex], sizeof(visibleValues[windowIndex]), "%u",
                static_cast<unsigned>(entry.strokes));
@@ -222,9 +218,8 @@ void GolfHistoryActivity::buildScreen(UiScreen& screen) {
 
 void GolfHistoryActivity::drawChrome() {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding, metrics.headerHeight);
-  GUI.drawHeader(renderer, Rect{layout.header.x, layout.header.y, layout.header.width, layout.header.height},
-                 headerTitle(), playerLabel);
+  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding);
+  golfui::drawHeader(renderer, layout.header, headerTitle(), playerLabel);
 }
 
 void GolfHistoryActivity::drawFooter() {

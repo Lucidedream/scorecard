@@ -30,9 +30,7 @@ const char* teeLabel(const TeeSelection tee) {
 GolfHistoryRoundMenuActivity::GolfHistoryRoundMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                            const GolfRound& archivedRound, const char* filename,
                                                            const uint8_t selectedPlayerSlot)
-    : UiListActivity("GolfHistoryMenu", renderer, mappedInput),
-      round(archivedRound),
-      playerSlot(selectedPlayerSlot) {
+    : UiListActivity("GolfHistoryMenu", renderer, mappedInput), round(archivedRound), playerSlot(selectedPlayerSlot) {
   if (filename != nullptr) snprintf(archiveFilename, sizeof(archiveFilename), "%s", filename);
 }
 
@@ -52,11 +50,10 @@ void GolfHistoryRoundMenuActivity::onEnter() {
   }
   const GolfPlayer& player = selectedPlayer();
   golfFormatRoundStatus(round, player.score, tr(STR_GOLF_EVEN), tr(STR_GOLF_TO_PAR_POSITIVE_FORMAT),
-                        tr(STR_GOLF_TO_PAR_NEGATIVE_FORMAT), tr(STR_GOLF_ROUND_STATUS_FORMAT), status,
-                        sizeof(status));
+                        tr(STR_GOLF_TO_PAR_NEGATIVE_FORMAT), tr(STR_GOLF_ROUND_STATUS_FORMAT), status, sizeof(status));
   golfFormatPlayerLabel(playerSlot, player.name, tr(STR_GOLF_PLAYER_LABEL_FORMAT), infoLine1, sizeof(infoLine1));
-  snprintf(infoLine2, sizeof(infoLine2), tr(STR_GOLF_ROUND_INFO_HOLES_FORMAT),
-           static_cast<unsigned>(round.holeCount), teeLabel(player.tee));
+  snprintf(infoLine2, sizeof(infoLine2), tr(STR_GOLF_ROUND_INFO_HOLES_FORMAT), static_cast<unsigned>(round.holeCount),
+           teeLabel(player.tee));
   UiListActivity::onEnter();
 }
 
@@ -122,8 +119,7 @@ void GolfHistoryRoundMenuActivity::completeDelete(const bool confirmed) {
 
 void GolfHistoryRoundMenuActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto chrome = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding,
-                                            metrics.headerHeight);
+  const auto chrome = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding);
   screen.setContentMargin(chrome.contentMargins);
 
   const int16_t smallLine = screen.target().lineHeight(screen.theme().smallText.font);
@@ -158,9 +154,8 @@ void GolfHistoryRoundMenuActivity::buildScreen(UiScreen& screen) {
 
 void GolfHistoryRoundMenuActivity::drawChrome() {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding, metrics.headerHeight);
-  GUI.drawHeader(renderer, Rect{layout.header.x, layout.header.y, layout.header.width, layout.header.height},
-                 round.courseName, status);
+  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding);
+  golfui::drawHeader(renderer, layout.header, round.courseName, status);
 }
 
 void GolfHistoryRoundMenuActivity::drawFooter() {

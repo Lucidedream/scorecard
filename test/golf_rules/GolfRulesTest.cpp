@@ -104,9 +104,9 @@ TEST_F(GolfRulesTest, ParFreeHoleDoesNotPreseed) {
 
 TEST_F(GolfRulesTest, InitializesStableDefaultNamesWithoutEnablingPlayers) {
   EXPECT_STREQ(round.players[0].name, "Noah");
-  EXPECT_STREQ(round.players[1].name, "Player B");
-  EXPECT_STREQ(round.players[2].name, "Player C");
-  EXPECT_STREQ(round.players[3].name, "Player D");
+  EXPECT_STREQ(round.players[1].name, "Player 2");
+  EXPECT_STREQ(round.players[2].name, "Player 3");
+  EXPECT_STREQ(round.players[3].name, "Player 4");
   for (const GolfPlayer& player : round.players) EXPECT_FALSE(golfPlayerIsEnabled(player));
 }
 

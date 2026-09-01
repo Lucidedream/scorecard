@@ -2,6 +2,7 @@
 
 #include <array>
 
+#include "GolfPlayerSetupPolicy.h"
 #include "GolfUiLayout.h"
 
 namespace {
@@ -73,7 +74,7 @@ TEST(GolfUiLayout, CardRowsFitOneThroughFourPlayersInBothOrientationsAndAllHintE
     const fui::Rect screen{0, 0, test.width, test.height};
     const fui::Rect frameSafe = golfui::inset(screen, BEZEL);
     const golfui::ChromeLayout chrome = golfui::makeChromeLayout(
-        frameSafe, golfui::reserveHintEdge(screen, test.edge, HINT_RESERVE), 15, 84);
+        frameSafe, golfui::reserveHintEdge(screen, test.edge, HINT_RESERVE), 15, golfui::GOLF_HEADER_HEIGHT);
     for (uint8_t players = 1; players <= 4; ++players) {
       for (const bool hasTabs : {false, true}) {
         for (const bool hasPar : {false, true}) {
@@ -100,13 +101,13 @@ TEST(GolfUiLayout, CardRowsFitOneThroughFourPlayersInBothOrientationsAndAllHintE
 TEST(GolfUiLayout, ScoringBandsStayInsideSafeAreaAtLandscapeHeight) {
   for (const Case test : cases()) {
     const fui::Rect screen{0, 0, test.width, test.height};
-    const fui::Rect safe = golfui::intersect(golfui::inset(screen, BEZEL),
-                                              golfui::reserveHintEdge(screen, test.edge, HINT_RESERVE));
+    const fui::Rect safe =
+        golfui::intersect(golfui::inset(screen, BEZEL), golfui::reserveHintEdge(screen, test.edge, HINT_RESERVE));
     for (uint8_t focused = 0; focused < 3; ++focused) {
       for (const bool penalty : {false, true}) {
-        const golfui::ScoringLayout layout = golfui::makeScoringLayout(safe, 15, 84, focused, penalty, FONT_MINIMUM);
+        const golfui::ScoringLayout layout = golfui::makeScoringLayout(safe, 15, focused, penalty, FONT_MINIMUM);
         ASSERT_TRUE(layout.valid);
-        const fui::Rect rects[] = {layout.header,      layout.hole,   layout.counters[0], layout.counters[1],
+        const fui::Rect rects[] = {layout.header,      layout.hole,    layout.counters[0], layout.counters[1],
                                    layout.counters[2], layout.penalty, layout.totals,      layout.nineStrip};
         expectOrderedInside(safe, rects, std::size(rects));
         EXPECT_GE(layout.header.height, FONT_MINIMUM);
@@ -120,12 +121,150 @@ TEST(GolfUiLayout, ScoringBandsStayInsideSafeAreaAtLandscapeHeight) {
   }
 }
 
+TEST(GolfUiLayout, GolfHeaderIsFixedAtFortySixPixels) {
+  const fui::Rect safe{0, 0, 480, 800};
+  const golfui::ChromeLayout chrome = golfui::makeChromeLayout(safe, safe, 15, golfui::GOLF_HEADER_HEIGHT);
+  const golfui::ScoringLayout scoring = golfui::makeScoringLayout(safe, 15, 1, true, FONT_MINIMUM);
+
+  EXPECT_EQ(chrome.header.height, 46);
+  EXPECT_EQ(scoring.header.height, 46);
+}
+
+TEST(GolfUiLayout, LyraHeaderRecoveryIsRedistributedToWeightedScoringBands) {
+  const golfui::ScoringLayout layout = golfui::makeScoringLayout(fui::Rect{0, 0, 480, 800}, 15, 1, true, FONT_MINIMUM);
+
+  EXPECT_EQ(layout.header.height, 46);
+  EXPECT_EQ(layout.hole.height, 87);
+  EXPECT_EQ(layout.counters[0].height, 123);
+  EXPECT_EQ(layout.counters[1].height, 175);
+  EXPECT_EQ(layout.counters[2].height, 123);
+  EXPECT_EQ(layout.penalty.height, 52);
+  EXPECT_EQ(layout.totals.height, 91);
+  EXPECT_EQ(layout.nineStrip.height, 88);
+  EXPECT_EQ(golfui::scoringDigitHeight(layout.counters[1].height, true), 100);
+  EXPECT_EQ(golfui::scoringDigitHeight(layout.counters[0].height, false), 66);
+  const golfui::ScoringLayout withoutPenalty =
+      golfui::makeScoringLayout(fui::Rect{0, 0, 480, 800}, 15, 1, false, FONT_MINIMUM);
+  EXPECT_EQ(golfui::scoringDigitHeight(withoutPenalty.counters[1].height, true), 100);
+  EXPECT_EQ(golfui::scoringDigitHeight(withoutPenalty.counters[0].height, false), 66);
+  EXPECT_EQ(golfui::scoringDigitHeight(124, true), 100);
+  EXPECT_EQ(golfui::scoringDigitHeight(123, true), 99);
+  EXPECT_EQ(golfui::scoringDigitHeight(90, false), 66);
+  EXPECT_EQ(golfui::scoringDigitHeight(89, false), 65);
+}
+
+TEST(GolfUiLayout, ScoringHoleNumberIsSmallerAndClearsItsRule) {
+  const fui::Rect holeBand{0, 46, 480, 87};
+  const int digitHeight = golfui::scoringHoleDigitHeight(holeBand.height, 20);
+  const int digitTop = golfui::scoringHoleDigitTop(holeBand, digitHeight);
+
+  EXPECT_EQ(digitHeight, 48);
+  EXPECT_EQ(holeBand.y + holeBand.height - digitTop - digitHeight, 12);
+}
+
+TEST(GolfUiLayout, TotalsBandUsesThreeContiguousCells) {
+  const fui::Rect totals{7, 11, 458, 64};
+  const fui::Rect first = golfui::totalsCell(totals, 0);
+  const fui::Rect second = golfui::totalsCell(totals, 1);
+  const fui::Rect third = golfui::totalsCell(totals, 2);
+
+  EXPECT_EQ(first.x, 7);
+  EXPECT_EQ(first.width, 152);
+  EXPECT_EQ(second.x, 159);
+  EXPECT_EQ(second.width, 153);
+  EXPECT_EQ(third.x, 312);
+  EXPECT_EQ(third.width, 153);
+  EXPECT_EQ(first.y, totals.y);
+  EXPECT_EQ(second.y, totals.y);
+  EXPECT_EQ(third.y, totals.y);
+  EXPECT_EQ(first.height, totals.height);
+  EXPECT_EQ(second.height, totals.height);
+  EXPECT_EQ(third.height, totals.height);
+  EXPECT_EQ(third.x + third.width, totals.x + totals.width);
+}
+
+TEST(GolfPlayerSetupPolicy, CountOwnsRosterAndSoloSkipsReview) {
+  GolfRound round{};
+  initializeGolfPlayerDefaults(round);
+
+  EXPECT_EQ(golfPlayerSetupNext(1), GolfPlayerSetupNext::StartRound);
+  for (uint8_t count = 2; count <= GOLF_MAX_PLAYERS; ++count) {
+    EXPECT_EQ(golfPlayerSetupNext(count), GolfPlayerSetupNext::ReviewRoster);
+  }
+
+  golfApplyPlayerCount(round, 3, TeeSelection::Blue);
+  for (uint8_t slot = 0; slot < GOLF_MAX_PLAYERS; ++slot) {
+    EXPECT_EQ(round.players[slot].tee, slot < 3 ? TeeSelection::Blue : TeeSelection::NotPlay);
+  }
+  EXPECT_STREQ(round.players[0].name, "Noah");
+  EXPECT_STREQ(round.players[1].name, "Player 2");
+  EXPECT_STREQ(round.players[2].name, "Player 3");
+  EXPECT_STREQ(round.players[3].name, "Player 4");
+}
+
+TEST(GolfPlayerSetupPolicy, DefaultSoloSetupEnablesPlayerOne) {
+  GolfRound round{};
+  initializeGolfPlayerDefaults(round);
+  uint8_t playerCount = 1;
+  golfSetPlayerCount(round, playerCount, 1, TeeSelection::Blue);
+
+  ASSERT_EQ(golfPlayerSetupNext(playerCount), GolfPlayerSetupNext::StartRound);
+  EXPECT_EQ(round.players[0].tee, TeeSelection::Blue);
+  for (uint8_t slot = 1; slot < GOLF_MAX_PLAYERS; ++slot) {
+    EXPECT_EQ(round.players[slot].tee, TeeSelection::NotPlay);
+  }
+}
+
+TEST(GolfPlayerSetupPolicy, SteppingAwayAndBackLeavesExactlyOneEnabledPlayer) {
+  GolfRound round{};
+  initializeGolfPlayerDefaults(round);
+  uint8_t playerCount = 1;
+  golfSetPlayerCount(round, playerCount, 1, TeeSelection::Blue);
+  golfSetPlayerCount(round, playerCount, golfStepPlayerCount(playerCount, 1), TeeSelection::Blue);
+  golfSetPlayerCount(round, playerCount, golfStepPlayerCount(playerCount, -1), TeeSelection::Blue);
+
+  EXPECT_EQ(playerCount, 1);
+  for (uint8_t slot = 0; slot < GOLF_MAX_PLAYERS; ++slot) {
+    EXPECT_EQ(round.players[slot].tee, slot == 0 ? TeeSelection::Blue : TeeSelection::NotPlay);
+  }
+}
+
+TEST(GolfPlayerSetupPolicy, CountsEnableExactlyThatManyPlayers) {
+  for (uint8_t count = 2; count <= GOLF_MAX_PLAYERS; ++count) {
+    GolfRound round{};
+    initializeGolfPlayerDefaults(round);
+    uint8_t playerCount = 1;
+    golfSetPlayerCount(round, playerCount, count, TeeSelection::Blue);
+
+    EXPECT_EQ(playerCount, count);
+    for (uint8_t slot = 0; slot < GOLF_MAX_PLAYERS; ++slot) {
+      EXPECT_EQ(round.players[slot].tee, slot < count ? TeeSelection::Blue : TeeSelection::NotPlay);
+    }
+  }
+}
+
+TEST(GolfPlayerSetupPolicy, CountStepsStayWithinOneAndFour) {
+  EXPECT_EQ(golfClampPlayerCount(0), 1);
+  EXPECT_EQ(golfClampPlayerCount(GOLF_MAX_PLAYERS + 1), GOLF_MAX_PLAYERS);
+  EXPECT_EQ(golfStepPlayerCount(1, -1), 1);
+  EXPECT_EQ(golfStepPlayerCount(1, 1), 2);
+  EXPECT_EQ(golfStepPlayerCount(GOLF_MAX_PLAYERS, 1), GOLF_MAX_PLAYERS);
+  EXPECT_EQ(golfStepPlayerCount(GOLF_MAX_PLAYERS, -1), GOLF_MAX_PLAYERS - 1);
+}
+
+TEST(GolfPlayerSetupPolicy, ConfirmLabelIsStartAtOnePlayerAndNextAbove) {
+  EXPECT_EQ(golfCountConfirmLabel(1), GolfCountConfirmLabel::Start);
+  for (uint8_t count = 2; count <= GOLF_MAX_PLAYERS; ++count) {
+    EXPECT_EQ(golfCountConfirmLabel(count), GolfCountConfirmLabel::Next);
+  }
+}
+
 TEST(GolfUiLayout, ReviewStatisticsAndMenuRowsUseAvailableSafeHeight) {
   for (const Case test : cases()) {
     const fui::Rect screen{0, 0, test.width, test.height};
     const fui::Rect frameSafe = golfui::inset(screen, BEZEL);
     const golfui::ChromeLayout chrome = golfui::makeChromeLayout(
-        frameSafe, golfui::reserveHintEdge(screen, test.edge, HINT_RESERVE), 15, 84);
+        frameSafe, golfui::reserveHintEdge(screen, test.edge, HINT_RESERVE), 15, golfui::GOLF_HEADER_HEIGHT);
 
     const golfui::HoleReviewLayout review = golfui::makeHoleReviewLayout(chrome.body, true, FONT_MINIMUM);
     ASSERT_TRUE(review.valid);

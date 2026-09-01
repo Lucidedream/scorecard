@@ -45,7 +45,7 @@ struct GolfRound {
 };
 
 inline constexpr char GOLF_DEFAULT_PLAYER_NAMES[GolfRound::MAX_PLAYERS][GolfPlayer::NAME_CAPACITY] = {
-    "Noah", "Player B", "Player C", "Player D"};
+    "Noah", "Player 2", "Player 3", "Player 4"};
 
 inline void initializeGolfPlayerDefaults(GolfRound& round) {
   for (uint8_t player = 0; player < GolfRound::MAX_PLAYERS; ++player) {

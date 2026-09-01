@@ -57,10 +57,40 @@ TEST_F(GolfValidateTest, RejectsUnsupportedHoleCountWithoutScoreMutation) {
   EXPECT_EQ(memcmp(&score(), &before, sizeof(before)), 0);
 }
 
-TEST_F(GolfValidateTest, RejectsDraftWithNoEnabledPlayers) {
+TEST_F(GolfValidateTest, RepairsRoundWithNoEnabledPlayers) {
   round.players[0].tee = TeeSelection::NotPlay;
   const GolfValidationResult result = validateGolfRound(round);
+  EXPECT_TRUE(result.valid);
+  EXPECT_TRUE(result.repaired());
+  EXPECT_TRUE(result.firstPlayerEnabled);
+  EXPECT_EQ(round.players[0].tee, TeeSelection::Blue);
+  for (uint8_t slot = 1; slot < GolfRound::MAX_PLAYERS; ++slot) {
+    EXPECT_EQ(round.players[slot].tee, TeeSelection::NotPlay);
+  }
+}
+
+TEST_F(GolfValidateTest, DoesNotRepairOtherwiseInvalidRound) {
+  round.holeCount = 12;
+  round.players[0].tee = TeeSelection::NotPlay;
+
+  const GolfValidationResult result = validateGolfRound(round);
+
   EXPECT_FALSE(result.valid);
+  EXPECT_FALSE(result.firstPlayerEnabled);
+  EXPECT_EQ(round.players[0].tee, TeeSelection::NotPlay);
+}
+
+TEST_F(GolfValidateTest, DoesNotAlterAlreadyEnabledPlayers) {
+  round.players[0].tee = TeeSelection::White;
+  round.players[2].tee = TeeSelection::Blue;
+  GolfPlayer playersBefore[GolfRound::MAX_PLAYERS]{};
+  memcpy(playersBefore, round.players, sizeof(playersBefore));
+
+  const GolfValidationResult result = validateGolfRound(round);
+
+  EXPECT_TRUE(result.valid);
+  EXPECT_FALSE(result.firstPlayerEnabled);
+  EXPECT_EQ(memcmp(round.players, playersBefore, sizeof(playersBefore)), 0);
 }
 
 TEST_F(GolfValidateTest, RejectsUnknownTeeValue) {

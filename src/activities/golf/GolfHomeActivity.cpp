@@ -32,9 +32,8 @@ void GolfHomeActivity::onEnter() {
     if (archiveMarkerSeen) cleanupSucceeded = GOLF_ROUND_STORE.clear();
   }
 
-  const GolfHomeEntryDecision decision =
-      golfDecideHomeEntry(archiveMarkerSeen, cleanupSucceeded, stateExists, loaded,
-                          loaded ? GOLF_ROUND_STORE.getRound().holeCount : 0);
+  const GolfHomeEntryDecision decision = golfDecideHomeEntry(archiveMarkerSeen, cleanupSucceeded, stateExists, loaded,
+                                                             loaded ? GOLF_ROUND_STORE.getRound().holeCount : 0);
   hasOpenRound = decision.showResume;
   showNewRound = decision.showNew;
   stateError = decision.stateError;
@@ -72,8 +71,7 @@ void GolfHomeActivity::activateIndex(const int index) {
     --logical;
   }
   if (logical < 0 || logical > 1) return;
-  const auto mode = logical == 0 ? GolfPlayerSelectActivity::Mode::History
-                                 : GolfPlayerSelectActivity::Mode::Trends;
+  const auto mode = logical == 0 ? GolfPlayerSelectActivity::Mode::History : GolfPlayerSelectActivity::Mode::Trends;
   auto selector = makeUniqueNoThrow<GolfPlayerSelectActivity>(renderer, mappedInput, mode);
   if (!selector) {
     LOG_ERR("GOLF", "OOM: player selector activity");
@@ -84,8 +82,7 @@ void GolfHomeActivity::activateIndex(const int index) {
 
 void GolfHomeActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding,
-                                            metrics.headerHeight);
+  const auto layout = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding);
   screen.setContentMargin(layout.contentMargins);
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
   listProps = {};
@@ -99,9 +96,8 @@ void GolfHomeActivity::buildScreen(UiScreen& screen) {
 
 void GolfHomeActivity::drawChrome() {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding, metrics.headerHeight);
-  GUI.drawHeader(renderer,
-                 Rect{layout.header.x, layout.header.y, layout.header.width, layout.header.height}, headerTitle());
+  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding);
+  golfui::drawHeader(renderer, layout.header, headerTitle());
 }
 
 #endif

@@ -69,8 +69,7 @@ void GolfSetupActivity::activateIndex(const int index) {
 
 void GolfSetupActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding,
-                                            metrics.headerHeight);
+  const auto layout = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding);
   screen.setContentMargin(layout.contentMargins);
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
   listProps = {};
@@ -84,9 +83,8 @@ void GolfSetupActivity::buildScreen(UiScreen& screen) {
 
 void GolfSetupActivity::drawChrome() {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding, metrics.headerHeight);
-  GUI.drawHeader(renderer,
-                 Rect{layout.header.x, layout.header.y, layout.header.width, layout.header.height}, headerTitle());
+  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding);
+  golfui::drawHeader(renderer, layout.header, headerTitle());
 }
 
 #endif
