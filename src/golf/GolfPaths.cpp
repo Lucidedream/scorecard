@@ -111,7 +111,12 @@ bool golfDateFromTimestamp(const int64_t timestamp, const int16_t utcOffsetMinut
   const int64_t adjusted = timestamp + static_cast<int64_t>(utcOffsetMinutes) * 60;
   const time_t value = static_cast<time_t>(adjusted);
   tm calendar{};
-  if (static_cast<int64_t>(value) != adjusted || gmtime_r(&value, &calendar) == nullptr) return false;
+  if (static_cast<int64_t>(value) != adjusted) return false;
+#if defined(_WIN32)
+  if (gmtime_s(&calendar, &value) != 0) return false;
+#else
+  if (gmtime_r(&value, &calendar) == nullptr) return false;
+#endif
   const uint16_t year = static_cast<uint16_t>(calendar.tm_year + 1900);
   if (year < 2020 || year > 2127) return false;
   dateYmd = static_cast<uint16_t>(((year - 2000) << 9) | ((calendar.tm_mon + 1) << 5) | calendar.tm_mday);

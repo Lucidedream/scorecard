@@ -3,12 +3,15 @@
 #if defined(CROSSPOINT_GOLF)
 
 #include <HalStorage.h>
+#include <I18n.h>
 #include <Logging.h>
+#include <Memory.h>
 
 #include <cstdio>
 
-#include "GolfStrings.h"
+#include "GolfUiLayout.h"
 #include "components/UITheme.h"
+#include "golf/RoundArchive.h"
 
 namespace fui = freeink::ui;
 
@@ -17,39 +20,47 @@ namespace {
 constexpr char INDEX_PATH[] = "/golf/rounds/index.csv";
 
 void formatTenths(const uint32_t value, char* output, const size_t size) {
-  snprintf(output, size, GolfStrings::DECIMAL_FORMAT, static_cast<unsigned long>(value / 10),
+  snprintf(output, size, tr(STR_GOLF_DECIMAL_FORMAT), static_cast<unsigned long>(value / 10),
            static_cast<unsigned long>(value % 10));
 }
 
 void formatSignedTenths(const int32_t value, char* output, const size_t size) {
   const uint32_t magnitude = static_cast<uint32_t>(value < 0 ? -value : value);
-  const char* format = value > 0   ? GolfStrings::POSITIVE_DECIMAL_FORMAT
-                       : value < 0 ? GolfStrings::NEGATIVE_DECIMAL_FORMAT
-                                   : GolfStrings::DECIMAL_FORMAT;
+  const char* format = value > 0   ? tr(STR_GOLF_POSITIVE_DECIMAL_FORMAT)
+                       : value < 0 ? tr(STR_GOLF_NEGATIVE_DECIMAL_FORMAT)
+                                   : tr(STR_GOLF_DECIMAL_FORMAT);
   snprintf(output, size, format, static_cast<unsigned long>(magnitude / 10),
            static_cast<unsigned long>(magnitude % 10));
 }
 
 void formatPercent(const uint32_t value, char* output, const size_t size) {
-  snprintf(output, size, GolfStrings::PERCENT_FORMAT, static_cast<unsigned long>(value / 10),
+  snprintf(output, size, tr(STR_GOLF_PERCENT_FORMAT), static_cast<unsigned long>(value / 10),
            static_cast<unsigned long>(value % 10));
 }
 
 }  // namespace
 
+GolfTrendsActivity::GolfTrendsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                       const uint8_t selectedPlayerSlot, const char* selectedFallbackName)
+    : Activity("GolfTrends", renderer, mappedInput), UiAppHost(renderer), playerSlot(selectedPlayerSlot) {
+  const char* source = selectedFallbackName;
+  if (source == nullptr && playerSlot < GolfRound::MAX_PLAYERS) source = GOLF_DEFAULT_PLAYER_NAMES[playerSlot];
+  if (source != nullptr) snprintf(fallbackName, sizeof(fallbackName), "%s", source);
+}
+
 void GolfTrendsActivity::onEnter() {
   Activity::onEnter();
-  loadHistory();
-  trends = golfCalculateTrends(history);
-  if (trends.enoughRounds()) {
-    snprintf(subtitle, sizeof(subtitle), GolfStrings::AVERAGE_OVER_ROUNDS, trends.rounds);
-    if (trends.showsPenalties) {
-      snprintf(message, sizeof(message), GolfStrings::MIX_OVER_ROUNDS, trends.penaltyRounds);
-    } else {
-      snprintf(message, sizeof(message), GolfStrings::MIX_NEED_ROUNDS, trends.penaltyRounds);
-    }
+  golfFormatPlayerLabel(playerSlot, fallbackName, tr(STR_GOLF_PLAYER_LABEL_FORMAT), playerLabel,
+                        sizeof(playerLabel));
+  activeState = &residentState;
+  stagingOwner = makeUniqueNoThrow<TrendsStagingScratch>();
+  stagingState = stagingOwner ? &stagingOwner->staging : nullptr;
+  if (!stagingState) {
+    LOG_ERR("GOLF", "OOM: trends staging scratch (%u bytes)",
+            static_cast<unsigned>(sizeof(TrendsStagingScratch)));
+    showStagingError();
   } else {
-    snprintf(message, sizeof(message), GolfStrings::TRENDS_NEED_ROUNDS, trends.rounds);
+    loadHistory();
   }
   resetUi();
   app.setScreen(&GolfTrendsActivity::screenTrampoline, this);
@@ -60,26 +71,82 @@ void GolfTrendsActivity::logMalformed(const uint32_t lineNumber, void*) {
   LOG_ERR("GOLF", "Malformed index row at line %lu", static_cast<unsigned long>(lineNumber));
 }
 
-void GolfTrendsActivity::loadHistory() {
-  history.reset();
-  loadError = false;
-  if (!Storage.exists(INDEX_PATH)) return;
+bool GolfTrendsActivity::streamIndex(TrendsState& state) {
+  if (!Storage.exists(INDEX_PATH)) return true;
+  if (!stagingOwner) return false;
 
   HalFile file;
-  if (!Storage.openFileForRead("GOLF", INDEX_PATH, file)) {
-    loadError = true;
-    return;
-  }
-  char chunk[128];
+  if (!Storage.openFileForRead("GOLF", INDEX_PATH, file)) return false;
+  bool success = true;
   while (file.available() > 0) {
-    const int bytesRead = file.read(chunk, sizeof(chunk));
+    const int bytesRead = file.read(stagingOwner->chunk, sizeof(stagingOwner->chunk));
     if (bytesRead <= 0) {
-      loadError = true;
+      success = false;
       break;
     }
-    history.feed(chunk, static_cast<size_t>(bytesRead), &GolfTrendsActivity::logMalformed, this);
+    state.history.feed(stagingOwner->chunk, static_cast<size_t>(bytesRead),
+                       &GolfTrendsActivity::logMalformed, this);
   }
-  history.finish(&GolfTrendsActivity::logMalformed, this);
+  state.history.finish(&GolfTrendsActivity::logMalformed, this);
+  return success;
+}
+
+void GolfTrendsActivity::refreshTrends(TrendsState& state) {
+  state.trends = golfCalculateTrends(state.history);
+  state.subtitle[0] = '\0';
+  state.message[0] = '\0';
+  if (state.history.count() == 0) {
+    snprintf(state.message, sizeof(state.message), "%s", tr(STR_GOLF_NO_ROUNDS));
+  } else if (state.trends.enoughRounds()) {
+    snprintf(state.subtitle, sizeof(state.subtitle), tr(STR_GOLF_AVERAGE_OVER_ROUNDS_FORMAT),
+             static_cast<unsigned>(state.trends.rounds));
+    if (state.trends.showsPenalties) {
+      snprintf(state.message, sizeof(state.message), tr(STR_GOLF_SHOT_MIX_OVER_ROUNDS_FORMAT),
+               static_cast<unsigned>(state.trends.penaltyRounds));
+    } else {
+      snprintf(state.message, sizeof(state.message), tr(STR_GOLF_SHOT_MIX_NEED_ROUNDS_FORMAT),
+               static_cast<unsigned>(state.trends.penaltyRounds));
+    }
+  } else {
+    snprintf(state.message, sizeof(state.message), tr(STR_GOLF_TRENDS_NEED_ROUNDS_FORMAT),
+             static_cast<unsigned>(state.trends.rounds));
+  }
+}
+
+void GolfTrendsActivity::publishState() {
+  RenderLock lock(*this);
+  TrendsState* previous = activeState;
+  activeState = stagingState;
+  stagingState = previous;
+  closeRouting();
+}
+
+void GolfTrendsActivity::showStagingError() {
+  RenderLock lock(*this);
+  activeState->history.reset(playerSlot);
+  activeState->trends = {};
+  activeState->subtitle[0] = '\0';
+  activeState->message[0] = '\0';
+  activeState->loadError = true;
+  closeRouting();
+}
+
+void GolfTrendsActivity::loadHistory() {
+  if (!stagingState) {
+    showStagingError();
+    return;
+  }
+
+  TrendsState& candidate = *stagingState;
+  candidate.loadError = !candidate.history.reset(playerSlot);
+  if (candidate.loadError) LOG_ERR("GOLF", "Trends received invalid player slot %u", playerSlot);
+  if (!candidate.loadError && !RoundArchive::recoverIndex(stagingOwner->recovery)) {
+    LOG_ERR("GOLF", "Trends refused unrecovered index.csv");
+    candidate.loadError = true;
+  }
+  if (!candidate.loadError && !streamIndex(candidate)) candidate.loadError = true;
+  refreshTrends(candidate);
+  publishState();
 }
 
 void GolfTrendsActivity::screenTrampoline(UiScreen& screen, void* user) {
@@ -90,21 +157,35 @@ void GolfTrendsActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
       mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     finish();
+    return;
   }
+  const auto route = routeTouch(mappedInput);
+  if (route.routed && app.invalidated()) requestUpdate();
 }
 
 void GolfTrendsActivity::buildScreen(UiScreen& screen) {
+  const TrendsState& state = *activeState;
+  const GolfTrendStats& trends = state.trends;
   const auto& metrics = UITheme::getInstance().getMetrics();
-  screen.setContentMargin(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
-                                      static_cast<int16_t>(metrics.buttonHintsHeight), 0});
-  if (loadError || !trends.enoughRounds()) {
-    screen.centeredText(loadError ? GolfStrings::TRENDS_ERROR : message, screen.theme().bodyText);
+  const auto layout = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding,
+                                            metrics.headerHeight);
+  screen.setContentMargin(layout.contentMargins);
+  if (state.loadError || !trends.enoughRounds()) {
+    screen.centeredText(state.loadError ? tr(STR_GOLF_TRENDS_ERROR) : state.message,
+                        screen.theme().bodyText);
     return;
   }
 
-  const char* labels[MAX_ROWS] = {GolfStrings::SCORING_AVERAGE, GolfStrings::AVERAGE_TO_PAR, GolfStrings::BEST_WORST,
-                                  GolfStrings::PUTTS_PER_ROUND, GolfStrings::LONG_GAME,      GolfStrings::SHORT_GAME,
-                                  GolfStrings::PUTTING,         GolfStrings::PENALTIES};
+  fui::TextStyle subtitleStyle = screen.theme().smallText;
+  subtitleStyle.align = fui::TextAlign::Center;
+  const int16_t subtitleHeight = screen.target().lineHeight(subtitleStyle.font);
+  const int16_t gap = static_cast<int16_t>(metrics.verticalSpacing);
+  screen.target().text(screen.takeTop(subtitleHeight, gap), state.subtitle, subtitleStyle);
+
+  const char* labels[MAX_ROWS] = {tr(STR_GOLF_SCORING_AVERAGE), tr(STR_GOLF_AVERAGE_TO_PAR),
+                                  tr(STR_GOLF_BEST_WORST),      tr(STR_GOLF_PUTTS_PER_ROUND),
+                                  tr(STR_GOLF_LONG_GAME),       tr(STR_GOLF_SHORT_GAME),
+                                  tr(STR_GOLF_PUTTING),         tr(STR_GOLF_PENALTIES)};
   const uint32_t averages[MAX_ROWS] = {trends.scoringAverageTenths,
                                        0,
                                        0,
@@ -113,8 +194,8 @@ void GolfTrendsActivity::buildScreen(UiScreen& screen) {
                                        trends.shortAverageTenths,
                                        trends.puttingAverageTenths,
                                        trends.penaltyStrokesAverageTenths};
-  const uint32_t percentages[4] = {trends.longPercentTenths, trends.shortPercentTenths, trends.puttingPercentTenths,
-                                   trends.penaltyPercentTenths};
+  const uint32_t percentages[4] = {trends.longPercentTenths, trends.shortPercentTenths,
+                                   trends.puttingPercentTenths, trends.penaltyPercentTenths};
   uint8_t rowCount = MAX_ROWS;
   if (!trends.showsToPar) --rowCount;
   if (!trends.showsPenalties) rowCount = static_cast<uint8_t>(rowCount - 4);
@@ -125,7 +206,8 @@ void GolfTrendsActivity::buildScreen(UiScreen& screen) {
     if (dataRow == 1) {
       formatSignedTenths(trends.toParAverageTenths, cells[row][1], sizeof(cells[row][1]));
     } else if (dataRow == 2) {
-      snprintf(cells[row][1], sizeof(cells[row][1]), GolfStrings::BEST_WORST_FORMAT, trends.best, trends.worst);
+      snprintf(cells[row][1], sizeof(cells[row][1]), tr(STR_GOLF_BEST_WORST_FORMAT),
+               static_cast<unsigned>(trends.best), static_cast<unsigned>(trends.worst));
     } else {
       formatTenths(averages[dataRow], cells[row][1], sizeof(cells[row][1]));
     }
@@ -137,33 +219,37 @@ void GolfTrendsActivity::buildScreen(UiScreen& screen) {
   fui::TextStyle noteStyle = screen.theme().smallText;
   noteStyle.align = fui::TextAlign::Center;
   const int16_t noteHeight = screen.target().lineHeight(noteStyle.font);
-  screen.target().text(screen.takeBottom(noteHeight, static_cast<int16_t>(metrics.verticalSpacing)), message,
-                       noteStyle);
+  const int16_t bodyLine = screen.target().lineHeight(screen.theme().bodyText.font);
+  const int requiredRows = rowCount * bodyLine;
+  const int16_t noteGap = screen.body().height > noteHeight + requiredRows
+                              ? golfui::minValue(gap, static_cast<int16_t>(screen.body().height - noteHeight -
+                                                                          requiredRows))
+                              : 0;
+  screen.target().text(screen.takeBottom(noteHeight, noteGap), state.message, noteStyle);
   const fui::Rect body = screen.body();
-  const int16_t rowHeight = static_cast<int16_t>(body.height / rowCount);
   for (uint8_t row = 0; row < rowCount; ++row) {
     const char* pointers[] = {cells[row][0], cells[row][1], cells[row][2]};
-    fui::TableProps props;
-    props.cells = pointers;
-    props.rows = 1;
-    props.cols = 3;
-    props.rowHeight = rowHeight;
-    props.text = screen.theme().bodyText;
-    props.text.align = fui::TextAlign::Center;
-    props.text.bold = row == 0;
-    fui::table(screen.frame(), fui::Rect{body.x, static_cast<int16_t>(body.y + row * rowHeight), body.width, rowHeight},
-               props);
+    const fui::Rect rowRect = golfui::evenRow(body, rowCount, row);
+    tableProps = {};
+    tableProps.cells = pointers;
+    tableProps.rows = 1;
+    tableProps.cols = 3;
+    tableProps.rowHeight = rowRect.height;
+    tableProps.text = screen.theme().bodyText;
+    tableProps.text.align = fui::TextAlign::Center;
+    tableProps.text.bold = row == 0;
+    fui::table(screen.frame(), rowRect, tableProps);
   }
 }
 
 void GolfTrendsActivity::render(RenderLock&&) {
   renderer.clearScreen();
   const auto& metrics = UITheme::getInstance().getMetrics();
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, renderer.getScreenWidth(), metrics.headerHeight},
-                 GolfStrings::TRENDS, trends.enoughRounds() ? subtitle : nullptr);
+  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding, metrics.headerHeight);
+  GUI.drawHeader(renderer, Rect{layout.header.x, layout.header.y, layout.header.width, layout.header.height},
+                 tr(STR_GOLF_TRENDS), playerLabel);
   renderUi();
-  const auto labels =
-      mappedInput.mapLabels(GolfStrings::BACK, GolfStrings::BACK, GolfStrings::EMPTY, GolfStrings::EMPTY);
+  const auto labels = mappedInput.mapLabels(tr(STR_GOLF_BUTTON_BACK), tr(STR_GOLF_BUTTON_BACK), "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }

@@ -2,6 +2,7 @@
 
 #include <FS.h>  // need to be included before SdFat.h for compatibility with FS.h's File class
 #include <Logging.h>
+#include <Memory.h>
 #include <SDCardManager.h>
 #if FREEINK_CAP_USB_MSC
 #include <UsbMassStorage.h>
@@ -19,14 +20,13 @@ freeink::UsbMassStorage usbMassStorage;
 
 HalStorage HalStorage::instance;
 
-HalStorage::HalStorage() {
+HalStorage::HalStorage() : storageMutex(xSemaphoreCreateRecursiveMutex()) {
   // Recursive so the same task can re-enter StorageLock without self-deadlock.
   // openFileForRead/Write take the lock and then assign to a HalFile&
   // out-param; if that out-param already held an Impl, its destructor takes
   // the lock again to close the prior FsFile under serialization (see
   // HalFile::Impl::~Impl below). Priority inheritance still applies to
   // recursive mutexes.
-  storageMutex = xSemaphoreCreateRecursiveMutex();
   assert(storageMutex != nullptr);
 }
 
@@ -134,7 +134,7 @@ bool HalStorage::ensureDirectoryExists(const char* path) { HAL_STORAGE_WRAPPED_C
 
 class HalFile::Impl {
  public:
-  Impl(FsFile&& fsFile) : file(std::move(fsFile)) {}
+  explicit Impl(FsFile&& fsFile) : file(std::move(fsFile)) {}
   // SdFat is not thread-safe; FsFile::close() touches SD/SPI and must run
   // under StorageLock or it races SdSpiCard::m_spiActive across tasks and
   // trips FreeRTOS's xTaskPriorityDisinherit assert. The FsFile member
@@ -156,7 +156,15 @@ HalFile& HalFile::operator=(HalFile&&) = default;
 
 HalFile HalStorage::open(const char* path, const oflag_t oflag) {
   StorageLock lock;  // ensure thread safety for the duration of this function
-  return HalFile(std::make_unique<HalFile::Impl>(SDCard.open(path, oflag)));
+  FsFile fsFile = SDCard.open(path, oflag);
+  if (!fsFile) return {};
+
+  auto fileImpl = makeUniqueNoThrow<HalFile::Impl>(std::move(fsFile));
+  if (!fileImpl) {
+    LOG_ERR("HAL", "OOM: HalFile handle (%u bytes)", static_cast<unsigned>(sizeof(HalFile::Impl)));
+    return {};
+  }
+  return HalFile(std::move(fileImpl));
 }
 
 bool HalStorage::mkdir(const char* path, const bool pFlag) { HAL_STORAGE_WRAPPED_CALL(mkdir, path, pFlag); }
@@ -173,9 +181,19 @@ bool HalStorage::rmdir(const char* path) { HAL_STORAGE_WRAPPED_CALL(rmdir, path)
 bool HalStorage::openFileForRead(const char* moduleName, const char* path, HalFile& file) {
   StorageLock lock;  // ensure thread safety for the duration of this function
   FsFile fsFile;
-  bool ok = SDCard.openFileForRead(moduleName, path, fsFile);
-  file = HalFile(std::make_unique<HalFile::Impl>(std::move(fsFile)));
-  return ok;
+  if (!SDCard.openFileForRead(moduleName, path, fsFile)) {
+    file = HalFile();
+    return false;
+  }
+
+  auto fileImpl = makeUniqueNoThrow<HalFile::Impl>(std::move(fsFile));
+  if (!fileImpl) {
+    LOG_ERR("HAL", "OOM: HalFile handle (%u bytes)", static_cast<unsigned>(sizeof(HalFile::Impl)));
+    file = HalFile();
+    return false;
+  }
+  file = HalFile(std::move(fileImpl));
+  return true;
 }
 
 bool HalStorage::openFileForRead(const char* moduleName, const std::string& path, HalFile& file) {
@@ -189,9 +207,19 @@ bool HalStorage::openFileForRead(const char* moduleName, const String& path, Hal
 bool HalStorage::openFileForWrite(const char* moduleName, const char* path, HalFile& file) {
   StorageLock lock;  // ensure thread safety for the duration of this function
   FsFile fsFile;
-  bool ok = SDCard.openFileForWrite(moduleName, path, fsFile);
-  file = HalFile(std::make_unique<HalFile::Impl>(std::move(fsFile)));
-  return ok;
+  if (!SDCard.openFileForWrite(moduleName, path, fsFile)) {
+    file = HalFile();
+    return false;
+  }
+
+  auto fileImpl = makeUniqueNoThrow<HalFile::Impl>(std::move(fsFile));
+  if (!fileImpl) {
+    LOG_ERR("HAL", "OOM: HalFile handle (%u bytes)", static_cast<unsigned>(sizeof(HalFile::Impl)));
+    file = HalFile();
+    return false;
+  }
+  file = HalFile(std::move(fileImpl));
+  return true;
 }
 
 bool HalStorage::openFileForWrite(const char* moduleName, const std::string& path, HalFile& file) {
@@ -218,6 +246,7 @@ bool HalStorage::removeDir(const char* path) { HAL_STORAGE_WRAPPED_CALL(removeDi
   return impl->file.method(__VA_ARGS__);
 
 void HalFile::flush() { HAL_FILE_WRAPPED_CALL(flush, ); }
+bool HalFile::sync() { HAL_FILE_WRAPPED_CALL(sync, ); }
 size_t HalFile::getName(char* name, size_t len) { HAL_FILE_WRAPPED_CALL(getName, name, len); }
 size_t HalFile::size() { HAL_FILE_FORWARD_CALL(size, ); }              // already thread-safe, no need to wrap
 size_t HalFile::fileSize() { HAL_FILE_FORWARD_CALL(fileSize, ); }      // already thread-safe, no need to wrap
@@ -240,7 +269,15 @@ bool HalFile::close() { HAL_FILE_WRAPPED_CALL(close, ); }
 HalFile HalFile::openNextFile() {
   HalStorage::StorageLock lock;
   assert(impl != nullptr);
-  return HalFile(std::make_unique<Impl>(impl->file.openNextFile()));
+  FsFile fsFile = impl->file.openNextFile();
+  if (!fsFile) return {};
+
+  auto fileImpl = makeUniqueNoThrow<Impl>(std::move(fsFile));
+  if (!fileImpl) {
+    LOG_ERR("HAL", "OOM: HalFile handle (%u bytes)", static_cast<unsigned>(sizeof(Impl)));
+    return {};
+  }
+  return HalFile(std::move(fileImpl));
 }
 bool HalFile::isOpen() const { return impl != nullptr && impl->file.isOpen(); }  // already thread-safe, no need to wrap
 HalFile::operator bool() const { return isOpen(); }

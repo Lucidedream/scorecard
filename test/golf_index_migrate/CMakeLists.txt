@@ -1,6 +1,10 @@
 add_executable(golf_index_migrate_tests test_golf_index_migrate.cpp
   ${REPO_ROOT}/src/golf/GolfCsv.cpp
   ${REPO_ROOT}/src/golf/GolfIndexMigrate.cpp
+  ${REPO_ROOT}/src/golf/GolfStats.cpp
+  ${REPO_ROOT}/src/golf/GolfPenalty.cpp
+  ${REPO_ROOT}/src/golf/GolfRules.cpp
+  ${REPO_ROOT}/test/golf_test_support/GolfPathsHost.cpp
 )
 target_link_libraries(golf_index_migrate_tests PRIVATE GTest::gtest_main crosspoint_test_common)
 target_include_directories(golf_index_migrate_tests PRIVATE ${REPO_ROOT}/src/golf)

@@ -12,7 +12,13 @@ struct GolfMutationResult {
   bool loweredPutts;
 };
 
-GolfMutationResult incrementGolfCounter(GolfRound& round, uint8_t hole, GolfField field);
-GolfMutationResult decrementGolfCounter(GolfRound& round, uint8_t hole, GolfField field);
+GolfMutationResult incrementGolfCounter(GolfPlayerScore& score, uint8_t hole, GolfField field);
+GolfMutationResult decrementGolfCounter(GolfPlayerScore& score, uint8_t hole, GolfField field);
 GolfField nextGolfField(GolfField field);
-bool seedGolfHoleAtPar(GolfRound& round, uint8_t hole);
+bool seedGolfHoleAtPar(GolfPlayerScore& score, uint8_t hole, uint8_t par);
+
+uint8_t golfFirstEnabledPlayer(const GolfRound& round);
+uint8_t golfNextEnabledPlayer(const GolfRound& round, uint8_t player);
+uint8_t golfPreviousEnabledPlayer(const GolfRound& round, uint8_t player);
+bool advanceGolfTurn(GolfRound& round);
+bool retreatGolfTurn(GolfRound& round);

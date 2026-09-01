@@ -2,24 +2,28 @@
 
 Authoritative architecture for the golf scorecard app built on this CrossPoint fork.
 Owned by the architect. **Workers implement against this document and
-[CONTRACTS.md](CONTRACTS.md); they do not amend either one.** If a task cannot be
-completed without violating something here, stop and report the conflict rather than
-improvising around it.
+[CONTRACTS.md](CONTRACTS.md); they amend either one only when an approved contract task
+explicitly requires it.** Otherwise, stop and report a conflict rather than improvising
+around it.
 
 ## 1. Product scope
 
-An offline, single-player golf scorecard that runs entirely on an Xteink X4.
+An offline scorecard for one to four golfers that runs entirely on an Xteink X4.
 
 * Scoring, storage, and review all happen on the device.
 * Rounds are files on the SD card, retrieved via the existing CrossPoint webserver
   or by removing the card.
 * No companion app, no cloud, no network dependency on the course.
+* Four stable player slots are stored in every round. A slot participates only when its
+  fixed tee selection is Blue or White; `NotPlay` disables it.
 
-Three values are captured per hole and only these three: **total strokes**, **putts**,
-and **strokes played from inside 100 yards**.
+Each enabled player captures putts, strokes from inside 100 yards (including putts),
+strokes from outside 100 yards, and packed penalty events. Gross total is derived.
+Course par and stroke index are shared; yardages are per player because tee choices may
+differ.
 
-Explicitly out of scope: multi-player, fairways hit, greens in regulation, penalties,
-sand saves, per-hole notes, GPS, shot tracking.
+Explicitly out of scope: more than four players, player handicaps or net scoring,
+fairways hit, greens in regulation, sand saves, per-hole notes, GPS, and shot tracking.
 
 ## 2. Why this lives in a fork
 
@@ -32,10 +36,11 @@ The consequence that matters is **rebase cost**. Upstream `develop` moves fast a
 recently refactored the whole activity system. A fork that scatters edits across
 upstream files becomes unmergeable within weeks.
 
-### The three-touchpoint rule
+### The bounded-touchpoint rule
 
-All new code lives in **new directories**. Exactly three upstream files may be
-modified, all behind the `CROSSPOINT_GOLF` build flag:
+Golf implementation stays in its dedicated directories. Only the upstream integration
+surfaces listed here may be modified, with executable changes behind the
+`CROSSPOINT_GOLF` build flag where applicable:
 
 | File | Budget | Change |
 | --- | --- | --- |
@@ -43,6 +48,11 @@ modified, all behind the `CROSSPOINT_GOLF` build flag:
 | `platformio.ini` | ~8 lines | `[env:golf]` extending `default`, adds `-DCROSSPOINT_GOLF=1` |
 | `src/main.cpp` | ~14 lines | Guarded resume-into-round branch in the boot routing chain, plus a golf state flush in `enterDeepSleep()` beside the existing `APP_STATE.saveToFile()` |
 | `test/CMakeLists.txt` | 1 marker + 1 line per suite | `# --- golf (fork) ---` marker + one `add_subdirectory()` per golf test suite |
+| `lib/I18n/translations/*.yaml` | Scorecard keys only | Source translations for user-facing Scorecard labels; generated headers remain untouched |
+
+*Multiplayer/i18n amendment:* the translation-source row supersedes the historical
+"exactly three/four" counts below. It permits only Scorecard string keys and does not
+open unrelated upstream files to modification.
 
 *Amended 2026-08-29: `test/CMakeLists.txt` was added as a fourth touchpoint after a
 worker correctly reported that M0 required registering test suites there while
@@ -102,20 +112,23 @@ New code:
 
 ```
 src/golf/
-  GolfRound.h              the round struct (see CONTRACTS.md §1)
+  GolfRound.h              fixed four-slot round model (see CONTRACTS.md §1)
   GolfRoundStore.{h,cpp}   PersistableStore<GolfRoundStore> -> /golf/state.json
   CourseStore.{h,cpp}      enumerate + load /golf/courses/*.json
   RoundArchive.{h,cpp}     write round file, append index.csv, read index
-  GolfStats.{h,cpp}        pure functions over GolfRound -> derived figures
+  GolfStats.{h,cpp}        pure functions over shared round + explicit player score
 
 src/activities/golf/
-  GolfHomeActivity.{h,cpp}        : UiListActivity
-  GolfSetupActivity.{h,cpp}       : UiListActivity
-  GolfScoringActivity.{h,cpp}     : Activity + UiAppHost    <- the screen that matters
-  GolfCardActivity.{h,cpp}        : Activity + UiAppHost
-  GolfHistoryActivity.{h,cpp}     : UiListActivity
-  GolfRoundDetailActivity.{h,cpp} : Activity + UiAppHost
-  GolfCourseEditActivity.{h,cpp}  : UiListActivity          (built last)
+  GolfHomeActivity.{h,cpp}         : UiListActivity
+  GolfSetupActivity.{h,cpp}        : UiListActivity
+  GolfPlayerSetupActivity.{h,cpp}  : UiListActivity
+  GolfScoringActivity.{h,cpp}      : Activity + UiAppHost    <- the screen that matters
+  GolfCardActivity.{h,cpp}         : Activity + UiAppHost
+  GolfPlayerSelectActivity.{h,cpp} : UiListActivity
+  GolfHistoryActivity.{h,cpp}      : UiListActivity
+  GolfTrendsActivity.{h,cpp}       : Activity + UiAppHost
+  GolfRoundDetailActivity.{h,cpp}  : Activity + UiAppHost
+  GolfCourseEditActivity.{h,cpp}   : UiListActivity          (built last)
 
 docs/golf/
   ARCHITECTURE.md    this file
@@ -134,7 +147,7 @@ fight the base class on every input event.
 is auto-loaded by agent tooling. Read it. The rules that bite hardest here:
 
 * **~380 KB RAM is a hard ceiling.** ~47 KB of it is already the display framebuffer.
-  Justify every heap allocation; prefer static and stack.
+  Justify every heap allocation; prefer fixed members and small stack values.
 * **No `xTaskCreate` inside activities.** Nothing in this app needs a background task.
 * **State that `render()` reads and `loop()` writes must be mutated under a
   `RenderLock`.** They run on different FreeRTOS tasks.
@@ -142,6 +155,33 @@ is auto-loaded by agent tooling. Read it. The rules that bite hardest here:
   lock, mutate, release, then flush.
 * **Never invoke `clang-format` directly.** Use `./bin/clang-format-fix -g`.
 * **Cite file paths and line numbers** as evidence when justifying a change.
+
+### 4.1 Multiplayer memory boundary
+
+Multiplayer is a fixed-capacity extension, not a dynamic roster. `GolfRound` embeds four
+`GolfPlayer` records and each embeds exactly 18 holes of yardage, score counters, and
+packed penalties. `src/golf/GolfRound.h` locks the layout with size assertions:
+144 bytes per `GolfPlayerScore`, 206 bytes per `GolfPlayer`, and 906 bytes for the full
+round. Enabling another slot performs no `new`, `malloc`, or vector growth; the 906-byte
+worst case is reserved once, so runtime heap fragmentation does not vary with player
+count. The increase from the prior 254-byte round is a fixed 652 bytes.
+
+That predictable size is still too large for an automatic local on a small embedded task
+stack. The live round belongs in the persistent singleton or as a member of an already
+heap-allocated activity. Domain helpers take `GolfRound&`, `GolfPlayer&`, or
+`GolfPlayerScore&`; rendering and mutation paths do not copy a whole round. Persistence
+uses one checked `makeUniqueNoThrow` staging allocation when it needs transactional
+decode/archive semantics, logs OOM, and never allocates inside a player or hole loop.
+
+History and Trends use a separate fixed-capacity player-selector activity. It retains one
+`GolfPlayerNamesReader`, one index-recovery migrator, and one 128-byte streaming chunk.
+Each index scan or post-child rescan needs one checked `HalFile::Impl` handle allocation;
+it logs OOM and publishes unavailable rows, while row parsing itself performs no
+allocation. The selected data screen receives one immutable stable-slot number plus a
+copied fallback name, so neither data activity retains all four names or a tab bar.
+History and Trends keep checked inactive reader storage and publish a complete
+slot-specific snapshot under `RenderLock`; target payload accounting is recorded in
+`CONTRACTS-V2.md` §16.6.
 
 ## 5. E-ink refresh policy
 
@@ -214,22 +254,28 @@ the SD card takes about a minute, while entering 18 pars and 18 yardages through
 stepper rows on a 7-button device is genuinely unpleasant. See
 `docs/golf/examples/` for the template and field guide.
 
-## 5.4 Deliberate deviation: no i18n for golf screens
+## 5.4 Course-to-roster device feedback
 
-`AGENTS.md` requires user-facing strings to go through `tr()`. Golf screens do **not**,
-and that is a considered exception rather than an oversight.
+Selecting a course immediately produces a truthful playable draft when the source permits
+it. Setup enables P1 Noah on Blue when `CourseStore::resolveTee()` can resolve Blue, or on
+exact White when Blue is unavailable. A course with both an empty tee label and no yardage
+supports Blue and White as zero-yard selection-only choices and defaults P1 to Blue. P2–P4
+stay `NotPlay`. Noncanonical labels and unlabeled nonzero yardage are not guessed, so those
+courses retain the all-disabled draft and require corrected course data. The neutral round
+initializer and legacy decoder defaults remain unchanged.
 
-`tr(id)` resolves only a generated `StrId`, produced by `scripts/gen_i18n.py` from the
-YAML files in `lib/I18n/translations/` — 24-plus languages. Adding golf strings would
-mean editing generated tables and every translation source, turning a four-file
-touchpoint surface into dozens and guaranteeing a rebase conflict in each one. The
-`tr()` rule exists to keep *upstream* translatable; it does not usefully bind a
-single-user fork feature that will never be translated.
+Because activity is still defined solely by `tee != NotPlay`, Complete is enabled on the
+first render whenever that initial P1 selection is truthful. This is device feedback, not
+a second stored enabled flag and not an implicit yardage assignment.
 
-Golf screens therefore use English literals, collected in **one header of string
-constants** rather than scattered through the activities, so a future i18n pass has a
-single place to work from. If this fork is ever shared beyond its author, i18n becomes a
-real task and that header is where it starts.
+## 5.5 Internationalization
+
+The earlier single-user exception for hard-coded English golf screens is retired.
+Scorecard is now a multi-user feature and follows the repository rule: every user-facing
+label goes through `tr()`, including setup labels for Player, Not play, Blue, and
+White. Serialized `TeeSelection` values remain canonical language-independent tokens;
+translated display text is never written to a round file. Player names are user data and
+therefore are not passed through `tr()`.
 
 ## 6. Review gates
 

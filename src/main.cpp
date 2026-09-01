@@ -53,6 +53,7 @@ FontDecompressor fontDecompressor;
 SdCardFontSystem sdFontSystem;
 FontCacheManager fontCacheManager(renderer.getFontMap(), renderer.getSdCardFonts());
 static unsigned long allowSleepAt = 0;
+static unsigned long lastActivityTime = 0;
 static unsigned long lastX4ProPowerClickAt = 0;
 
 namespace {
@@ -261,6 +262,18 @@ static bool loadSleepFrameBuffer() {
 // Enter deep sleep mode
 void enterDeepSleep(bool fromTimeout = false) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
+#if CROSSPOINT_GOLF
+  // Persistence happens before any activity teardown and without a RenderLock.
+  // On failure, keep the live scoring surface and retry only after a fresh idle
+  // interval rather than spinning on every main-loop iteration.
+  if (!flushGolfRoundForSleep()) {
+    LOG_ERR("MAIN", "Golf round flush before sleep failed; sleep aborted");
+    lastActivityTime = millis();
+    allowSleepAt = lastActivityTime + 2000;
+    activityManager.requestUpdate();
+    return;
+  }
+#endif
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
 
   const bool isQuickResumeSleep =
@@ -272,11 +285,6 @@ void enterDeepSleep(bool fromTimeout = false) {
   APP_STATE.showBootScreen = false;
 
   APP_STATE.saveToFile();
-#if CROSSPOINT_GOLF
-  // Covers both sleep paths (auto-sleep timeout and power-button hold), since
-  // GolfScoringActivity::onExit() must not do SD I/O (CONTRACTS.md §6).
-  if (!flushGolfRoundForSleep()) LOG_ERR("MAIN", "Golf round flush before sleep failed");
-#endif
 
   // Commit to sleeping before goToSleep() runs the outgoing activity's onExit():
   // a WiFi activity would otherwise silentRestart() here and reboot instead.
@@ -580,7 +588,8 @@ void setup() {
     gpio.update();
   }
 
-  allowSleepAt = millis() + 2000;
+  lastActivityTime = millis();
+  allowSleepAt = lastActivityTime + 2000;
 }
 
 void loop() {
@@ -639,7 +648,6 @@ void loop() {
   }
 
   // Check for any user activity (button press or release) or active background work
-  static unsigned long lastActivityTime = millis();
   if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || gpio.wasTouchActivity() || halTiltSensor.hadActivity() ||
       activityManager.preventAutoSleep()) {
     lastActivityTime = millis();         // Reset inactivity timer

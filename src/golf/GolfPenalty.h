@@ -23,12 +23,13 @@ enum class GolfPenaltyMutationStatus : uint8_t {
 
 uint8_t golfPackPenaltyEvent(GolfField field, GolfPenaltyKind kind);
 bool golfUnpackPenaltyEvent(uint8_t packed, GolfPenaltyEvent& event);
-bool golfPenaltyEventAt(const GolfRound& round, uint8_t hole, uint8_t index, GolfPenaltyEvent& event);
-GolfPenaltyMutationStatus golfAppendPenalty(GolfRound& round, uint8_t hole, GolfField field, GolfPenaltyKind kind);
-GolfPenaltyMutationStatus golfRemoveLatestPenalty(GolfRound& round, uint8_t hole, GolfField field);
-uint8_t golfHazardsForHole(const GolfRound& round, uint8_t hole);
-uint8_t golfObsForHole(const GolfRound& round, uint8_t hole);
-uint16_t golfHazardsForRound(const GolfRound& round);
-uint16_t golfObsForRound(const GolfRound& round);
-uint16_t golfPenaltyStrokesForHole(const GolfRound& round, uint8_t hole);
-uint16_t golfPenaltyStrokesForRound(const GolfRound& round);
+bool golfPenaltyEventAt(const GolfPlayerScore& score, uint8_t hole, uint8_t index, GolfPenaltyEvent& event);
+GolfPenaltyMutationStatus golfAppendPenalty(GolfPlayerScore& score, uint8_t hole, GolfField field,
+                                            GolfPenaltyKind kind);
+GolfPenaltyMutationStatus golfRemoveLatestPenalty(GolfPlayerScore& score, uint8_t hole, GolfField field);
+uint8_t golfHazardsForHole(const GolfPlayerScore& score, uint8_t hole);
+uint8_t golfObsForHole(const GolfPlayerScore& score, uint8_t hole);
+uint16_t golfHazardsForRound(const GolfPlayerScore& score, uint8_t holeCount);
+uint16_t golfObsForRound(const GolfPlayerScore& score, uint8_t holeCount);
+uint16_t golfPenaltyStrokesForHole(const GolfPlayerScore& score, uint8_t hole);
+uint16_t golfPenaltyStrokesForRound(const GolfPlayerScore& score, uint8_t holeCount);

@@ -6,7 +6,7 @@
 #include "GolfRound.h"
 
 class GolfRoundStore : public PersistableStore<GolfRoundStore> {
-  GolfRoundStore() = default;
+  GolfRoundStore() { initializeGolfPlayerDefaults(round); }
 
   friend class PersistableStore<GolfRoundStore>;
 
@@ -25,6 +25,7 @@ class GolfRoundStore : public PersistableStore<GolfRoundStore> {
   bool markArchivedAs(const char* filename);
 
   bool saveToFile() const;
+  bool loadFromFile();
   bool clear();
 
   void toJson(JsonDocument& doc) const;

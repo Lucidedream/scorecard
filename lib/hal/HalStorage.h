@@ -45,6 +45,8 @@ class HalStorage {
   // Ensure a directory exists, creating it if necessary. Returns true on success.
   bool ensureDirectoryExists(const char* path);
 
+  // Each successfully opened HalFile owns one checked heap-allocated handle.
+  // Handle OOM is logged and reported as an empty HalFile or false.
   HalFile open(const char* path, const oflag_t oflag = O_RDONLY);
   bool mkdir(const char* path, const bool pFlag = true);
   bool exists(const char* path);
@@ -88,6 +90,7 @@ class HalFile : public Print {
   HalFile& operator=(const HalFile&) = delete;
 
   void flush();
+  bool sync();
   size_t getName(char* name, size_t len);
   size_t size();
   size_t fileSize();

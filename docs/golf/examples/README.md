@@ -13,11 +13,11 @@ hyphens — `Pebble Beach` becomes `pebble-beach.json`. See CONTRACTS §5.
 | --- | --- | --- |
 | `v` | yes | Schema version. Always `1`. |
 | `name` | yes | Shown on the scoring screen. Keep under 40 characters. |
-| `tees` | no | Free text — `Blue`, `White`, `Championship`. Under 12 characters. |
+| `tees` | no | Canonical yardage-row token: `Blue` or `White`. It is not translated UI text. |
 | `holes` | yes | `9` or `18`. Nothing else is accepted. |
 | `par` | yes | Exactly `holes` entries. |
-| `yards` | no | Exactly `holes` entries when present. Shown in the hole band. |
-| `si` | no | Stroke index / handicap ranking, 1–18. Currently displayed only. |
+| `yards` | no | Exactly `holes` entries when present. Copied into each player using this tee row. |
+| `si` | no | Shared stroke-index ranking, 1–18. Snapshotted into the round; it does not create handicap/net scoring. |
 
 Every array must have exactly `holes` entries. A length that disagrees with `holes`
 is treated as a corrupt file and rejected — it is never padded or truncated, because
@@ -29,9 +29,10 @@ The par and stroke-index values are printed on the paper scorecard in the pro sh
 and almost every course publishes them on its own website. Yardages depend on which
 tees you actually play, so take them from that row of the card.
 
-Par is the only field the app truly needs. Yardage and stroke index are display-only
-today, so a course file with just `name`, `holes`, and `par` is perfectly valid and
-takes about a minute to write.
+Par is the only field the app truly needs. A course file with just `name`, `holes`, and
+`par` is valid. Par and SI are shared by all players; yardage is copied per player because
+Blue and White selections can differ. Missing SI remains an explicit zeroed `hasSi = false`
+snapshot, and no handicap or net score is inferred from it.
 
 ## Worked example: Pebble Beach, Blue tees
 
@@ -49,7 +50,8 @@ else. From the Blue tees the course measures **6,802 yards, rating 74.9, slope 1
 indexes could not be confirmed from a trustworthy source — the course database sites are
 CAPTCHA-gated and the official scorecard PDF did not resolve. Rather than mix unverified
 numbers into a file whose par values *are* verified, `yards` and `si` are left out. Both
-are optional and display-only, so nothing is lost functionally.
+are optional; omitting them leaves the corresponding round snapshot unavailable rather
+than guessed.
 
 If you want them, take that row straight off the paper card in the pro shop and add:
 
@@ -97,4 +99,5 @@ Expect `holes 18` and `total 72`. If the total is not 72, a hole has been mistyp
 Delete the `_TODO` line once done — unknown fields are ignored, but leaving it invites
 confusion later.
 
-Add `yards` and `si` the same way if you want them; both are optional and display-only.
+Add `yards` and `si` the same way if you want them; both are optional. Use the canonical
+`Blue` or `White` token for the yardage row, and never translate that stored token.

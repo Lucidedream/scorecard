@@ -4,9 +4,7 @@
 
 #include "GolfRound.h"
 
-struct GolfValidationResult {
-  bool valid;
-  bool currentHoleReset;
+struct GolfPlayerValidationResult {
   uint32_t puttsRepaired;
   uint32_t in100Repaired;
   uint32_t penaltyCountRepaired;
@@ -14,7 +12,7 @@ struct GolfValidationResult {
   uint32_t penaltyMarkerRepaired;
 
   bool repaired() const {
-    return currentHoleReset || puttsRepaired != 0 || in100Repaired != 0 || penaltyCountRepaired != 0 ||
+    return puttsRepaired != 0 || in100Repaired != 0 || penaltyCountRepaired != 0 ||
            penaltyEventRepaired != 0 || penaltyMarkerRepaired != 0;
   }
   bool holePuttsRepaired(uint8_t hole) const { return (puttsRepaired & (1UL << hole)) != 0; }
@@ -24,4 +22,20 @@ struct GolfValidationResult {
   bool holePenaltyMarkerRepaired(uint8_t hole) const { return (penaltyMarkerRepaired & (1UL << hole)) != 0; }
 };
 
+struct GolfValidationResult {
+  bool valid;
+  bool currentHoleReset;
+  bool currentPlayerReset;
+  GolfPlayerValidationResult players[GolfRound::MAX_PLAYERS];
+
+  bool repaired() const {
+    if (currentHoleReset || currentPlayerReset) return true;
+    for (const GolfPlayerValidationResult& player : players) {
+      if (player.repaired()) return true;
+    }
+    return false;
+  }
+};
+
+GolfPlayerValidationResult validateGolfPlayerScore(GolfPlayerScore& score, uint8_t holeCount);
 GolfValidationResult validateGolfRound(GolfRound& round);

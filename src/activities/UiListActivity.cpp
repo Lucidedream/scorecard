@@ -35,7 +35,13 @@ void UiListActivity::rowActionTrampoline(const fui::ActionEvent& event, void* us
 }
 
 void UiListActivity::onRowAction(const fui::ActionEvent& event) {
-  activeNav().selected = event.value;
+  {
+    RenderLock lock(*this);
+    auto& n = activeNav();
+    n.selected = event.value;
+    n.follow(listCount());
+  }
+  // Activation may allocate and navigate; do not carry the render lock into it.
   if (event.longPress) {
     onRowLongPress(event.value);
     return;
@@ -120,19 +126,17 @@ void UiListActivity::navigateButtons() {
 }
 
 void UiListActivity::syncListViewport(UiScreen& screen, fui::ListProps& props, const bool hasSubtitle) {
-  int16_t rowHeight = screen.theme().rowHeight;
-  if (!mappedInput.hasTouch()) {
+  int16_t rowHeight = props.rowHeight > 0 ? props.rowHeight : screen.theme().rowHeight;
+  if (!mappedInput.hasTouch() && props.rowHeight <= 0) {
     // Non-touch hardware (X3/X4) keeps the original, denser per-theme row
     // height instead of FreeInkUI's touch-target-sized default, so lists fit
     // as many rows per screen as they did before the FreeInkUI migration.
-    // props.rowHeight must be set explicitly: screen.list() otherwise falls
-    // back to the (touch-friendly) theme token, not this local value.
-    // A label that must wrap (labelText.maxLines > 1) grows only its own row:
-    // list() sizes wrapped items per-row, so the dense height stays.
+    // An explicit caller height wins when a screen derives rows from its safe
+    // content height. A label that must wrap grows only its own row.
     const auto& metrics = UITheme::getInstance().getMetrics();
     rowHeight = static_cast<int16_t>(hasSubtitle ? metrics.listWithSubtitleRowHeight : metrics.listRowHeight);
-    props.rowHeight = rowHeight;
   }
+  props.rowHeight = rowHeight;
   activeNav().syncToProps(screen.body(), rowHeight, screen.theme().listRowGap, listCount(), props);
 }
 

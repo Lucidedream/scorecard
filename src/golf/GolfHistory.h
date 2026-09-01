@@ -9,6 +9,7 @@ inline constexpr uint8_t GOLF_HISTORY_CAPACITY = 50;
 
 struct GolfHistoryEntry {
   char course[40];
+  char playerName[GolfPlayer::NAME_CAPACITY];
   uint16_t dateYmd;
   uint16_t strokes;
   uint16_t par;
@@ -18,17 +19,17 @@ struct GolfHistoryEntry {
   uint16_t hazards;
   uint16_t obs;
   uint8_t holes;
-  // False when this round predates penalty tracking (v2 row, or a migrated v3
-  // row with empty hazards/obs). Trends exclude such rounds from penalty
-  // averages rather than counting an unrecorded round as a clean one.
+  uint8_t playerSlot;
   bool penaltiesRecorded;
 };
+
+static_assert(sizeof(GolfHistoryEntry) <= 96);
 
 using GolfHistoryMalformedCallback = void (*)(uint32_t lineNumber, void* user);
 
 class GolfHistoryReader {
  public:
-  void reset();
+  bool reset(uint8_t playerSlot);
   void feed(const char* data, size_t size, GolfHistoryMalformedCallback malformedCallback = nullptr,
             void* callbackUser = nullptr);
   void finish(GolfHistoryMalformedCallback malformedCallback = nullptr, void* callbackUser = nullptr);
@@ -36,6 +37,7 @@ class GolfHistoryReader {
   uint8_t count() const { return entryCount; }
   bool overflowed() const { return validRows > GOLF_HISTORY_CAPACITY; }
   uint32_t totalValidRows() const { return validRows; }
+  uint8_t playerSlot() const { return playerSlot_; }
   const GolfHistoryEntry& newest(uint8_t index) const;
 
  private:
@@ -46,6 +48,7 @@ class GolfHistoryReader {
   uint16_t lineLength = 0;
   uint8_t entryCount = 0;
   uint8_t nextEntry = 0;
+  uint8_t playerSlot_ = GolfRound::NO_PLAYER;
   bool lineOverflow = false;
 
   void acceptLine(GolfHistoryMalformedCallback malformedCallback, void* callbackUser);
@@ -53,16 +56,11 @@ class GolfHistoryReader {
 
 bool golfHistoryShowsToPar(const GolfHistoryEntry& entry);
 
-// Recovers the `file` column of a single index.csv row on a second streaming pass,
-// so History can open one round file without holding a filename per cached entry
-// (GolfHistoryEntry stays within its 56-byte budget). The target is given in
-// newest-first terms to match the list; `totalValidRows` comes from the first pass.
 class GolfIndexFileLocator {
  public:
-  // newestIndex 0 is the most recent valid row.
-  void reset(uint8_t newestIndex, uint32_t totalValidRows);
+  bool reset(uint8_t playerSlot, uint8_t newestIndex, uint32_t totalFilteredRows);
   void feed(const char* data, size_t size);
-  bool finish();  // returns found()
+  bool finish();
 
   bool found() const { return found_; }
   const char* filename() const { return filename_; }
@@ -70,13 +68,37 @@ class GolfIndexFileLocator {
  private:
   char line_[GOLF_CSV_ROW_BUFFER_SIZE]{};
   char filename_[GOLF_ROUND_FILENAME_BUFFER_SIZE]{};
-  uint32_t targetRow_ = 0;  // file-order index of the wanted row
+  uint32_t targetRow_ = 0;
   uint32_t validRow_ = 0;
   uint32_t lineNumber_ = 1;
   uint16_t lineLength_ = 0;
+  uint8_t playerSlot_ = GolfRound::NO_PLAYER;
   bool lineOverflow_ = false;
   bool found_ = false;
   bool active_ = false;
+
+  void acceptLine();
+};
+
+// Streams all valid rows chronologically and retains only the latest name for
+// each stable slot. Defaults remain available for slots not yet present.
+class GolfPlayerNamesReader {
+ public:
+  void reset();
+  void feed(const char* data, size_t size);
+  void finish();
+
+  const char* name(uint8_t playerSlot) const;
+  bool present(uint8_t playerSlot) const;
+  uint8_t firstPresent() const;
+
+ private:
+  char names_[GolfRound::MAX_PLAYERS][GolfPlayer::NAME_CAPACITY]{};
+  char line_[GOLF_CSV_ROW_BUFFER_SIZE]{};
+  uint16_t lineLength_ = 0;
+  uint32_t lineNumber_ = 1;
+  bool present_[GolfRound::MAX_PLAYERS]{};
+  bool lineOverflow_ = false;
 
   void acceptLine();
 };

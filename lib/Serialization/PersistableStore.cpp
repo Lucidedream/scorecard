@@ -8,9 +8,32 @@
 #include <limits>
 
 bool PersistableStoreBase::writeDocToFile(const char* path, const JsonDocument& doc) {
-  Storage.mkdir("/.crosspoint");
+  if (path == nullptr || doc.overflowed()) {
+    LOG_ERR("PERSIST", "Refused incomplete JSON document");
+    return false;
+  }
+  const size_t measured = measureJson(doc);
+  if (measured == 0 || measured > std::numeric_limits<unsigned int>::max()) {
+    LOG_ERR("PERSIST", "Invalid serialized length for %s", path);
+    return false;
+  }
+
+  // Reserve the measured payload once before opening/truncating the target.
+  // A failed String allocation therefore cannot turn the old file into an
+  // empty or partial one, and serialization performs no growth reallocations.
   String json;
-  serializeJson(doc, json);
+  if (!json.reserve(static_cast<unsigned int>(measured))) {
+    LOG_ERR("PERSIST", "OOM serializing %s (%u bytes)", path, static_cast<unsigned>(measured));
+    return false;
+  }
+  const size_t written = serializeJson(doc, json);
+  if (written != measured || json.length() != measured) {
+    LOG_ERR("PERSIST", "Incomplete JSON serialization for %s (%u/%u bytes)", path,
+            static_cast<unsigned>(written), static_cast<unsigned>(measured));
+    return false;
+  }
+
+  Storage.mkdir("/.crosspoint");
   if (!Storage.writeFile(path, json)) {
     LOG_ERR("PERSIST", "Failed to write %s", path);
     return false;

@@ -32,4 +32,6 @@ struct GolfTrendStats {
   bool enoughMixRounds() const { return penaltyRounds >= 2; }
 };
 
+// `history` must have been reset for one stable player slot; no cross-slot
+// aggregation is performed here.
 GolfTrendStats golfCalculateTrends(const GolfHistoryReader& history);

@@ -5,10 +5,10 @@
 #include <ArduinoJson.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <PersistableStore.h>
 
 #include "GolfJson.h"
-#include "GolfPaths.h"
 #include "GolfRoundDecode.h"
 #include "GolfRoundRepairLog.h"
 
@@ -24,47 +24,26 @@ bool loadGolfRoundFile(const char* path, GolfRound& out) {
     return false;
   }
 
-  GolfRound loaded{};
-  const int version = doc["v"] | 0;
-  if (version == 1) {
-    LOG_ERR("GOLF", "Rejected v1 round file: in100 semantics changed in v2");
+  // A 906-byte transactional staging value is unsafe on the activity task
+  // stack. One checked heap allocation keeps `out` unchanged on every failure.
+  auto loaded = makeUniqueNoThrow<GolfRound>();
+  if (!loaded) {
+    LOG_ERR("GOLF", "OOM: GolfRound file decode (%u bytes)", static_cast<unsigned>(sizeof(GolfRound)));
     return false;
   }
-  const int holes = doc["holes"] | 0;
-  bool validDate = doc["date"].isNull();
-  if (!validDate && doc["date"].is<const char*>()) {
-    validDate = golfParseDate(doc["date"].as<const char*>(), loaded.dateYmd);
-  }
-  if (holes < 0 || holes > UINT8_MAX || !validDate ||
-      !golfReadJsonString(doc["course"], loaded.courseName, sizeof(loaded.courseName)) ||
-      !golfReadJsonString(doc["tees"], loaded.tees, sizeof(loaded.tees))) {
-    LOG_ERR("GOLF", "Rejected invalid round metadata: %s", path);
-    return false;
-  }
-
-  GolfRoundColumnLengths lengths{};
-  lengths.expectYards = false;  // completed-round schema omits yards
-  if (!golfReadJsonHoleArray(doc["par"], loaded.par, GolfRound::MAX_HOLES, UINT8_MAX, lengths.par) ||
-      !golfReadJsonHoleArray(doc["putts"], loaded.putts, GolfRound::MAX_HOLES, 99, lengths.putts) ||
-      !golfReadJsonHoleArray(doc["in100"], loaded.in100, GolfRound::MAX_HOLES, 99, lengths.in100) ||
-      !golfReadJsonHoleArray(doc["out100"], loaded.out100, GolfRound::MAX_HOLES, 99, lengths.out100)) {
-    LOG_ERR("GOLF", "Rejected invalid round arrays: %s", path);
-    return false;
-  }
-  if (version == 3 && !golfReadJsonPenalties(doc["penalties"], loaded, lengths.penalties)) {
-    LOG_ERR("GOLF", "Rejected invalid round penalties array: %s", path);
-    return false;
-  }
-
   GolfValidationResult validation{};
-  const GolfRoundDecodeStatus status = golfCheckRound(loaded, version, holes, /*currentHole=*/0, lengths, validation);
+  const GolfRoundDecodeStatus status = golfDecodeRoundJson(doc.as<JsonVariantConst>(), false, *loaded, validation);
   if (status != GolfRoundDecodeStatus::Ok) {
-    LOG_ERR("GOLF", "Rejected round file (decode status %u): %s", static_cast<unsigned>(status), path);
+    if ((doc["v"] | 0) == 1) {
+      LOG_ERR("GOLF", "Rejected v1 round file: in100 semantics changed in v2");
+    } else {
+      LOG_ERR("GOLF", "Rejected round file (decode status %u): %s", static_cast<unsigned>(status), path);
+    }
     return false;
   }
 
-  golfLogRoundRepairs(loaded, validation);
-  out = loaded;
+  golfLogRoundRepairs(*loaded, validation);
+  out = *loaded;
   return true;
 }
 

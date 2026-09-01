@@ -7,20 +7,16 @@
 
 namespace {
 
-GolfRound oneHole() {
-  GolfRound round{};
-  round.holeCount = 1;
-  round.par[0] = 4;
-  return round;
-}
+class GolfPenaltyTest : public ::testing::Test {
+ protected:
+  GolfPlayerScore scores[GolfRound::MAX_PLAYERS]{};
 
-void increment(GolfRound& round, const GolfField field, const uint8_t count) {
-  for (uint8_t index = 0; index < count; ++index) ASSERT_TRUE(incrementGolfCounter(round, 0, field).changed);
-}
+  void increment(GolfPlayerScore& score, const GolfField field, const uint8_t count) {
+    for (uint8_t index = 0; index < count; ++index) ASSERT_TRUE(incrementGolfCounter(score, 0, field).changed);
+  }
+};
 
-}  // namespace
-
-TEST(GolfPenalty, NibbleRoundTripsEveryFieldAndKind) {
+TEST_F(GolfPenaltyTest, NibbleRoundTripsEveryFieldAndKind) {
   for (const GolfField field : {GolfField::Putts, GolfField::In100, GolfField::Out100}) {
     for (const GolfPenaltyKind kind : {GolfPenaltyKind::Hazard, GolfPenaltyKind::Ob}) {
       const uint8_t packed = golfPackPenaltyEvent(field, kind);
@@ -36,152 +32,152 @@ TEST(GolfPenalty, NibbleRoundTripsEveryFieldAndKind) {
   EXPECT_FALSE(golfUnpackPenaltyEvent(0x08, invalid));
 }
 
-TEST(GolfPenalty, AppendThenRemoveRestoresExactRound) {
+TEST_F(GolfPenaltyTest, AppendThenRemoveRestoresExactPlayerScore) {
   for (const GolfField field : {GolfField::Putts, GolfField::In100, GolfField::Out100}) {
-    GolfRound round = oneHole();
-    round.putts[0] = 2;
-    round.in100[0] = 2;
-    round.out100[0] = 2;
-    const GolfRound before = round;
-    ASSERT_EQ(golfAppendPenalty(round, 0, field, GolfPenaltyKind::Hazard), GolfPenaltyMutationStatus::Changed);
-    ASSERT_EQ(golfRemoveLatestPenalty(round, 0, field), GolfPenaltyMutationStatus::Changed);
-    EXPECT_EQ(memcmp(&round, &before, sizeof(round)), 0);
+    GolfPlayerScore& score = scores[static_cast<uint8_t>(field)];
+    score.putts[0] = 2;
+    score.in100[0] = 2;
+    score.out100[0] = 2;
+    const GolfPlayerScore before = score;
+    ASSERT_EQ(golfAppendPenalty(score, 0, field, GolfPenaltyKind::Hazard), GolfPenaltyMutationStatus::Changed);
+    ASSERT_EQ(golfRemoveLatestPenalty(score, 0, field), GolfPenaltyMutationStatus::Changed);
+    EXPECT_EQ(memcmp(&score, &before, sizeof(score)), 0);
   }
 }
 
-TEST(GolfPenalty, PuttsPenaltyAddsAndRemovesTheContainingIn100Stroke) {
-  GolfRound round = oneHole();
-  round.putts[0] = 1;
-  round.in100[0] = 3;
-  const GolfRound before = round;
-  ASSERT_EQ(golfAppendPenalty(round, 0, GolfField::Putts, GolfPenaltyKind::Hazard),
+TEST_F(GolfPenaltyTest, PuttsPenaltyAddsAndRemovesTheContainingIn100Stroke) {
+  GolfPlayerScore& score = scores[0];
+  score.putts[0] = 1;
+  score.in100[0] = 3;
+  const GolfPlayerScore before = score;
+  ASSERT_EQ(golfAppendPenalty(score, 0, GolfField::Putts, GolfPenaltyKind::Hazard),
             GolfPenaltyMutationStatus::Changed);
-  EXPECT_EQ(round.putts[0], 2);
-  EXPECT_EQ(round.in100[0], 4);
-  ASSERT_EQ(golfRemoveLatestPenalty(round, 0, GolfField::Putts), GolfPenaltyMutationStatus::Changed);
-  EXPECT_EQ(memcmp(&round, &before, sizeof(round)), 0);
+  EXPECT_EQ(score.putts[0], 2);
+  EXPECT_EQ(score.in100[0], 4);
+  ASSERT_EQ(golfRemoveLatestPenalty(score, 0, GolfField::Putts), GolfPenaltyMutationStatus::Changed);
+  EXPECT_EQ(memcmp(&score, &before, sizeof(score)), 0);
 }
 
-TEST(GolfPenalty, RemoveTakesMostRecentMarkerOnRequestedField) {
-  GolfRound round = oneHole();
-  ASSERT_EQ(golfAppendPenalty(round, 0, GolfField::Out100, GolfPenaltyKind::Hazard),
+TEST_F(GolfPenaltyTest, RemoveTakesMostRecentMarkerOnRequestedField) {
+  GolfPlayerScore& score = scores[0];
+  ASSERT_EQ(golfAppendPenalty(score, 0, GolfField::Out100, GolfPenaltyKind::Hazard),
             GolfPenaltyMutationStatus::Changed);
-  ASSERT_EQ(golfAppendPenalty(round, 0, GolfField::In100, GolfPenaltyKind::Ob), GolfPenaltyMutationStatus::Changed);
-  ASSERT_EQ(golfAppendPenalty(round, 0, GolfField::Out100, GolfPenaltyKind::Ob), GolfPenaltyMutationStatus::Changed);
+  ASSERT_EQ(golfAppendPenalty(score, 0, GolfField::In100, GolfPenaltyKind::Ob), GolfPenaltyMutationStatus::Changed);
+  ASSERT_EQ(golfAppendPenalty(score, 0, GolfField::Out100, GolfPenaltyKind::Ob), GolfPenaltyMutationStatus::Changed);
 
-  ASSERT_EQ(golfRemoveLatestPenalty(round, 0, GolfField::Out100), GolfPenaltyMutationStatus::Changed);
-  ASSERT_EQ(round.penaltyCount[0], 2);
+  ASSERT_EQ(golfRemoveLatestPenalty(score, 0, GolfField::Out100), GolfPenaltyMutationStatus::Changed);
+  ASSERT_EQ(score.penaltyCount[0], 2);
   GolfPenaltyEvent first{};
   GolfPenaltyEvent second{};
-  ASSERT_TRUE(golfPenaltyEventAt(round, 0, 0, first));
-  ASSERT_TRUE(golfPenaltyEventAt(round, 0, 1, second));
+  ASSERT_TRUE(golfPenaltyEventAt(score, 0, 0, first));
+  ASSERT_TRUE(golfPenaltyEventAt(score, 0, 1, second));
   EXPECT_EQ(first.field, GolfField::Out100);
   EXPECT_EQ(first.kind, GolfPenaltyKind::Hazard);
   EXPECT_EQ(second.field, GolfField::In100);
   EXPECT_EQ(second.kind, GolfPenaltyKind::Ob);
-  EXPECT_EQ(round.out100[0], 1);
-  EXPECT_EQ(round.in100[0], 1);
+  EXPECT_EQ(score.out100[0], 1);
+  EXPECT_EQ(score.in100[0], 1);
 }
 
-TEST(GolfPenalty, CapRefusesWithoutMutation) {
-  GolfRound round = oneHole();
+TEST_F(GolfPenaltyTest, CapRefusesWithoutMutation) {
+  GolfPlayerScore& score = scores[0];
   for (uint8_t index = 0; index < GolfRound::MAX_PENALTIES_PER_HOLE; ++index) {
-    ASSERT_EQ(golfAppendPenalty(round, 0, GolfField::Out100, GolfPenaltyKind::Hazard),
+    ASSERT_EQ(golfAppendPenalty(score, 0, GolfField::Out100, GolfPenaltyKind::Hazard),
               GolfPenaltyMutationStatus::Changed);
   }
-  const GolfRound before = round;
-  EXPECT_EQ(golfAppendPenalty(round, 0, GolfField::In100, GolfPenaltyKind::Ob), GolfPenaltyMutationStatus::HoleFull);
-  EXPECT_EQ(memcmp(&round, &before, sizeof(round)), 0);
+  const GolfPlayerScore before = score;
+  EXPECT_EQ(golfAppendPenalty(score, 0, GolfField::In100, GolfPenaltyKind::Ob),
+            GolfPenaltyMutationStatus::HoleFull);
+  EXPECT_EQ(memcmp(&score, &before, sizeof(score)), 0);
 }
 
-TEST(GolfPenalty, StrokeTotalsCoverHazardObMixedAndCap) {
-  GolfRound hazard = oneHole();
-  ASSERT_EQ(golfAppendPenalty(hazard, 0, GolfField::Out100, GolfPenaltyKind::Hazard),
+TEST_F(GolfPenaltyTest, StrokeTotalsCoverHazardObMixedAndCap) {
+  ASSERT_EQ(golfAppendPenalty(scores[0], 0, GolfField::Out100, GolfPenaltyKind::Hazard),
             GolfPenaltyMutationStatus::Changed);
-  EXPECT_EQ(golfPenaltyStrokesForHole(hazard, 0), 1);
+  EXPECT_EQ(golfPenaltyStrokesForHole(scores[0], 0), 1);
 
-  GolfRound ob = oneHole();
-  ASSERT_EQ(golfAppendPenalty(ob, 0, GolfField::Out100, GolfPenaltyKind::Ob), GolfPenaltyMutationStatus::Changed);
-  EXPECT_EQ(golfPenaltyStrokesForHole(ob, 0), 2);
-
-  GolfRound mixed = oneHole();
-  ASSERT_EQ(golfAppendPenalty(mixed, 0, GolfField::Out100, GolfPenaltyKind::Hazard),
+  ASSERT_EQ(golfAppendPenalty(scores[1], 0, GolfField::Out100, GolfPenaltyKind::Ob),
             GolfPenaltyMutationStatus::Changed);
-  ASSERT_EQ(golfAppendPenalty(mixed, 0, GolfField::In100, GolfPenaltyKind::Ob), GolfPenaltyMutationStatus::Changed);
-  EXPECT_EQ(golfPenaltyStrokesForHole(mixed, 0), 3);
-  EXPECT_EQ(golfPenaltyStrokesForRound(mixed), 3);
+  EXPECT_EQ(golfPenaltyStrokesForHole(scores[1], 0), 2);
 
-  GolfRound capped = oneHole();
+  ASSERT_EQ(golfAppendPenalty(scores[2], 0, GolfField::Out100, GolfPenaltyKind::Hazard),
+            GolfPenaltyMutationStatus::Changed);
+  ASSERT_EQ(golfAppendPenalty(scores[2], 0, GolfField::In100, GolfPenaltyKind::Ob),
+            GolfPenaltyMutationStatus::Changed);
+  EXPECT_EQ(golfPenaltyStrokesForHole(scores[2], 0), 3);
+  EXPECT_EQ(golfPenaltyStrokesForRound(scores[2], 1), 3);
+
   for (uint8_t index = 0; index < GolfRound::MAX_PENALTIES_PER_HOLE; ++index) {
-    ASSERT_EQ(golfAppendPenalty(capped, 0, GolfField::Out100,
+    ASSERT_EQ(golfAppendPenalty(scores[3], 0, GolfField::Out100,
                                 index % 2 == 0 ? GolfPenaltyKind::Hazard : GolfPenaltyKind::Ob),
               GolfPenaltyMutationStatus::Changed);
   }
-  EXPECT_EQ(golfPenaltyStrokesForHole(capped, 0), 12);
+  EXPECT_EQ(golfPenaltyStrokesForHole(scores[3], 0), 12);
 }
 
-TEST(GolfPenalty, WorkedParFourWaterScoresSix) {
-  GolfRound round = oneHole();
-  ASSERT_EQ(golfAppendPenalty(round, 0, GolfField::Out100, GolfPenaltyKind::Hazard),
+TEST_F(GolfPenaltyTest, PenaltyMutationCannotTouchAnotherPlayer) {
+  scores[1].putts[0] = 4;
+  scores[1].in100[0] = 5;
+  const GolfPlayerScore untouched = scores[1];
+  ASSERT_EQ(golfAppendPenalty(scores[0], 0, GolfField::Out100, GolfPenaltyKind::Hazard),
             GolfPenaltyMutationStatus::Changed);
-  increment(round, GolfField::Out100, 2);
-  increment(round, GolfField::Putts, 2);
-  EXPECT_EQ(round.out100[0], 3);
-  EXPECT_EQ(round.in100[0], 2);
-  EXPECT_EQ(golfPenaltyStrokesForHole(round, 0), 1);
-  EXPECT_EQ(static_cast<uint16_t>(round.in100[0] + round.out100[0] + golfPenaltyStrokesForHole(round, 0)), 6);
+  EXPECT_EQ(memcmp(&scores[1], &untouched, sizeof(untouched)), 0);
 }
 
-TEST(GolfPenalty, WorkedParFourObScoresSeven) {
-  GolfRound round = oneHole();
-  ASSERT_EQ(golfAppendPenalty(round, 0, GolfField::Out100, GolfPenaltyKind::Ob), GolfPenaltyMutationStatus::Changed);
-  increment(round, GolfField::Out100, 2);
-  increment(round, GolfField::Putts, 2);
-  EXPECT_EQ(static_cast<uint16_t>(round.in100[0] + round.out100[0] + golfPenaltyStrokesForHole(round, 0)), 7);
+TEST_F(GolfPenaltyTest, WorkedParFourWaterScoresSix) {
+  GolfPlayerScore& score = scores[0];
+  ASSERT_EQ(golfAppendPenalty(score, 0, GolfField::Out100, GolfPenaltyKind::Hazard),
+            GolfPenaltyMutationStatus::Changed);
+  increment(score, GolfField::Out100, 2);
+  increment(score, GolfField::Putts, 2);
+  EXPECT_EQ(score.out100[0], 3);
+  EXPECT_EQ(score.in100[0], 2);
+  EXPECT_EQ(golfPenaltyStrokesForHole(score, 0), 1);
+  EXPECT_EQ(static_cast<uint16_t>(score.in100[0] + score.out100[0] + golfPenaltyStrokesForHole(score, 0)), 6);
 }
 
-// CONTRACTS-V2 §13.1: a penalty added to an unlogged hole must be applied on top
-// of the seeded par preview, never on top of bare stored zeros — otherwise the
-// golfer's displayed putts and inside-100 appear wiped the moment the hole flips
-// to "entered". The scoring screen orchestrates this by seeding first
-// (GolfScoringActivity::ensureHoleSeeded); these tests lock down the composition
-// it depends on.
-TEST(GolfPenalty, PenaltyOnSeededUnloggedHoleKeepsPuttsAndIn100) {
-  GolfRound seeded = oneHole();
-  seeded.par[0] = 5;
-  ASSERT_TRUE(seedGolfHoleAtPar(seeded, 0));
+TEST_F(GolfPenaltyTest, WorkedParFourObScoresSeven) {
+  GolfPlayerScore& score = scores[0];
+  ASSERT_EQ(golfAppendPenalty(score, 0, GolfField::Out100, GolfPenaltyKind::Ob),
+            GolfPenaltyMutationStatus::Changed);
+  increment(score, GolfField::Out100, 2);
+  increment(score, GolfField::Putts, 2);
+  EXPECT_EQ(static_cast<uint16_t>(score.in100[0] + score.out100[0] + golfPenaltyStrokesForHole(score, 0)), 7);
+}
+
+TEST_F(GolfPenaltyTest, PenaltyOnSeededUnloggedHoleKeepsPuttsAndIn100) {
+  GolfPlayerScore& seeded = scores[0];
+  ASSERT_TRUE(seedGolfHoleAtPar(seeded, 0, 5));
   ASSERT_EQ(golfAppendPenalty(seeded, 0, GolfField::Out100, GolfPenaltyKind::Hazard),
             GolfPenaltyMutationStatus::Changed);
   EXPECT_EQ(seeded.putts[0], 2);
   EXPECT_EQ(seeded.in100[0], 2);
-  EXPECT_EQ(seeded.out100[0], 4);  // 3 seeded + the shot that was played
+  EXPECT_EQ(seeded.out100[0], 4);
   EXPECT_EQ(golfPenaltyStrokesForHole(seeded, 0), 1);
 
-  // Without the seed the same press leaves the hole reading 0 / 0 / 1 — the bug.
-  GolfRound unseeded = oneHole();
-  unseeded.par[0] = 5;
+  GolfPlayerScore& unseeded = scores[1];
   ASSERT_EQ(golfAppendPenalty(unseeded, 0, GolfField::Out100, GolfPenaltyKind::Hazard),
             GolfPenaltyMutationStatus::Changed);
   EXPECT_EQ(unseeded.putts[0], 0);
   EXPECT_EQ(unseeded.in100[0], 0);
 }
 
-TEST(GolfPenalty, RemovePenaltyFromSeededHoleRestoresPreview) {
-  GolfRound round = oneHole();
-  round.par[0] = 5;
-  ASSERT_TRUE(seedGolfHoleAtPar(round, 0));
-  const GolfRound afterSeed = round;
-  ASSERT_EQ(golfAppendPenalty(round, 0, GolfField::Out100, GolfPenaltyKind::Ob), GolfPenaltyMutationStatus::Changed);
-  ASSERT_EQ(golfRemoveLatestPenalty(round, 0, GolfField::Out100), GolfPenaltyMutationStatus::Changed);
-  EXPECT_EQ(memcmp(&round, &afterSeed, sizeof(round)), 0);
+TEST_F(GolfPenaltyTest, RemovePenaltyFromSeededHoleRestoresPreview) {
+  GolfPlayerScore& score = scores[0];
+  ASSERT_TRUE(seedGolfHoleAtPar(score, 0, 5));
+  const GolfPlayerScore afterSeed = score;
+  ASSERT_EQ(golfAppendPenalty(score, 0, GolfField::Out100, GolfPenaltyKind::Ob),
+            GolfPenaltyMutationStatus::Changed);
+  ASSERT_EQ(golfRemoveLatestPenalty(score, 0, GolfField::Out100), GolfPenaltyMutationStatus::Changed);
+  EXPECT_EQ(memcmp(&score, &afterSeed, sizeof(score)), 0);
 }
 
-TEST(GolfPenalty, SeedIsIdempotentSoRepeatMutationPathsAreSafe) {
-  GolfRound round = oneHole();
-  round.par[0] = 4;
-  ASSERT_TRUE(seedGolfHoleAtPar(round, 0));
-  const GolfRound afterSeed = round;
-  // A second seed (a different mutation path re-entering) must be a no-op.
-  EXPECT_FALSE(seedGolfHoleAtPar(round, 0));
-  EXPECT_EQ(memcmp(&round, &afterSeed, sizeof(round)), 0);
+TEST_F(GolfPenaltyTest, SeedIsIdempotentSoRepeatMutationPathsAreSafe) {
+  GolfPlayerScore& score = scores[0];
+  ASSERT_TRUE(seedGolfHoleAtPar(score, 0, 4));
+  const GolfPlayerScore afterSeed = score;
+  EXPECT_FALSE(seedGolfHoleAtPar(score, 0, 4));
+  EXPECT_EQ(memcmp(&score, &afterSeed, sizeof(score)), 0);
 }
+
+}  // namespace

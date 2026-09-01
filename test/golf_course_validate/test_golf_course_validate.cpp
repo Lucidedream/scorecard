@@ -64,15 +64,19 @@ TEST(GolfBuiltInCourses, SanyangShipsVerifiedScorecardDataForBothTees) {
 
   EXPECT_TRUE(validateGolfCourse(*sanyang).valid);
 
-  GolfCourse white = *sanyang;
-  ASSERT_TRUE(applyBuiltInTeeYardages(sanyangIndex, "White", white));
-  EXPECT_EQ(std::accumulate(white.par, white.par + 9, 0), 36);
-  EXPECT_EQ(std::accumulate(white.par + 9, white.par + 18, 0), 36);
-  EXPECT_EQ(std::accumulate(white.par, white.par + 18, 0), 72);
+  GolfCourseFile builtIn{};
+  builtIn.builtInIndex = sanyangIndex;
+  GolfTeeResolution blue{};
+  ASSERT_TRUE(CourseStore::resolveTee(builtIn, *sanyang, TeeSelection::Blue, blue));
+  ASSERT_TRUE(blue.hasYards);
+  EXPECT_EQ(std::accumulate(blue.yards, blue.yards + 18, 0), 6466);
+
+  GolfTeeResolution white{};
+  ASSERT_TRUE(CourseStore::resolveTee(builtIn, *sanyang, TeeSelection::White, white));
+  ASSERT_TRUE(white.hasYards);
   EXPECT_EQ(std::accumulate(white.yards, white.yards + 9, 0), 2910);
   EXPECT_EQ(std::accumulate(white.yards + 9, white.yards + 18, 0), 3043);
   EXPECT_EQ(std::accumulate(white.yards, white.yards + 18, 0), 5953);
-  EXPECT_TRUE(validateGolfCourse(white).valid);
 }
 
 TEST(GolfBuiltInCourses, MoganShanGowinShipsVerifiedBlueTeeCardWithoutStrokeIndexes) {
@@ -106,6 +110,140 @@ TEST(GolfBuiltInCourses, MoganShanGowinShipsVerifiedBlueTeeCardWithoutStrokeInde
   for (uint8_t hole = 0; hole < moganshan->holeCount; ++hole) EXPECT_EQ(moganshan->si[hole], 0);
 
   EXPECT_TRUE(validateGolfCourse(*moganshan).valid);
+}
+
+TEST(GolfTeeResolver, OtherBuiltInOffersOnlyItsCanonicalTeeRow) {
+  GolfCourseFile builtIn{};
+  builtIn.builtInIndex = MOGANSHAN_BUILT_IN_INDEX;
+  const GolfCourse& moganshan = GOLF_BUILT_IN_COURSES[MOGANSHAN_BUILT_IN_INDEX];
+  GolfTeeResolution resolved{};
+
+  ASSERT_TRUE(CourseStore::resolveTee(builtIn, moganshan, TeeSelection::Blue, resolved));
+  EXPECT_EQ(std::accumulate(resolved.yards, resolved.yards + 18, 0), 6232);
+  EXPECT_FALSE(CourseStore::resolveTee(builtIn, moganshan, TeeSelection::White, resolved));
+  EXPECT_FALSE(resolved.hasYards);
+}
+
+TEST(GolfTeeResolver, SdOverrideNeverBorrowsBuiltInAlternate) {
+  GolfCourseFile overrideFile{};
+  strcpy(overrideFile.filename, "sanyang.json");
+  overrideFile.builtInIndex = SANYANG_BUILT_IN_INDEX;
+  GolfCourse overrideCourse = GOLF_BUILT_IN_COURSES[SANYANG_BUILT_IN_INDEX];
+  strcpy(overrideCourse.tees, "White");
+  for (uint8_t hole = 0; hole < overrideCourse.holeCount; ++hole) overrideCourse.yards[hole] = 200 + hole;
+
+  GolfTeeResolution resolved{};
+  ASSERT_TRUE(CourseStore::resolveTee(overrideFile, overrideCourse, TeeSelection::White, resolved));
+  EXPECT_EQ(resolved.yards[0], 200);
+  EXPECT_EQ(resolved.yards[17], 217);
+  EXPECT_FALSE(CourseStore::resolveTee(overrideFile, overrideCourse, TeeSelection::Blue, resolved));
+  EXPECT_FALSE(resolved.hasYards);
+}
+
+TEST(GolfTeeResolver, NoncanonicalCourseTeeNameOffersNoChoice) {
+  GolfCourseFile sdFile{};
+  strcpy(sdFile.filename, "custom.json");
+  GolfCourse course = GOLF_BUILT_IN_COURSES[MOGANSHAN_BUILT_IN_INDEX];
+  strcpy(course.tees, "Blue/White");
+  GolfTeeResolution resolved{};
+
+  EXPECT_FALSE(CourseStore::resolveTee(sdFile, course, TeeSelection::Blue, resolved));
+  EXPECT_FALSE(CourseStore::resolveTee(sdFile, course, TeeSelection::White, resolved));
+}
+
+TEST(GolfTeeResolver, EmptyTeeAndNoYardsOffersBothSelectionOnlyChoices) {
+  GolfCourseFile sdFile{};
+  strcpy(sdFile.filename, "template.json");
+  GolfCourse course{};
+  strcpy(course.courseName, "Template course");
+  course.holeCount = 18;
+
+  GolfTeeResolution blue{};
+  ASSERT_TRUE(CourseStore::resolveTee(sdFile, course, TeeSelection::Blue, blue));
+  EXPECT_FALSE(blue.hasYards);
+  EXPECT_EQ(blue.yards, nullptr);
+
+  GolfTeeResolution white{};
+  ASSERT_TRUE(CourseStore::resolveTee(sdFile, course, TeeSelection::White, white));
+  EXPECT_FALSE(white.hasYards);
+  EXPECT_EQ(white.yards, nullptr);
+}
+
+TEST(GolfTeeResolver, UnlabelledYardsCannotBeAssignedToEitherTee) {
+  GolfCourseFile sdFile{};
+  strcpy(sdFile.filename, "unlabelled.json");
+  GolfCourse course{};
+  strcpy(course.courseName, "Unlabelled yards");
+  course.hasYards = true;
+  course.yards[0] = 321;
+  GolfTeeResolution resolved{};
+
+  EXPECT_FALSE(CourseStore::resolveTee(sdFile, course, TeeSelection::Blue, resolved));
+  EXPECT_FALSE(CourseStore::resolveTee(sdFile, course, TeeSelection::White, resolved));
+}
+
+TEST(GolfPlayerSetupDefaults, PrefersTruthfulBlueAndLeavesOtherSlotsDisabled) {
+  GolfCourseFile builtIn{};
+  builtIn.builtInIndex = SANYANG_BUILT_IN_INDEX;
+  const GolfCourse& course = GOLF_BUILT_IN_COURSES[SANYANG_BUILT_IN_INDEX];
+  GolfRound round{};
+  CourseStore::applyGolfCourse(course, round, 0);
+
+  ASSERT_TRUE(CourseStore::initializeGolfPlayerSelection(builtIn, course, round));
+  EXPECT_EQ(round.players[0].tee, TeeSelection::Blue);
+  for (uint8_t slot = 1; slot < GolfRound::MAX_PLAYERS; ++slot) {
+    EXPECT_EQ(round.players[slot].tee, TeeSelection::NotPlay);
+  }
+}
+
+TEST(GolfPlayerSetupDefaults, FallsBackToExactWhiteWhenBlueIsUnavailable) {
+  GolfCourseFile sdFile{};
+  strcpy(sdFile.filename, "white-only.json");
+  GolfCourse course{};
+  strcpy(course.courseName, "White only");
+  strcpy(course.tees, "White");
+  course.hasYards = true;
+  for (uint8_t hole = 0; hole < GolfRound::MAX_HOLES; ++hole) course.yards[hole] = 200 + hole;
+  GolfRound round{};
+  CourseStore::applyGolfCourse(course, round, 0);
+
+  ASSERT_TRUE(CourseStore::initializeGolfPlayerSelection(sdFile, course, round));
+  EXPECT_EQ(round.players[0].tee, TeeSelection::White);
+  for (uint8_t slot = 1; slot < GolfRound::MAX_PLAYERS; ++slot) {
+    EXPECT_EQ(round.players[slot].tee, TeeSelection::NotPlay);
+  }
+}
+
+TEST(GolfPlayerSetupDefaults, EmptyNoYardCourseDefaultsToSelectionOnlyBlue) {
+  GolfCourseFile sdFile{};
+  strcpy(sdFile.filename, "template.json");
+  GolfCourse course{};
+  strcpy(course.courseName, "Template course");
+  GolfRound round{};
+  CourseStore::applyGolfCourse(course, round, 0);
+
+  ASSERT_TRUE(CourseStore::initializeGolfPlayerSelection(sdFile, course, round));
+  EXPECT_EQ(round.players[0].tee, TeeSelection::Blue);
+  for (const uint16_t yards : round.players[0].yards) EXPECT_EQ(yards, 0);
+}
+
+TEST(GolfPlayerSetupDefaults, GuessedOrUnlabelledYardTeeKeepsCompleteDisabled) {
+  GolfCourseFile sdFile{};
+  strcpy(sdFile.filename, "custom.json");
+  GolfCourse course{};
+  strcpy(course.courseName, "Custom");
+  strcpy(course.tees, "Blue/White");
+  GolfRound round{};
+  CourseStore::applyGolfCourse(course, round, 0);
+
+  EXPECT_FALSE(CourseStore::initializeGolfPlayerSelection(sdFile, course, round));
+  EXPECT_EQ(round.players[0].tee, TeeSelection::NotPlay);
+
+  course.tees[0] = '\0';
+  course.hasYards = true;
+  course.yards[0] = 300;
+  EXPECT_FALSE(CourseStore::initializeGolfPlayerSelection(sdFile, course, round));
+  for (const GolfPlayer& player : round.players) EXPECT_EQ(player.tee, TeeSelection::NotPlay);
 }
 
 TEST(GolfCourseValidate, RealPebbleBeachFixtureValidatesWithoutOptionalArrays) {
@@ -211,30 +349,36 @@ TEST(GolfCourseValidate, RejectsUnsupportedHoleCount) {
   EXPECT_EQ(validateGolfCourse(course).error, GolfCourseValidationError::HoleCount);
 }
 
-TEST(GolfCourseApply, SeedsRoundAndClearsAllCounters) {
+TEST(GolfCourseApply, SeedsSharedFactsDefaultsPlayersAndClearsPlayerOwnedData) {
   GolfCourse course = nineHoleCourse();
   strcpy(course.courseName, "Pebble Beach");
-  strcpy(course.tees, "Blue");
-  course.yards[0] = 380;
-  course.si[0] = 7;
+  course.hasSi = true;
+  for (uint8_t hole = 0; hole < course.holeCount; ++hole) course.si[hole] = hole + 1;
   GolfRound round{};
-  memset(round.putts, 4, sizeof(round.putts));
-  memset(round.in100, 3, sizeof(round.in100));
-  memset(round.out100, 9, sizeof(round.out100));
+  memset(round.players, 0xff, sizeof(round.players));
 
   CourseStore::applyGolfCourse(course, round, 0x1234);
 
   EXPECT_STREQ(round.courseName, "Pebble Beach");
-  EXPECT_STREQ(round.tees, "Blue");
   EXPECT_EQ(round.dateYmd, 0x1234);
   EXPECT_EQ(round.holeCount, 9);
   EXPECT_EQ(round.currentHole, 0);
+  EXPECT_EQ(round.currentPlayer, 0);
   EXPECT_EQ(round.par[0], 4);
-  EXPECT_EQ(round.yards[0], 380);
-  for (uint8_t hole = 0; hole < GolfRound::MAX_HOLES; ++hole) {
-    EXPECT_EQ(round.putts[hole], 0);
-    EXPECT_EQ(round.in100[hole], 0);
-    EXPECT_EQ(round.out100[hole], 0);
+  EXPECT_TRUE(round.hasSi);
+  EXPECT_EQ(round.si[0], 1);
+  EXPECT_EQ(round.si[8], 9);
+  for (uint8_t slot = 0; slot < GolfRound::MAX_PLAYERS; ++slot) {
+    EXPECT_STREQ(round.players[slot].name, GOLF_DEFAULT_PLAYER_NAMES[slot]);
+    EXPECT_EQ(round.players[slot].tee, TeeSelection::NotPlay);
+    for (uint8_t hole = 0; hole < GolfRound::MAX_HOLES; ++hole) {
+      EXPECT_EQ(round.players[slot].yards[hole], 0);
+      EXPECT_EQ(round.players[slot].score.putts[hole], 0);
+      EXPECT_EQ(round.players[slot].score.in100[hole], 0);
+      EXPECT_EQ(round.players[slot].score.out100[hole], 0);
+      EXPECT_EQ(round.players[slot].score.penaltyCount[hole], 0);
+      for (uint8_t byte : round.players[slot].score.penaltyEvents[hole]) EXPECT_EQ(byte, 0);
+    }
   }
 }
 

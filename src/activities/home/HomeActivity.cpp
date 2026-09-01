@@ -24,7 +24,6 @@
 
 #if CROSSPOINT_GOLF
 #include "activities/golf/GolfNavigation.h"
-#include "activities/golf/GolfStrings.h"
 #endif
 
 int HomeActivity::getMenuItemCount() const {
@@ -355,7 +354,7 @@ void HomeActivity::render(RenderLock&&) {
   menuItems.reserve(7);
   menuIcons.reserve(7);
 #if CROSSPOINT_GOLF
-  menuItems.push_back(GolfStrings::APP_TITLE);
+  menuItems.push_back(tr(STR_GOLF_APP_TITLE));
   menuIcons.push_back(Scorecard);
 #endif
   menuItems.insert(menuItems.end(),

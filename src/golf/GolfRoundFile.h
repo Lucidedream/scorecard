@@ -2,14 +2,10 @@
 
 #include "GolfRound.h"
 
-// Reads one completed-round file from /golf/rounds/<name>.json (CONTRACTS-V2 §8).
-// The completed-round schema is the state schema minus currentHole and yards
-// (CONTRACTS.md §5.2), so this shares GolfJson / GolfRoundDecode with
-// GolfRoundStore::fromJson.
+// Reads one completed group-round file from /golf/rounds/<name>.json. V4 uses
+// the same shared/player payload as state.json and omits only currentHole and
+// currentPlayer. V2/V3 are migrated into slot 0 while v1 remains rejected.
 //
-// Returns false — never a partial round — on a missing file, unparseable JSON, a
-// rejected "v": 1 record, an array length that disagrees with "holes", or a
-// validation rejection. A repair applied by validateGolfRound() is logged, not
-// rejected. History selects one row and calls this once; on failure the caller
-// falls back to the CSV-only summary screen.
+// Returns false without modifying `out` on a missing file, malformed JSON,
+// unsupported version, invalid fixed-array length, OOM, or validation failure.
 bool loadGolfRoundFile(const char* path, GolfRound& out);

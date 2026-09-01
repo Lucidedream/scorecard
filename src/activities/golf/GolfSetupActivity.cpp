@@ -2,23 +2,16 @@
 
 #if defined(CROSSPOINT_GOLF)
 
-#include <HalStorage.h>
-#include <Logging.h>
-
-#include <cstdio>
-#include <cstring>
+#include <I18n.h>
 
 #include "GolfNavigation.h"
-#include "GolfStrings.h"
+#include "GolfUiLayout.h"
 #include "components/UITheme.h"
-#include "golf/CourseBuiltIns.h"
 #include "golf/CourseOrder.h"
-#include "golf/GolfRoundStore.h"
 
 namespace fui = freeink::ui;
 
 void GolfSetupActivity::onEnter() {
-  phase = Phase::Course;
   loadCourses();
   UiListActivity::onEnter();
 }
@@ -55,95 +48,45 @@ void GolfSetupActivity::loadCourses() {
   }
   if (overflow) {
     rows[row] = {};
-    rows[row].label = GolfStrings::COURSE_OVERFLOW;
+    rows[row].label = tr(STR_GOLF_COURSE_OVERFLOW);
     rows[row].enabled = false;
-    ++row;
   }
 }
 
-int GolfSetupActivity::listCount() const {
-  if (phase == Phase::Tees) return 2;
-  return courseCount + (overflow ? 1 : 0);
-}
+int GolfSetupActivity::listCount() const { return courseCount + (overflow ? 1 : 0); }
 
 const char* GolfSetupActivity::headerTitle() const {
-  if (saveFailed) return GolfStrings::SAVE_ERROR;
-  if (phase == Phase::Tees) return GolfStrings::CHOOSE_TEES;
-  return noCourses ? GolfStrings::NO_COURSES : GolfStrings::COURSES;
+  return noCourses ? tr(STR_GOLF_NO_COURSES) : tr(STR_GOLF_CHOOSE_COURSE);
 }
 
-void GolfSetupActivity::onBackButton() {
-  if (phase == Phase::Tees) {
-    phase = Phase::Course;
-    saveFailed = false;
-    nav.reset();
-    loadCourses();
-    requestUpdate();
-    return;
-  }
-  openGolfHome(activityManager, renderer, mappedInput);
-}
+void GolfSetupActivity::onBackButton() { openGolfHome(activityManager, renderer, mappedInput); }
 
 void GolfSetupActivity::activateIndex(const int index) {
   app.clearTapFlash();
-  if (phase == Phase::Tees) {
-    if (index == 0) startRound(GolfStrings::BLUE);
-    if (index == 1) startRound(GolfStrings::WHITE);
-    return;
-  }
-  if (index < courseCount) {
-    selectCourse(static_cast<uint8_t>(index));
-    return;
-  }
-}
-
-void GolfSetupActivity::selectCourse(const uint8_t index) {
-  selectedCourse = index;
-  phase = Phase::Tees;
-  saveFailed = false;
-  nav.reset();
-  rows[0] = {};
-  rows[0].label = GolfStrings::BLUE_TEES;
-  rows[0].actionValue = 0;
-  rows[1] = {};
-  rows[1].label = GolfStrings::WHITE_TEES;
-  rows[1].actionValue = 1;
-  requestUpdate();
-}
-
-void GolfSetupActivity::startRound(const char* tees) {
-  GolfCourse& chosenCourse = courses[selectedCourse];
-  const GolfCourseFile& selectedFile = files[selectedCourse];
-  // Tee-specific yardages are a built-in-only mechanism. An SD file (even one that
-  // overrides a built-in, CONTRACTS-V2 §7.1) carries its own data and is left as loaded.
-  if (selectedFile.filename[0] == '\0') {
-    applyBuiltInTeeYardages(selectedFile.builtInIndex, tees, chosenCourse);
-  }
-  snprintf(chosenCourse.tees, sizeof(chosenCourse.tees), "%s", tees);
-  GolfRound round{};
-  CourseStore::applyGolfCourse(chosenCourse, round, 0);
-  GOLF_ROUND_STORE.setRound(round);
-  if (!GOLF_ROUND_STORE.saveToFile()) {
-    saveFailed = true;
-    requestUpdate();
-    return;
-  }
-  openGolfScoring(activityManager, renderer, mappedInput);
+  if (index < 0 || index >= courseCount) return;
+  openGolfPlayerSetup(activityManager, renderer, mappedInput, files[index], courses[index]);
 }
 
 void GolfSetupActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  screen.setContentMargin(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
-                                      static_cast<int16_t>(metrics.buttonHintsHeight), 0});
+  const auto layout = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding,
+                                            metrics.headerHeight);
+  screen.setContentMargin(layout.contentMargins);
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
-  fui::ListProps props;
-  props.items = rows;
-  props.count = static_cast<uint16_t>(listCount());
-  props.action = ACTION_ROW;
-  props.inputMask = fui::InputTouch;
-  props.subtitleText = screen.theme().smallText;
-  syncListViewport(screen, props, phase == Phase::Course);
-  screen.list(props);
+  listProps = {};
+  listProps.items = rows;
+  listProps.count = static_cast<uint16_t>(listCount());
+  listProps.action = ACTION_ROW;
+  listProps.inputMask = fui::InputTouch;
+  syncListViewport(screen, listProps);
+  screen.list(listProps);
+}
+
+void GolfSetupActivity::drawChrome() {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding, metrics.headerHeight);
+  GUI.drawHeader(renderer,
+                 Rect{layout.header.x, layout.header.y, layout.header.width, layout.header.height}, headerTitle());
 }
 
 #endif

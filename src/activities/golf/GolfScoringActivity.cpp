@@ -6,6 +6,7 @@
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <HalDisplay.h>
+#include <I18n.h>
 #include <Memory.h>
 
 #include <cstdio>
@@ -14,34 +15,19 @@
 #include "CrossPointSettings.h"
 #include "GolfLargeNumber.h"
 #include "GolfNavigation.h"
+#include "GolfReviewFormat.h"
 #include "GolfRoundMenuActivity.h"
-#include "GolfStrings.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "golf/CourseStore.h"
 #include "golf/GolfPenalty.h"
 #include "golf/GolfRoundStore.h"
 #include "golf/GolfStats.h"
 
 namespace {
 
-constexpr int STATUS_BOTTOM = 46;
-constexpr int HOLE_BOTTOM = 156;
-constexpr int COUNTERS_BOTTOM = 626;
-constexpr int TOTALS_BOTTOM = 696;
 constexpr uint32_t IDLE_SAVE_MS = 5000;
 constexpr uint32_t REPEAT_START_MS = 500;
 constexpr uint32_t REPEAT_INTERVAL_MS = 250;
-
-// The three counter rows share HOLE_BOTTOM..countersRegionBottom() in a
-// 150:150:170 (unfocused:unfocused:focused) split; 470 is that sum at full height.
-constexpr int COUNTER_UNFOCUSED_WEIGHT = 150;
-constexpr int COUNTER_REGION_WEIGHT = 470;
-
-// Inverted "PENALTY +N" band, present only on a hole that has penalties. Its
-// height comes out of the counter region so the totals strip, nine strip and
-// footer sit at the same y in both layouts.
-constexpr int PENALTY_BAND_HEIGHT = 42;
 
 // Markers ("H" / "OB") drawn to the right of a field's number. No monospace
 // font is bundled, so the small UI font stands in for the mock's mono style.
@@ -63,25 +49,59 @@ constexpr int SHEET_TEXT_X = 92;     // title / subtitle left edge
 constexpr unsigned long PICKER_LONGPRESS_MS = 500;
 
 void formatToPar(const int16_t value, char* output, const size_t size) {
-  if (value == 0) {
-    snprintf(output, size, "%s", GolfStrings::EVEN);
-  } else {
-    snprintf(output, size, value > 0 ? "+%d" : "%d", value);
-  }
+  golfFormatReviewToPar(value, tr(STR_GOLF_EVEN), tr(STR_GOLF_TO_PAR_POSITIVE_FORMAT),
+                        tr(STR_GOLF_TO_PAR_NEGATIVE_FORMAT), output, size);
 }
 
-void ellipsize(const GfxRenderer& renderer, const char* input, char* output, const size_t size, const int maxWidth) {
+void ellipsize(const GfxRenderer& renderer, char* text, const size_t size, const int maxWidth) {
   if (size == 0) return;
-  snprintf(output, size, "%s", input == nullptr ? "" : input);
-  if (renderer.getTextWidth(UI_12_FONT_ID, output, EpdFontFamily::BOLD) <= maxWidth) return;
-  size_t length = strlen(output);
-  while (length > 3) {
-    output[--length] = '\0';
-    output[length - 3] = '.';
-    output[length - 2] = '.';
-    output[length - 1] = '.';
-    if (renderer.getTextWidth(UI_12_FONT_ID, output, EpdFontFamily::BOLD) <= maxWidth) return;
+  text[size - 1] = '\0';
+
+  const size_t inputLength = strlen(text);
+  size_t offset = 0;
+  while (offset < inputLength) {
+    const uint8_t lead = static_cast<uint8_t>(text[offset]);
+    size_t codepointBytes = 0;
+    if (lead < 0x80) {
+      codepointBytes = 1;
+    } else if ((lead & 0xe0) == 0xc0) {
+      codepointBytes = 2;
+    } else if ((lead & 0xf0) == 0xe0) {
+      codepointBytes = 3;
+    } else if ((lead & 0xf8) == 0xf0) {
+      codepointBytes = 4;
+    }
+    if (codepointBytes == 0 || offset + codepointBytes > inputLength) {
+      text[offset] = '\0';
+      break;
+    }
+    bool complete = true;
+    for (size_t byte = 1; byte < codepointBytes; ++byte) {
+      if ((static_cast<uint8_t>(text[offset + byte]) & 0xc0) != 0x80) complete = false;
+    }
+    if (!complete) {
+      text[offset] = '\0';
+      break;
+    }
+    offset += codepointBytes;
   }
+
+  if (renderer.getTextWidth(UI_12_FONT_ID, text, EpdFontFamily::BOLD) <= maxWidth) return;
+
+  constexpr char ELLIPSIS[] = "...";
+  size_t length = strlen(text);
+  while (length > 0) {
+    do {
+      --length;
+    } while (length > 0 && (static_cast<uint8_t>(text[length]) & 0xc0) == 0x80);
+    text[length] = '\0';
+    if (length + sizeof(ELLIPSIS) <= size) {
+      memcpy(text + length, ELLIPSIS, sizeof(ELLIPSIS));
+      if (renderer.getTextWidth(UI_12_FONT_ID, text, EpdFontFamily::BOLD) <= maxWidth) return;
+      text[length] = '\0';
+    }
+  }
+  snprintf(text, size, "%s", ELLIPSIS);
 }
 
 }  // namespace
@@ -89,54 +109,102 @@ void ellipsize(const GfxRenderer& renderer, const char* input, char* output, con
 void GolfScoringActivity::onEnter() {
   Activity::onEnter();
   resetUi();
-  loadCourseDisplayData();
+  if (GOLF_ROUND_STORE.isArchived()) {
+    LOG_ERR("GOLF", "Committed archive cannot re-enter scoring");
+    openGolfHome(activityManager, renderer, mappedInput);
+    return;
+  }
+
+  bool currentPlayerChanged = false;
+  bool hasEnabledPlayer = true;
+  {
+    RenderLock lock(*this);
+    GolfRound& round = GOLF_ROUND_STORE.getRound();
+    const uint8_t firstPlayer = golfFirstEnabledPlayer(round);
+    if (firstPlayer == GolfRound::NO_PLAYER) {
+      hasEnabledPlayer = false;
+      if (round.currentPlayer >= GolfRound::MAX_PLAYERS) round.currentPlayer = 0;
+    } else if (round.currentPlayer >= GolfRound::MAX_PLAYERS ||
+               !golfPlayerIsEnabled(round.players[round.currentPlayer])) {
+      round.currentPlayer = firstPlayer;
+      currentPlayerChanged = true;
+    }
+    resetTurnState();
+  }
+  if (!hasEnabledPlayer) LOG_ERR("GOLF", "Scoring round has no enabled player");
+  if (currentPlayerChanged) markDirtyForIdle();
   requestUpdate();
 }
 
 void GolfScoringActivity::onExit() { Activity::onExit(); }
 
-void GolfScoringActivity::loadCourseDisplayData() {
-  GolfCourse course{};
-  if (!CourseStore::findByName(GOLF_ROUND_STORE.getRound().courseName, course) || !course.hasSi) return;
-  memcpy(si, course.si, sizeof(si));
-  hasSi = true;
+bool GolfScoringActivity::rejectArchivedMutation() {
+  if (!GOLF_ROUND_STORE.isArchived()) return false;
+  LOG_ERR("GOLF", "Rejected mutation of committed archive");
+  {
+    RenderLock lock(*this);
+    saveFailed = true;
+  }
+  requestUpdate();
+  return true;
 }
 
 bool GolfScoringActivity::flushDirty() {
   const bool success = flushGolfRoundIfDirty();
-  if (!success) {
-    saveFailed = true;
-    requestUpdate();
+  const bool failed = !success;
+  bool failureStateChanged = false;
+  {
+    RenderLock lock(*this);
+    failureStateChanged = saveFailed != failed;
+    saveFailed = failed;
   }
+  if (failureStateChanged) requestUpdate();
   return success;
+}
+
+void GolfScoringActivity::resetTurnState() {
+  focusedField = GolfField::Putts;
+  carryNotice = nullptr;
+  pickerOpen = false;
+  pickerKind = GolfPenaltyKind::Hazard;
+  pickerHoleFull = false;
+  lastRepeatAt = 0;
+}
+
+void GolfScoringActivity::markDirtyForIdle() {
+  if (rejectArchivedMutation()) return;
+  markGolfRoundDirty();
+  lastChangeAt = millis();
+  RenderLock lock(*this);
+  saveFailed = false;
 }
 
 bool GolfScoringActivity::ensureHoleSeeded() {
   GolfRound& round = GOLF_ROUND_STORE.getRound();
-  return seedGolfHoleAtPar(round, round.currentHole);
+  GolfPlayerScore& score = round.players[round.currentPlayer].score;
+  return seedGolfHoleAtPar(score, round.currentHole, round.par[round.currentHole]);
 }
 
 void GolfScoringActivity::mutateCounter(const bool increment) {
+  if (rejectArchivedMutation()) return;
   GolfMutationResult result{};
   {
     RenderLock lock(*this);
     GolfRound& round = GOLF_ROUND_STORE.getRound();
+    GolfPlayerScore& score = round.players[round.currentPlayer].score;
     const bool seeded = ensureHoleSeeded();
-    result = increment ? incrementGolfCounter(round, round.currentHole, focusedField)
-                       : decrementGolfCounter(round, round.currentHole, focusedField);
+    result = increment ? incrementGolfCounter(score, round.currentHole, focusedField)
+                       : decrementGolfCounter(score, round.currentHole, focusedField);
     if (seeded && !result.changed) result.changed = true;
-    if (result.carriedIn100) carryNotice = GolfStrings::IN100_CARRY;
-    if (result.loweredPutts) carryNotice = GolfStrings::PUTTS_CARRY;
+    if (result.carriedIn100) carryNotice = tr(STR_GOLF_INSIDE_100_CARRY);
+    if (result.loweredPutts) carryNotice = tr(STR_GOLF_PUTTS_CARRY);
   }
-  if (result.changed) {
-    markGolfRoundDirty();
-    lastCounterChangeAt = millis();
-    saveFailed = false;
-  }
+  if (result.changed) markDirtyForIdle();
   if (result.changed) requestUpdate();
 }
 
 void GolfScoringActivity::removeOrDecrement() {
+  if (rejectArchivedMutation()) return;
   // Down on a field that has markers removes that field's most recent marker,
   // its shot, and its penalty strokes. Otherwise it is a plain decrement,
   // exactly as before. CONTRACTS-V2 §12.4.
@@ -145,8 +213,9 @@ void GolfScoringActivity::removeOrDecrement() {
   {
     RenderLock lock(*this);
     GolfRound& round = GOLF_ROUND_STORE.getRound();
+    GolfPlayerScore& score = round.players[round.currentPlayer].score;
     seeded = ensureHoleSeeded();
-    status = golfRemoveLatestPenalty(round, round.currentHole, focusedField);
+    status = golfRemoveLatestPenalty(score, round.currentHole, focusedField);
   }
   if (status == GolfPenaltyMutationStatus::NoMarker) {
     // No marker on this field: fall through to a plain decrement, which seeds
@@ -155,9 +224,7 @@ void GolfScoringActivity::removeOrDecrement() {
     return;
   }
   if (seeded || status == GolfPenaltyMutationStatus::Changed) {
-    markGolfRoundDirty();
-    lastCounterChangeAt = millis();
-    saveFailed = false;
+    markDirtyForIdle();
     requestUpdate();
     return;
   }
@@ -178,17 +245,23 @@ bool GolfScoringActivity::powerCyclesField() const {
 }
 
 void GolfScoringActivity::openPenaltyPicker() {
-  pickerKind = GolfPenaltyKind::Hazard;
-  pickerHoleFull = false;
-  pickerOpen = true;
+  {
+    RenderLock lock(*this);
+    pickerKind = GolfPenaltyKind::Hazard;
+    pickerHoleFull = false;
+    pickerOpen = true;
+  }
   renderer.promoteNextRefresh(HalDisplay::HALF_REFRESH);
   requestUpdate();
 }
 
 void GolfScoringActivity::closePenaltyPicker() {
   // Cancel path: touches no round state at all.
-  pickerOpen = false;
-  pickerHoleFull = false;
+  {
+    RenderLock lock(*this);
+    pickerOpen = false;
+    pickerHoleFull = false;
+  }
   renderer.promoteNextRefresh(HalDisplay::HALF_REFRESH);
   requestUpdate();
 }
@@ -199,14 +272,20 @@ void GolfScoringActivity::handlePickerInput() {
     return;
   }
   if (mappedInput.wasPressed(MappedInputManager::Button::Up) && pickerKind != GolfPenaltyKind::Hazard) {
-    pickerKind = GolfPenaltyKind::Hazard;
-    pickerHoleFull = false;
+    {
+      RenderLock lock(*this);
+      pickerKind = GolfPenaltyKind::Hazard;
+      pickerHoleFull = false;
+    }
     requestUpdate();
     return;
   }
   if (mappedInput.wasPressed(MappedInputManager::Button::Down) && pickerKind != GolfPenaltyKind::Ob) {
-    pickerKind = GolfPenaltyKind::Ob;
-    pickerHoleFull = false;
+    {
+      RenderLock lock(*this);
+      pickerKind = GolfPenaltyKind::Ob;
+      pickerHoleFull = false;
+    }
     requestUpdate();
     return;
   }
@@ -217,28 +296,30 @@ void GolfScoringActivity::handlePickerInput() {
 }
 
 void GolfScoringActivity::applyPenaltyPick() {
+  if (rejectArchivedMutation()) return;
   GolfPenaltyMutationStatus status;
   bool seeded = false;
   {
     RenderLock lock(*this);
     GolfRound& round = GOLF_ROUND_STORE.getRound();
+    GolfPlayerScore& score = round.players[round.currentPlayer].score;
     seeded = ensureHoleSeeded();
-    status = golfAppendPenalty(round, round.currentHole, focusedField, pickerKind);
+    status = golfAppendPenalty(score, round.currentHole, focusedField, pickerKind);
   }
-  if (seeded || status == GolfPenaltyMutationStatus::Changed) {
-    markGolfRoundDirty();
-    lastCounterChangeAt = millis();
-    saveFailed = false;
-  }
+  if (seeded || status == GolfPenaltyMutationStatus::Changed) markDirtyForIdle();
   switch (status) {
     case GolfPenaltyMutationStatus::Changed:
       closePenaltyPicker();
       break;
-    case GolfPenaltyMutationStatus::HoleFull:
+    case GolfPenaltyMutationStatus::HoleFull: {
       // Never silently drop the event: keep the sheet open and say so.
-      pickerHoleFull = true;
+      {
+        RenderLock lock(*this);
+        pickerHoleFull = true;
+      }
       requestUpdate();
       break;
+    }
     default:
       LOG_ERR("GOLF", "penalty add rejected: %d", static_cast<int>(status));
       closePenaltyPicker();
@@ -247,12 +328,14 @@ void GolfScoringActivity::applyPenaltyPick() {
 }
 
 void GolfScoringActivity::handleConfirm() {
+  if (rejectArchivedMutation()) return;
   GolfConfirmAction action = GolfConfirmAction::CycleFocus;
   {
     RenderLock lock(*this);
     const GolfRound& round = GOLF_ROUND_STORE.getRound();
+    const GolfPlayerScore& score = round.players[round.currentPlayer].score;
     const uint8_t hole = round.currentHole;
-    const bool logged = golfHoleScore(round, hole) != 0;
+    const bool logged = static_cast<uint16_t>(score.in100[hole]) + score.out100[hole] != 0;
     const bool canCommit = !logged && round.par[hole] >= 3;
     action = golfConfirmPress(focusedField, logged, canCommit);
     if (action == GolfConfirmAction::CycleFocus) focusedField = nextGolfField(focusedField);
@@ -262,40 +345,53 @@ void GolfScoringActivity::handleConfirm() {
     return;
   }
   if (action == GolfConfirmAction::AdvanceWithoutCommit) {
-    changeHole(1);
+    changeTurn(true);
     return;
   }
   requestUpdate();
 }
 
 void GolfScoringActivity::commitAndAdvance() {
+  if (rejectArchivedMutation()) return;
   bool committed = false;
   {
     RenderLock lock(*this);
     committed = ensureHoleSeeded();
   }
-  if (committed) {
-    markGolfRoundDirty();
-    lastCounterChangeAt = millis();
-    saveFailed = false;
-  }
-  changeHole(1);
+  if (committed) markDirtyForIdle();
+  changeTurn(true);
 }
 
-void GolfScoringActivity::changeHole(const int delta) {
+void GolfScoringActivity::changeTurn(const bool forward) {
+  if (rejectArchivedMutation()) return;
+  bool changed = false;
+  bool holeChanged = false;
   {
     RenderLock lock(*this);
     GolfRound& round = GOLF_ROUND_STORE.getRound();
-    round.currentHole = static_cast<uint8_t>((round.currentHole + round.holeCount + delta) % round.holeCount);
-    focusedField = GolfField::Putts;
-    carryNotice = nullptr;
+    const uint8_t previousHole = round.currentHole;
+    const uint8_t previousPlayer = round.currentPlayer;
+    const bool traversed = forward ? advanceGolfTurn(round) : retreatGolfTurn(round);
+    changed = traversed && (round.currentHole != previousHole || round.currentPlayer != previousPlayer);
+    holeChanged = changed && round.currentHole != previousHole;
+    if (changed) resetTurnState();
   }
-  markGolfRoundDirty();
-  flushDirty();
+  if (!changed) {
+    LOG_ERR("GOLF", "Turn change rejected");
+    return;
+  }
+
+  markDirtyForIdle();
+  if (holeChanged) flushDirty();
   requestUpdate();
 }
 
 void GolfScoringActivity::openRoundMenu() {
+  if (rejectArchivedMutation()) {
+    openGolfHome(activityManager, renderer, mappedInput);
+    return;
+  }
+  if (!flushDirty()) return;
   auto menu = makeUniqueNoThrow<GolfRoundMenuActivity>(renderer, mappedInput);
   if (!menu) {
     LOG_ERR("GOLF", "OOM: round menu");
@@ -304,12 +400,14 @@ void GolfScoringActivity::openRoundMenu() {
   startActivityForResult(std::move(menu), nullptr);
 }
 
-bool GolfScoringActivity::handleHomeGesture() {
-  flushDirty();
-  return false;
-}
+bool GolfScoringActivity::handleHomeGesture() { return !flushDirty(); }
 
 void GolfScoringActivity::loop() {
+  if (GOLF_ROUND_STORE.isArchived()) {
+    LOG_ERR("GOLF", "Leaving committed archive scoring surface");
+    openGolfHome(activityManager, renderer, mappedInput);
+    return;
+  }
   if (pickerOpen) {
     handlePickerInput();
     return;
@@ -319,12 +417,13 @@ void GolfScoringActivity::loop() {
     openRoundMenu();
     return;
   }
+  const bool swapped = mappedInput.isNavDirectionSwapped();
   if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
-    changeHole(-1);
+    changeTurn(golfFrontNavDelta(swapped, true) > 0);
     return;
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
-    changeHole(1);
+    changeTurn(golfFrontNavDelta(swapped, false) > 0);
     return;
   }
 
@@ -370,64 +469,99 @@ void GolfScoringActivity::loop() {
     removeOrDecrement();
     return;
   }
-  if (isGolfRoundDirty() && millis() - lastCounterChangeAt >= IDLE_SAVE_MS) flushDirty();
+  if (isGolfRoundDirty() && millis() - lastChangeAt >= IDLE_SAVE_MS) flushDirty();
 }
 
-void GolfScoringActivity::drawStatusBar() const {
-  char title[40];
-  char time[9];
+void GolfScoringActivity::drawStatusBar(const golfui::ScoringLayout& layout) const {
   const GolfRound& round = GOLF_ROUND_STORE.getRound();
-  ellipsize(renderer, saveFailed ? GolfStrings::SAVE_ERROR : round.courseName, title, sizeof(title),
-            renderer.getScreenWidth() - 135);
+  const GolfPlayer& player = round.players[round.currentPlayer];
+  golfFormatPlayerLabel(round.currentPlayer, player.name, tr(STR_GOLF_PLAYER_LABEL_FORMAT), statusPlayerLabel,
+                        sizeof(statusPlayerLabel));
+  snprintf(statusTitle, sizeof(statusTitle), tr(STR_GOLF_PLAYER_CONTEXT_FORMAT), statusPlayerLabel,
+           (saveFailed || hasGolfRoundSaveFailed()) ? tr(STR_GOLF_SAVE_ERROR) : round.courseName);
+  ellipsize(renderer, statusTitle, sizeof(statusTitle),
+            layout.header.width > 135 ? layout.header.width - 135 : layout.header.width);
   const char* right = nullptr;
-  if (halClock.isAvailable() && halClock.formatTime(time, sizeof(time))) right = time;
-  GUI.drawHeader(renderer, Rect{0, 0, renderer.getScreenWidth(), STATUS_BOTTOM}, title, right);
+  if (halClock.isAvailable() && halClock.formatTime(statusTime, sizeof(statusTime))) right = statusTime;
+  GUI.drawHeader(renderer, Rect{layout.header.x, layout.header.y, layout.header.width, layout.header.height},
+                 statusTitle, right);
 }
 
-void GolfScoringActivity::drawHoleBand() const {
+void GolfScoringActivity::drawHoleBand(const golfui::ScoringLayout& layout) const {
   const GolfRound& round = GOLF_ROUND_STORE.getRound();
+  const GolfPlayer& player = round.players[round.currentPlayer];
   const uint8_t hole = round.currentHole;
-  renderer.drawText(UI_10_FONT_ID, 18, 61, GolfStrings::HOLE, true, EpdFontFamily::BOLD);
-  golfDrawLargeNumber(renderer, 125, 82, 58, hole + 1);
-  char text[24];
-  if (round.par[hole] != 0) {
-    snprintf(text, sizeof(text), "%s %u", GolfStrings::PAR, round.par[hole]);
-    renderer.drawText(UI_12_FONT_ID, renderer.getScreenWidth() - 20 - renderer.getTextWidth(UI_12_FONT_ID, text), 66,
-                      text, true, EpdFontFamily::BOLD);
+  const freeink::ui::Rect rect = layout.hole;
+  const int padding = golfui::minValue(18, static_cast<int16_t>(rect.width / 8));
+  const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  renderer.drawText(UI_10_FONT_ID, rect.x + padding, rect.y + 4, tr(STR_GOLF_HOLE), true,
+                    EpdFontFamily::BOLD);
+  const int digitHeight = golfui::clampValue(rect.height - lineHeight - 8, 24, 58);
+  golfDrawLargeNumber(renderer, rect.x + rect.width / 4, rect.y + rect.height - digitHeight - 4, digitHeight,
+                      hole + 1);
+  char text[32];
+  const int right = rect.x + rect.width - padding;
+  if (rect.height < lineHeight * 3 + 4) {
+    if (round.par[hole] != 0) {
+      snprintf(text, sizeof(text), tr(STR_GOLF_LABEL_VALUE_FORMAT), tr(STR_GOLF_PAR),
+               static_cast<unsigned>(round.par[hole]));
+      renderer.drawText(UI_10_FONT_ID, right - renderer.getTextWidth(UI_10_FONT_ID, text), rect.y + 3, text, true,
+                        EpdFontFamily::BOLD);
+    }
+    if (player.yards[hole] != 0 || round.hasSi) {
+      if (player.yards[hole] != 0 && round.hasSi) {
+        snprintf(text, sizeof(text), tr(STR_GOLF_DISTANCE_STROKE_INDEX_FORMAT),
+                 static_cast<unsigned>(player.yards[hole]), tr(STR_GOLF_YARDS_UNIT), tr(STR_GOLF_STROKE_INDEX),
+                 static_cast<unsigned>(round.si[hole]));
+      } else if (player.yards[hole] != 0) {
+        snprintf(text, sizeof(text), tr(STR_GOLF_DISTANCE_FORMAT), static_cast<unsigned>(player.yards[hole]),
+                 tr(STR_GOLF_YARDS_UNIT));
+      } else {
+        snprintf(text, sizeof(text), tr(STR_GOLF_LABEL_VALUE_FORMAT), tr(STR_GOLF_STROKE_INDEX),
+                 static_cast<unsigned>(round.si[hole]));
+      }
+      renderer.drawText(UI_10_FONT_ID, right - renderer.getTextWidth(UI_10_FONT_ID, text),
+                        rect.y + rect.height - lineHeight - 3, text);
+    }
+  } else {
+    int y = rect.y + 4;
+    const int lineStep = golfui::clampValue((rect.height - 4) / 3, lineHeight, lineHeight + 8);
+    if (round.par[hole] != 0) {
+      snprintf(text, sizeof(text), tr(STR_GOLF_LABEL_VALUE_FORMAT), tr(STR_GOLF_PAR),
+               static_cast<unsigned>(round.par[hole]));
+      renderer.drawText(UI_12_FONT_ID, right - renderer.getTextWidth(UI_12_FONT_ID, text), y, text, true,
+                        EpdFontFamily::BOLD);
+      y += lineStep;
+    }
+    if (player.yards[hole] != 0) {
+      snprintf(text, sizeof(text), tr(STR_GOLF_DISTANCE_FORMAT), static_cast<unsigned>(player.yards[hole]),
+               tr(STR_GOLF_YARDS_UNIT));
+      renderer.drawText(UI_10_FONT_ID, right - renderer.getTextWidth(UI_10_FONT_ID, text), y, text);
+      y += lineStep;
+    }
+    if (round.hasSi && y + lineHeight <= rect.y + rect.height) {
+      snprintf(text, sizeof(text), tr(STR_GOLF_LABEL_VALUE_FORMAT), tr(STR_GOLF_STROKE_INDEX),
+               static_cast<unsigned>(round.si[hole]));
+      renderer.drawText(UI_10_FONT_ID, right - renderer.getTextWidth(UI_10_FONT_ID, text), y, text);
+    }
   }
-  int y = 100;
-  if (round.yards[hole] != 0) {
-    snprintf(text, sizeof(text), "%u %s", round.yards[hole], GolfStrings::YARDS);
-    renderer.drawText(UI_10_FONT_ID, renderer.getScreenWidth() - 20 - renderer.getTextWidth(UI_10_FONT_ID, text), y,
-                      text);
-    y += 24;
-  }
-  if (hasSi) {
-    snprintf(text, sizeof(text), "%s %u", GolfStrings::SI, si[hole]);
-    renderer.drawText(UI_10_FONT_ID, renderer.getScreenWidth() - 20 - renderer.getTextWidth(UI_10_FONT_ID, text), y,
-                      text);
-  }
-  renderer.drawLine(0, HOLE_BOTTOM - 1, renderer.getScreenWidth(), HOLE_BOTTOM - 1);
+  renderer.drawLine(rect.x, rect.y + rect.height - 1, rect.x + rect.width - 1, rect.y + rect.height - 1);
 }
 
-int GolfScoringActivity::countersRegionBottom() const {
-  const GolfRound& round = GOLF_ROUND_STORE.getRound();
-  return round.penaltyCount[round.currentHole] > 0 ? COUNTERS_BOTTOM - PENALTY_BAND_HEIGHT : COUNTERS_BOTTOM;
-}
-
-int GolfScoringActivity::formatHoleMarkers(const GolfRound& round, const uint8_t hole, const int fieldFilter,
+int GolfScoringActivity::formatHoleMarkers(const GolfPlayerScore& score, const uint8_t hole, const int fieldFilter,
                                            const int maxWidth, char* out, const size_t size) const {
   out[0] = '\0';
-  const uint8_t count = round.penaltyCount[hole] < GolfRound::MAX_PENALTIES_PER_HOLE
-                            ? round.penaltyCount[hole]
+  const uint8_t count = score.penaltyCount[hole] < GolfRound::MAX_PENALTIES_PER_HOLE
+                            ? score.penaltyCount[hole]
                             : GolfRound::MAX_PENALTIES_PER_HOLE;
   const char* tokens[GolfRound::MAX_PENALTIES_PER_HOLE];
   uint8_t n = 0;
   for (uint8_t i = 0; i < count; ++i) {
     GolfPenaltyEvent event{};
-    if (!golfPenaltyEventAt(round, hole, i, event)) continue;
+    if (!golfPenaltyEventAt(score, hole, i, event)) continue;
     if (fieldFilter >= 0 && static_cast<int>(event.field) != fieldFilter) continue;
-    tokens[n++] = event.kind == GolfPenaltyKind::Ob ? GolfStrings::OB_TAG : GolfStrings::HAZARD_TAG;
+    tokens[n++] = event.kind == GolfPenaltyKind::Ob ? tr(STR_GOLF_OUT_OF_BOUNDS_TAG)
+                                                     : tr(STR_GOLF_HAZARD_TAG);
   }
   if (n == 0) return 0;
 
@@ -440,7 +574,8 @@ int GolfScoringActivity::formatHoleMarkers(const GolfRound& round, const uint8_t
       len += snprintf(buf + len, sizeof(buf) - len, "%s%s", i == 0 ? "" : " ", tokens[i]);
     }
     if (shown < n && len < sizeof(buf)) {
-      len += snprintf(buf + len, sizeof(buf) - len, "%s+%u", shown == 0 ? "" : " ", n - shown);
+      len += snprintf(buf + len, sizeof(buf) - len, "%s+%u", shown == 0 ? "" : " ",
+                      static_cast<unsigned>(n - shown));
     }
     const int width = renderer.getTextWidth(MARKER_FONT_ID, buf, EpdFontFamily::BOLD);
     if (width <= maxWidth || shown == 0) {
@@ -450,210 +585,248 @@ int GolfScoringActivity::formatHoleMarkers(const GolfRound& round, const uint8_t
   }
 }
 
-void GolfScoringActivity::drawCounters() const {
+void GolfScoringActivity::drawCounters(const golfui::ScoringLayout& layout) const {
   const GolfRound& round = GOLF_ROUND_STORE.getRound();
+  const GolfPlayerScore& score = round.players[round.currentPlayer].score;
   const uint8_t hole = round.currentHole;
-  const int screenWidth = renderer.getScreenWidth();
-  const bool entered = golfHoleScore(round, hole) != 0;
+  const bool entered = static_cast<uint16_t>(score.in100[hole]) + score.out100[hole] != 0;
   const bool preseed = !entered && round.par[hole] >= 3;
-  const uint8_t values[] = {preseed ? static_cast<uint8_t>(2) : round.putts[hole],
-                            preseed ? static_cast<uint8_t>(2) : round.in100[hole],
-                            preseed ? static_cast<uint8_t>(round.par[hole] - 2) : round.out100[hole]};
-  const char* labels[] = {GolfStrings::PUTTS, GolfStrings::IN100, GolfStrings::OUT100};
+  const uint8_t values[] = {preseed ? static_cast<uint8_t>(2) : score.putts[hole],
+                            preseed ? static_cast<uint8_t>(2) : score.in100[hole],
+                            preseed ? static_cast<uint8_t>(round.par[hole] - 2) : score.out100[hole]};
+  const char* labels[] = {tr(STR_GOLF_PUTTS), tr(STR_GOLF_INSIDE_100), tr(STR_GOLF_ENTER_SCORING_ZONE)};
 
-  const int region = countersRegionBottom() - HOLE_BOTTOM;
-  const int unfocusedHeight = region * COUNTER_UNFOCUSED_WEIGHT / COUNTER_REGION_WEIGHT;
-  const int focusedHeight = region - unfocusedHeight * 2;
-
-  // Left limit for the marker run: clear of the widest centred number.
-  const int markerLeft = screenWidth / 2 + 60 + MARKER_GUTTER;
-  const int markerMaxWidth = screenWidth - MARKER_RIGHT_MARGIN - markerLeft;
-
-  int top = HOLE_BOTTOM;
   for (uint8_t index = 0; index < 3; ++index) {
+    const freeink::ui::Rect rect = layout.counters[index];
     const bool focused = focusedField == static_cast<GolfField>(index);
-    const int height = focused ? focusedHeight : unfocusedHeight;
     const bool inverse = focused;
-    if (inverse) renderer.fillRect(0, top, screenWidth, height, true);
-    renderer.drawText(UI_10_FONT_ID, 20, top + 14, labels[index], !inverse, EpdFontFamily::BOLD);
+    const int padding = golfui::minValue(20, static_cast<int16_t>(rect.width / 8));
+    if (inverse) renderer.fillRect(rect.x, rect.y, rect.width, rect.height, true);
+    renderer.drawText(UI_10_FONT_ID, rect.x + padding, rect.y + 4, labels[index], !inverse,
+                      EpdFontFamily::BOLD);
     if (index == 2) {
       char badge[24];
-      // Penalty-inclusive so it agrees with the totals strip and the band.
-      const uint16_t total = preseed ? static_cast<uint16_t>(values[1] + values[2]) : golfHoleScore(round, hole);
+      const uint16_t total =
+          preseed ? static_cast<uint16_t>(values[1] + values[2]) : golfHoleScore(round, score, hole);
       if (round.par[hole] != 0) {
         char toPar[8];
         formatToPar(static_cast<int16_t>(total) - round.par[hole], toPar, sizeof(toPar));
-        snprintf(badge, sizeof(badge), "%s %u %s", GolfStrings::TOTAL, total, toPar);
+        snprintf(badge, sizeof(badge), tr(STR_GOLF_TOTAL_TO_PAR_FORMAT), tr(STR_GOLF_TOTAL),
+                 static_cast<unsigned>(total), toPar);
       } else {
-        snprintf(badge, sizeof(badge), "%s %u", GolfStrings::TOTAL, total);
+        snprintf(badge, sizeof(badge), tr(STR_GOLF_LABEL_VALUE_FORMAT), tr(STR_GOLF_TOTAL),
+                 static_cast<unsigned>(total));
       }
-      renderer.drawText(UI_10_FONT_ID, screenWidth - 22 - renderer.getTextWidth(UI_10_FONT_ID, badge), top + 14, badge,
-                        !inverse, EpdFontFamily::BOLD);
+      renderer.drawText(UI_10_FONT_ID,
+                        rect.x + rect.width - padding - renderer.getTextWidth(UI_10_FONT_ID, badge), rect.y + 4,
+                        badge, !inverse, EpdFontFamily::BOLD);
     } else if (carryNotice != nullptr && index == static_cast<uint8_t>(focusedField)) {
-      renderer.drawText(UI_10_FONT_ID, screenWidth - 22 - renderer.getTextWidth(UI_10_FONT_ID, carryNotice), top + 14,
+      renderer.drawText(UI_10_FONT_ID,
+                        rect.x + rect.width - padding - renderer.getTextWidth(UI_10_FONT_ID, carryNotice), rect.y + 4,
                         carryNotice, !inverse, EpdFontFamily::BOLD);
     }
-    const int digitHeight = focused ? 100 : 66;
-    golfDrawLargeNumber(renderer, screenWidth / 2, top + (height - digitHeight) / 2 + 12, digitHeight, values[index],
-                        !inverse, preseed);
+    const int preferredDigitHeight = focused ? 100 : 66;
+    const int digitHeight = golfui::clampValue(rect.height - 10, 20, preferredDigitHeight);
+    golfDrawLargeNumber(renderer, rect.x + rect.width / 2, rect.y + (rect.height - digitHeight) / 2, digitHeight,
+                        values[index], !inverse, preseed);
 
-    // Markers for this field, right of the number, in the order they happened.
-    char markers[48];
-    const int markerWidth = formatHoleMarkers(round, hole, index, markerMaxWidth, markers, sizeof(markers));
-    if (markerWidth > 0) {
-      renderer.drawText(MARKER_FONT_ID, screenWidth - MARKER_RIGHT_MARGIN - markerWidth, top + height / 2 - 6, markers,
-                        !inverse, EpdFontFamily::BOLD);
+    const int markerLeft = rect.x + rect.width / 2 + digitHeight + MARKER_GUTTER;
+    const int markerMaxWidth = rect.x + rect.width - MARKER_RIGHT_MARGIN - markerLeft;
+    if (markerMaxWidth > 0) {
+      char markers[48];
+      const int markerWidth = formatHoleMarkers(score, hole, index, markerMaxWidth, markers, sizeof(markers));
+      if (markerWidth > 0) {
+        renderer.drawText(MARKER_FONT_ID, rect.x + rect.width - MARKER_RIGHT_MARGIN - markerWidth,
+                          rect.y + (rect.height - renderer.getLineHeight(MARKER_FONT_ID)) / 2, markers, !inverse,
+                          EpdFontFamily::BOLD);
+      }
     }
 
-    renderer.drawLine(0, top + height - 1, screenWidth, top + height - 1, !inverse);
-    top += height;
+    renderer.drawLine(rect.x, rect.y + rect.height - 1, rect.x + rect.width - 1, rect.y + rect.height - 1,
+                      !inverse);
   }
 }
 
-void GolfScoringActivity::drawPenaltyBand() const {
+void GolfScoringActivity::drawPenaltyBand(const golfui::ScoringLayout& layout) const {
   const GolfRound& round = GOLF_ROUND_STORE.getRound();
+  const GolfPlayerScore& score = round.players[round.currentPlayer].score;
   const uint8_t hole = round.currentHole;
-  if (round.penaltyCount[hole] == 0) return;  // absent entirely on a clean hole
+  const freeink::ui::Rect rect = layout.penalty;
+  if (score.penaltyCount[hole] == 0 || rect.height <= 0) return;
 
-  const int screenWidth = renderer.getScreenWidth();
-  const int top = COUNTERS_BOTTOM - PENALTY_BAND_HEIGHT;
-  renderer.fillRect(0, top, screenWidth, PENALTY_BAND_HEIGHT, true);
-
+  const int padding = golfui::minValue(18, static_cast<int16_t>(rect.width / 8));
+  renderer.fillRect(rect.x, rect.y, rect.width, rect.height, true);
   char label[24];
-  snprintf(label, sizeof(label), "%s +%u", GolfStrings::PENALTY, golfPenaltyStrokesForHole(round, hole));
-  renderer.drawText(UI_12_FONT_ID, 18, top + 12, label, false, EpdFontFamily::BOLD);
+  snprintf(label, sizeof(label), tr(STR_GOLF_PENALTY_STROKES_FORMAT), tr(STR_GOLF_PENALTY),
+           static_cast<unsigned>(golfPenaltyStrokesForHole(score, hole)));
+  const int textY = rect.y + (rect.height - renderer.getLineHeight(UI_12_FONT_ID)) / 2;
+  renderer.drawText(UI_12_FONT_ID, rect.x + padding, textY, label, false, EpdFontFamily::BOLD);
 
-  // Whole-hole marker sequence on the right; same "+N" overflow trim.
-  const int labelRight = 18 + renderer.getTextWidth(UI_12_FONT_ID, label, EpdFontFamily::BOLD);
+  const int labelRight = rect.x + padding + renderer.getTextWidth(UI_12_FONT_ID, label, EpdFontFamily::BOLD);
   char sequence[48];
-  const int sequenceWidth =
-      formatHoleMarkers(round, hole, -1, screenWidth - 18 - labelRight - 12, sequence, sizeof(sequence));
+  const int sequenceWidth = formatHoleMarkers(score, hole, -1,
+                                               rect.x + rect.width - padding - labelRight - 12, sequence,
+                                               sizeof(sequence));
   if (sequenceWidth > 0) {
-    renderer.drawText(MARKER_FONT_ID, screenWidth - 18 - sequenceWidth, top + 14, sequence, false, EpdFontFamily::BOLD);
+    renderer.drawText(MARKER_FONT_ID, rect.x + rect.width - padding - sequenceWidth,
+                      rect.y + (rect.height - renderer.getLineHeight(MARKER_FONT_ID)) / 2, sequence, false,
+                      EpdFontFamily::BOLD);
   }
-  renderer.drawLine(0, COUNTERS_BOTTOM - 1, screenWidth, COUNTERS_BOTTOM - 1, true);
+  renderer.drawLine(rect.x, rect.y + rect.height - 1, rect.x + rect.width - 1, rect.y + rect.height - 1, true);
 }
 
-void GolfScoringActivity::drawTotals() const {
+void GolfScoringActivity::drawTotals(const golfui::ScoringLayout& layout) const {
   const GolfRound& round = GOLF_ROUND_STORE.getRound();
-  const int width = renderer.getScreenWidth() / 3;
+  const GolfPlayerScore& score = round.players[round.currentPlayer].score;
+  const freeink::ui::Rect rect = layout.totals;
   const bool hasPar = golfHasPar(round);
-  const char* labels[] = {GolfStrings::THRU, GolfStrings::SCORE, hasPar ? GolfStrings::TO_PAR : ""};
+  const char* labels[] = {tr(STR_GOLF_THRU), tr(STR_GOLF_SCORE), hasPar ? tr(STR_GOLF_TO_PAR) : ""};
   char values[3][8];
-  snprintf(values[0], sizeof(values[0]), "%u", golfThru(round));
-  snprintf(values[1], sizeof(values[1]), "%u", golfScore(round));
+  snprintf(values[0], sizeof(values[0]), "%u", static_cast<unsigned>(golfThru(round, score)));
+  snprintf(values[1], sizeof(values[1]), "%u", static_cast<unsigned>(golfScore(round, score)));
   if (hasPar) {
-    formatToPar(golfToPar(round), values[2], sizeof(values[2]));
+    formatToPar(golfToPar(round, score), values[2], sizeof(values[2]));
   } else {
     values[2][0] = '\0';
   }
+  const int labelHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  const int valueHeight = renderer.getLineHeight(UI_12_FONT_ID);
+  const int textTop = rect.y + (rect.height - labelHeight - valueHeight) / 2;
   for (uint8_t index = 0; index < 3; ++index) {
-    const int x = index * width;
+    const int left = rect.x + static_cast<int32_t>(rect.width) * index / 3;
+    const int right = rect.x + static_cast<int32_t>(rect.width) * (index + 1) / 3;
+    const int width = right - left;
     const int labelWidth = renderer.getTextWidth(UI_10_FONT_ID, labels[index], EpdFontFamily::BOLD);
-    renderer.drawText(UI_10_FONT_ID, x + (width - labelWidth) / 2, COUNTERS_BOTTOM + 8, labels[index], true,
+    renderer.drawText(UI_10_FONT_ID, left + (width - labelWidth) / 2, textTop, labels[index], true,
                       EpdFontFamily::BOLD);
     const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, values[index], EpdFontFamily::BOLD);
-    renderer.drawText(UI_12_FONT_ID, x + (width - textWidth) / 2, COUNTERS_BOTTOM + 35, values[index], true,
+    renderer.drawText(UI_12_FONT_ID, left + (width - textWidth) / 2, textTop + labelHeight, values[index], true,
                       EpdFontFamily::BOLD);
-    if (index != 0) renderer.drawLine(x, COUNTERS_BOTTOM + 6, x, TOTALS_BOTTOM - 6);
+    if (index != 0) renderer.drawLine(left, rect.y + 4, left, rect.y + rect.height - 5);
   }
-  renderer.drawLine(0, TOTALS_BOTTOM - 1, renderer.getScreenWidth(), TOTALS_BOTTOM - 1);
+  renderer.drawLine(rect.x, rect.y + rect.height - 1, rect.x + rect.width - 1, rect.y + rect.height - 1);
 }
 
-void GolfScoringActivity::drawNineStrip() const {
+void GolfScoringActivity::drawNineStrip(const golfui::ScoringLayout& layout) const {
   const GolfRound& round = GOLF_ROUND_STORE.getRound();
+  const GolfPlayerScore& playerScore = round.players[round.currentPlayer].score;
   const uint8_t first = static_cast<uint8_t>((round.currentHole / 9) * 9);
-  const int cellWidth = renderer.getScreenWidth() / 9;
-  const int stripBottom = renderer.getScreenHeight() - UITheme::getInstance().getMetrics().buttonHintsHeight;
+  const freeink::ui::Rect rect = layout.nineStrip;
+  const int numberHeight = renderer.getLineHeight(SMALL_FONT_ID);
+  const int scoreHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  const int textTop = rect.y + (rect.height - numberHeight - scoreHeight) / 2;
   for (uint8_t offset = 0; offset < 9 && first + offset < round.holeCount; ++offset) {
     const uint8_t hole = first + offset;
-    const int x = offset * cellWidth;
+    const int left = rect.x + static_cast<int32_t>(rect.width) * offset / 9;
+    const int right = rect.x + static_cast<int32_t>(rect.width) * (offset + 1) / 9;
+    const int cellWidth = right - left;
     const bool current = hole == round.currentHole;
-    if (current) renderer.fillRect(x, TOTALS_BOTTOM, cellWidth, stripBottom - TOTALS_BOTTOM, true);
+    if (current) renderer.fillRect(left, rect.y, cellWidth, rect.height, true);
     char number[4];
-    snprintf(number, sizeof(number), "%u", hole + 1);
-    renderer.drawText(SMALL_FONT_ID, x + (cellWidth - renderer.getTextWidth(SMALL_FONT_ID, number)) / 2,
-                      TOTALS_BOTTOM + 5, number, !current, EpdFontFamily::BOLD);
-    const uint16_t score = golfHoleScore(round, hole);
-    if (score == 0) {
+    snprintf(number, sizeof(number), "%u", static_cast<unsigned>(hole + 1));
+    renderer.drawText(SMALL_FONT_ID, left + (cellWidth - renderer.getTextWidth(SMALL_FONT_ID, number)) / 2,
+                      textTop, number, !current, EpdFontFamily::BOLD);
+    const uint16_t holeScore = golfHoleScore(round, playerScore, hole);
+    if (holeScore == 0) {
       snprintf(number, sizeof(number), ".");
     } else {
-      snprintf(number, sizeof(number), "%u", score);
+      snprintf(number, sizeof(number), "%u", static_cast<unsigned>(holeScore));
     }
     const int scoreWidth = renderer.getTextWidth(UI_10_FONT_ID, number, EpdFontFamily::BOLD);
-    // Superscript on a hole that had a penalty: "O" if any OB, else "H". Sized
-    // to sit inside the column with the score, so the strip never widens.
-    const bool superscript = score != 0 && round.penaltyCount[hole] > 0;
-    const char* mark = superscript && golfObsForHole(round, hole) > 0 ? "O" : "H";
+    const bool superscript = holeScore != 0 && playerScore.penaltyCount[hole] > 0;
+    const char* mark = superscript && golfObsForHole(playerScore, hole) > 0
+                           ? tr(STR_GOLF_OUT_OF_BOUNDS_SHORT_TAG)
+                           : tr(STR_GOLF_HAZARD_TAG);
     const int markWidth = superscript ? renderer.getTextWidth(SMALL_FONT_ID, mark) + 1 : 0;
-    const int scoreX = x + (cellWidth - scoreWidth - markWidth) / 2;
-    renderer.drawText(UI_10_FONT_ID, scoreX, TOTALS_BOTTOM + 28, number, !current, EpdFontFamily::BOLD);
+    const int scoreX = left + (cellWidth - scoreWidth - markWidth) / 2;
+    renderer.drawText(UI_10_FONT_ID, scoreX, textTop + numberHeight, number, !current, EpdFontFamily::BOLD);
     if (superscript) {
-      renderer.drawText(SMALL_FONT_ID, scoreX + scoreWidth + 1, TOTALS_BOTTOM + 22, mark, !current);
+      renderer.drawText(SMALL_FONT_ID, scoreX + scoreWidth + 1, textTop + numberHeight - 5, mark, !current);
     }
   }
 }
 
 void GolfScoringActivity::drawFooter() const {
-  const auto labels =
-      mappedInput.mapLabels(GolfStrings::F_MENU, powerCyclesField() ? GolfStrings::PENALTY : GolfStrings::F_FIELD,
-                            GolfStrings::F_PREV, GolfStrings::F_NEXT);
+  const auto labels = mappedInput.mapLabels(
+      tr(STR_GOLF_FOOTER_MENU), powerCyclesField() ? tr(STR_GOLF_PENALTY) : tr(STR_GOLF_FOOTER_FIELD),
+      tr(STR_GOLF_FOOTER_PREVIOUS), tr(STR_GOLF_FOOTER_NEXT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
-void GolfScoringActivity::drawPenaltyPicker() const {
-  const int screenWidth = renderer.getScreenWidth();
-  const int screenHeight = renderer.getScreenHeight();
+void GolfScoringActivity::drawPenaltyPicker(const freeink::ui::Rect safe) const {
   const int noticeHeight = pickerHoleFull ? SHEET_NOTICE_H : 0;
-  const int sheetHeight =
-      SHEET_TITLE_H + noticeHeight + SHEET_OPTION_H * 2 + UITheme::getInstance().getMetrics().buttonHintsHeight;
-  const int sheetTop = screenHeight - sheetHeight;
+  const int desiredHeight = SHEET_TITLE_H + noticeHeight + SHEET_OPTION_H * 2;
+  const int sheetHeight = golfui::clampValue(desiredHeight, 0, safe.height);
+  const int sheetTop = safe.y + safe.height - sheetHeight;
+  const int titleHeight = golfui::clampValue(SHEET_TITLE_H, 0, sheetHeight);
+  const int appliedNotice = golfui::clampValue(noticeHeight, 0, sheetHeight - titleHeight);
+  const int optionAreaHeight = sheetHeight - titleHeight - appliedNotice;
 
-  // Dim the hole still showing above the sheet so it reads as modal.
-  renderer.fillRectDither(0, 0, screenWidth, sheetTop, Color::LightGray);
+  renderer.fillRectDither(safe.x, safe.y, safe.width, sheetTop - safe.y, Color::LightGray);
+  renderer.fillRect(safe.x, sheetTop, safe.width, sheetHeight, false);
+  renderer.fillRect(safe.x, sheetTop, safe.width, golfui::minValue(SHEET_BORDER, titleHeight), true);
 
-  renderer.fillRect(0, sheetTop, screenWidth, sheetHeight, false);
-  renderer.fillRect(0, sheetTop, screenWidth, SHEET_BORDER, true);
+  int y = sheetTop + golfui::minValue(SHEET_BORDER, titleHeight);
+  renderer.drawText(UI_10_FONT_ID, safe.x + SHEET_PAD_X,
+                    y + (titleHeight - renderer.getLineHeight(UI_10_FONT_ID)) / 2, tr(STR_GOLF_ADD_PENALTY), true,
+                    EpdFontFamily::BOLD);
+  y = sheetTop + titleHeight;
+  renderer.drawLine(safe.x, y - 1, safe.x + safe.width - 1, y - 1, true);
 
-  int y = sheetTop + SHEET_BORDER;
-  renderer.drawText(UI_10_FONT_ID, SHEET_PAD_X, y + 16, GolfStrings::ADD_PENALTY, true, EpdFontFamily::BOLD);
-  y += SHEET_TITLE_H - SHEET_BORDER;
-  renderer.drawLine(0, y - 1, screenWidth, y - 1, true);
-
-  if (pickerHoleFull) {
-    renderer.fillRect(0, y, screenWidth, SHEET_NOTICE_H, true);
-    renderer.drawText(UI_10_FONT_ID, SHEET_PAD_X, y + 9, GolfStrings::HOLE_FULL, false, EpdFontFamily::BOLD);
-    y += SHEET_NOTICE_H;
+  if (appliedNotice > 0) {
+    renderer.fillRect(safe.x, y, safe.width, appliedNotice, true);
+    renderer.drawText(UI_10_FONT_ID, safe.x + SHEET_PAD_X,
+                      y + (appliedNotice - renderer.getLineHeight(UI_10_FONT_ID)) / 2, tr(STR_GOLF_HOLE_FULL), false,
+                      EpdFontFamily::BOLD);
+    y += appliedNotice;
   }
 
   for (int option = 0; option < 2; ++option) {
+    const int rowTop = y + static_cast<int32_t>(optionAreaHeight) * option / 2;
+    const int rowBottom = y + static_cast<int32_t>(optionAreaHeight) * (option + 1) / 2;
+    const int rowHeight = rowBottom - rowTop;
     const bool selected = (option == 0) == (pickerKind == GolfPenaltyKind::Hazard);
-    const int rowTop = y + option * SHEET_OPTION_H;
-    if (selected) renderer.fillRect(0, rowTop, screenWidth, SHEET_OPTION_H, true);
+    if (selected) renderer.fillRect(safe.x, rowTop, safe.width, rowHeight, true);
     const bool ink = !selected;
-    const char* tag = option == 0 ? GolfStrings::HAZARD_TAG : GolfStrings::OB_TAG;
-    const char* name = option == 0 ? GolfStrings::HAZARD : GolfStrings::OB;
-    const char* cost = option == 0 ? GolfStrings::HAZARD_COST : GolfStrings::OB_COST;
+    const char* tag = option == 0 ? tr(STR_GOLF_HAZARD_TAG) : tr(STR_GOLF_OUT_OF_BOUNDS_TAG);
+    const char* name = option == 0 ? tr(STR_GOLF_HAZARD) : tr(STR_GOLF_OUT_OF_BOUNDS);
+    const char* cost = option == 0 ? tr(STR_GOLF_HAZARD_COST) : tr(STR_GOLF_OUT_OF_BOUNDS_COST);
+    const int tagColumn = golfui::minValue(SHEET_TAG_COL_W, static_cast<int16_t>(safe.width / 4));
+    const int textX = safe.x + golfui::minValue(SHEET_TEXT_X, static_cast<int16_t>(safe.width / 3));
     const int tagWidth = renderer.getTextWidth(UI_12_FONT_ID, tag, EpdFontFamily::BOLD);
-    renderer.drawText(UI_12_FONT_ID, (SHEET_TAG_COL_W - tagWidth) / 2, rowTop + 40, tag, ink, EpdFontFamily::BOLD);
-    renderer.drawText(UI_12_FONT_ID, SHEET_TEXT_X, rowTop + 34, name, ink, EpdFontFamily::BOLD);
-    renderer.drawText(UI_10_FONT_ID, SHEET_TEXT_X, rowTop + 66, cost, ink);
-    renderer.drawLine(0, rowTop + SHEET_OPTION_H - 1, screenWidth, rowTop + SHEET_OPTION_H - 1, true);
+    renderer.drawText(UI_12_FONT_ID, safe.x + (tagColumn - tagWidth) / 2,
+                      rowTop + (rowHeight - renderer.getLineHeight(UI_12_FONT_ID)) / 2, tag, ink,
+                      EpdFontFamily::BOLD);
+    const int nameHeight = renderer.getLineHeight(UI_12_FONT_ID);
+    const int costHeight = renderer.getLineHeight(UI_10_FONT_ID);
+    const int textTop = rowTop + (rowHeight - nameHeight - costHeight) / 2;
+    renderer.drawText(UI_12_FONT_ID, textX, textTop, name, ink, EpdFontFamily::BOLD);
+    renderer.drawText(UI_10_FONT_ID, textX, textTop + nameHeight, cost, ink);
+    renderer.drawLine(safe.x, rowBottom - 1, safe.x + safe.width - 1, rowBottom - 1, true);
   }
-  const auto labels = mappedInput.mapLabels(GolfStrings::PICK_BACK, GolfStrings::PICK_CONFIRM, "", "");
+  const auto labels =
+      mappedInput.mapLabels(tr(STR_GOLF_FOOTER_BACK), tr(STR_GOLF_FOOTER_CONFIRM), "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void GolfScoringActivity::render(RenderLock&&) {
   renderer.clearScreen();
-  drawStatusBar();
-  drawHoleBand();
-  drawCounters();
-  drawPenaltyBand();
-  drawTotals();
-  drawNineStrip();
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const auto chrome = golfui::chromeLayout(renderer, 0, 0);
+  const GolfRound& round = GOLF_ROUND_STORE.getRound();
+  const GolfPlayerScore& score = round.players[round.currentPlayer].score;
+  const bool hasPenalty = score.penaltyCount[round.currentHole] > 0;
+  const auto layout = golfui::makeScoringLayout(chrome.safe, metrics.topPadding, metrics.headerHeight,
+                                                static_cast<uint8_t>(focusedField), hasPenalty,
+                                                renderer.getLineHeight(UI_10_FONT_ID));
+  drawStatusBar(layout);
+  drawHoleBand(layout);
+  drawCounters(layout);
+  drawPenaltyBand(layout);
+  drawTotals(layout);
+  drawNineStrip(layout);
   drawFooter();
-  if (pickerOpen) drawPenaltyPicker();
+  if (pickerOpen) drawPenaltyPicker(layout.safe);
   ++paintCount;
   if (paintCount % 8 == 0) renderer.promoteNextRefresh(HalDisplay::HALF_REFRESH);
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);

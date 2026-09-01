@@ -109,14 +109,15 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
           return false;
       }
     case Button::NavNext:
-      // Logical "next item" navigation: side Down + front Right, with the control axis flipped in
-      // INVERTED / LANDSCAPE_CCW (frontButtonFollowOrientation) so it matches the rotated hint labels.
-      return isNavDirectionSwapped() ? (mapButton(Button::Up, fn) || mapButton(Button::Left, fn))
-                                     : (mapButton(Button::Down, fn) || mapButton(Button::Right, fn));
+      // Row semantics on the fixed side buttons never rotate: Down is next.
+      // Only the front previous/next roles flip with the rendered orientation.
+      return mapButton(Button::Down, fn) ||
+             mapButton(isNavDirectionSwapped() ? Button::Left : Button::Right, fn);
     case Button::NavPrevious:
-      // Logical "previous item" navigation: side Up + front Left, axis-flipped in the same orientations.
-      return isNavDirectionSwapped() ? (mapButton(Button::Down, fn) || mapButton(Button::Right, fn))
-                                     : (mapButton(Button::Up, fn) || mapButton(Button::Left, fn));
+      // Up remains previous while the corresponding front role follows the
+      // same axis swap used by mapLabels().
+      return mapButton(Button::Up, fn) ||
+             mapButton(isNavDirectionSwapped() ? Button::Right : Button::Left, fn);
     case Button::ScreenLeft:
     case Button::ScreenRight:
     case Button::ScreenUp:

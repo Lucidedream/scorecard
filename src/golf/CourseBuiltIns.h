@@ -64,18 +64,55 @@ static_assert(golfBuiltInSum(GOLF_BUILT_IN_COURSES[MOGANSHAN_BUILT_IN_INDEX].yar
 static_assert(golfBuiltInSum(GOLF_BUILT_IN_COURSES[MOGANSHAN_BUILT_IN_INDEX].yards, 9, 18) == 3132);
 static_assert(golfBuiltInSum(GOLF_BUILT_IN_COURSES[MOGANSHAN_BUILT_IN_INDEX].yards, 0, 18) == 6232);
 
-inline bool applyBuiltInTeeYardages(const int8_t builtInIndex, const char* tees, GolfCourse& course) {
-  if (builtInIndex != SANYANG_BUILT_IN_INDEX || tees == nullptr) return false;
+inline bool golfResolveBuiltInTeeYardages(const int8_t builtInIndex, const TeeSelection tee,
+                                           const uint16_t*& yards) {
+  yards = nullptr;
+  if (builtInIndex != SANYANG_BUILT_IN_INDEX) return false;
 
-  const uint16_t* yards = nullptr;
-  if (strcmp(tees, "Blue") == 0) {
+  if (tee == TeeSelection::Blue) {
     yards = GOLF_BUILT_IN_COURSES[SANYANG_BUILT_IN_INDEX].yards;
-  } else if (strcmp(tees, "White") == 0) {
+  } else if (tee == TeeSelection::White) {
     yards = SANYANG_WHITE_YARDS;
-  } else {
-    return false;
   }
-  memcpy(course.yards, yards, sizeof(course.yards));
-  course.hasYards = true;
+  return yards != nullptr;
+}
+
+struct GolfTeeResolution {
+  const uint16_t* yards = nullptr;
+  bool hasYards = false;
+};
+
+// Resolves only tee rows supplied by this exact course source. Built-in-only
+// alternates are considered before the course's canonical row; SD courses pass
+// allowBuiltInAlternates=false even when they override a built-in table slot.
+inline bool golfResolveTeeCourse(const GolfCourse& course, const int8_t builtInIndex,
+                                 const bool allowBuiltInAlternates, const TeeSelection tee,
+                                 GolfTeeResolution& resolved) {
+  resolved = {};
+  const char* teeName = tee == TeeSelection::Blue    ? "Blue"
+                        : tee == TeeSelection::White ? "White"
+                                                     : nullptr;
+  if (teeName == nullptr) return false;
+
+  const uint16_t* alternateYards = nullptr;
+  const bool exactBuiltIn =
+      builtInIndex >= 0 && builtInIndex < static_cast<int8_t>(GOLF_BUILT_IN_COURSE_COUNT) &&
+      strcmp(course.courseName, GOLF_BUILT_IN_COURSES[builtInIndex].courseName) == 0;
+  if (allowBuiltInAlternates && exactBuiltIn &&
+      golfResolveBuiltInTeeYardages(builtInIndex, tee, alternateYards)) {
+    resolved.yards = alternateYards;
+    resolved.hasYards = true;
+    return true;
+  }
+
+  // A course with neither a tee label nor yardage supports both domain choices
+  // as selection-only values. Yardage data without a label cannot truthfully be
+  // assigned to either tee, and noncanonical labels are never guessed.
+  if (course.tees[0] == '\0') {
+    return !course.hasYards;
+  }
+  if (strcmp(course.tees, teeName) != 0) return false;
+  resolved.yards = course.hasYards ? course.yards : nullptr;
+  resolved.hasYards = course.hasYards;
   return true;
 }

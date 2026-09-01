@@ -12,6 +12,7 @@ class GolfRoundMenuActivity final : public UiListActivity {
  private:
   enum class PendingAction : uint8_t { None, Finish, Abandon };
   freeink::ui::ListItem rows[3]{};
+  freeink::ui::ListProps listProps{};
   PendingAction pendingAction = PendingAction::None;
   const char* errorMessage = nullptr;
 
@@ -19,6 +20,7 @@ class GolfRoundMenuActivity final : public UiListActivity {
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
   const char* headerTitle() const override;
+  void drawChrome() override;
   void confirmAction(PendingAction action);
   void completeAction(bool confirmed);
 };

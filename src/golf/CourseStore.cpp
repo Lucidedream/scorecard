@@ -28,7 +28,7 @@ bool copyString(JsonVariantConst value, char* output, size_t capacity, bool requ
   }
   const char* source = value.as<const char*>();
   const size_t length = strlen(source);
-  if ((required && length == 0) || length >= capacity) {
+  if ((required && length == 0) || length >= capacity || strpbrk(source, "\r\n") != nullptr) {
     return false;
   }
   memcpy(output, source, length + 1);

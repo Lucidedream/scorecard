@@ -126,14 +126,24 @@ unknown is worse than one that shows no par at all.
 
 ### 5.2 History
 
-Reads `/golf/rounds/index.csv` and **nothing else**. Parsing round JSON files to render
-a list is forbidden — it was too slow in v1 and is still too slow.
+Golf Home first opens the shared fixed-capacity player selector in History mode. It
+recovers `/golf/rounds/index.csv`, streams one `GolfPlayerNamesReader` pass, and renders
+exactly four stable P1–P4 rows. A slot absent from the index stays visible but disabled
+with the short translated value `No rounds`. Logical Next/Previous skips disabled rows;
+all-absent remains Back-able. Touch and Confirm both recheck presence before activation.
+
+The selected History list reads the same recovered index and **nothing else**. Parsing
+round JSON files to render either list is forbidden — it was too slow in v1 and is still
+too slow. The list receives one immutable stable slot and copied fallback name, shows
+that identity on the header right, and has no player tabs or left/right player switching.
 
 * **Newest first.** Rows are appended chronologically, so the file order must be
   reversed for display.
 * **Bounded at 50 rows in RAM.** Stream the file once through a fixed ring buffer of the
-  most recent 50 entries; never accumulate the whole file. At ~56 bytes a row that is
-  under 3 KB. If more rounds exist, say so on screen rather than silently truncating.
+  most recent 50 entries; never accumulate the whole file. On the ESP32-C3 target,
+  `GolfHistoryEntry` is 84 bytes and the complete `GolfHistoryReader` is 4,472 bytes:
+  4,200 bytes of entries, the 255-byte CSV line buffer, and 17 bytes of counters, flags,
+  and alignment. If more rounds exist, say so on screen rather than silently truncating.
 * Dates are unknown in v2 (§3), so a row shows **course, score, and to-par** — not a
   date. Suppress to-par when the archived `par` total is 0.
 * A malformed row is skipped with a log line; it must never abort the listing.
@@ -234,8 +244,9 @@ it was a generic filler card that the owner does not use.
 
 ### What changes and what does not
 
-§5.2's rule is unchanged and remains absolute: **History builds its list from
-`index.csv` and nothing else.** Parsing round files to render a list is still forbidden.
+§5.2's rule is unchanged and remains absolute: **the player selector and selected-slot
+History build their lists from `index.csv` and nothing else.** Parsing round files to
+render a list is still forbidden.
 
 What changes is the *destination*. Selecting one row may open **one** round file. Opening
 a single chosen file costs nothing like scanning every file, and the hole-by-hole data is
@@ -245,10 +256,12 @@ already on the card — every finished round writes complete per-hole `par`, `pu
 ### The flow
 
 ```
-History (index.csv only)
-  └─ select a row
-       ├─ round file loads  ->  GolfCardActivity, read-only   (normal path)
-       └─ load fails        ->  GolfRoundSummaryActivity      (graceful fallback)
+Player selector (one recovered index.csv pass)
+  └─ select a present stable slot
+       └─ History (that slot, index.csv only)
+            └─ select a row
+                 ├─ round file loads  ->  GolfHistoryRoundMenuActivity
+                 └─ load fails        ->  GolfRoundSummaryActivity (CSV fallback)
 ```
 
 The summary screen is **retained as the degradation path**, not deleted. An `index.csv`
@@ -262,8 +275,9 @@ unreadable.
 
 `GolfCardActivity` currently reads `GOLF_ROUND_STORE.getRound()` at four sites. It must
 instead **hold its own `GolfRound` member** and populate it once in `onEnter()` — copied
-from the store for a live round, or from the loaded file for an archived one. 164 bytes
-on an activity that is already heap-allocated.
+from the store for a live round, or from the loaded file for an archived one. Under the
+§16 model that member is 906 bytes; the activity is already heap-allocated, so it must
+remain a member and must not become an automatic local on an embedded task stack.
 
 Copying rather than referencing also removes a live hazard: a reference into the store
 could observe a round mutating underneath the render pass.
@@ -434,7 +448,11 @@ the signed ones.
 
 ### Presentation
 
-A **Trends row on Golf home**, below History. One screen, no tabs.
+A **Trends row on Golf home**, below History. It opens the same four-row player
+selector in Trends mode; choosing a present row pushes one slot-specific screen. The
+screen has no player tabs or left/right switching, shows the copied Pn/name identity at
+the header right, and keeps `Average over N rounds` inside the content rather than using
+that header identity band.
 
 * **Fewer than two 18-hole rounds:** a plain message saying trends need at least two
   rounds, and how many exist. Not an error, and not an empty table of zeros.
@@ -508,9 +526,9 @@ uint8_t penaltyCount[MAX_HOLES];                               // 18 bytes
 uint8_t penaltyEvents[MAX_HOLES][MAX_PENALTIES_PER_HOLE / 2];  // 72 bytes
 ```
 
-`GolfRound` grows 164 -> 254 bytes. RAM is not the constraint; the packing exists because
-the round is serialised to `state.json` on every flush and a compact struct keeps that
-write small.
+At v3, `GolfRound` grew from 164 to 254 bytes. The §16 multiplayer layout supersedes
+that historical size with a compile-time-bounded 906-byte aggregate. Penalty nibbles
+remain packed because they are repeated for every player and serialized on every flush.
 
 ### 12.4 Add and remove
 
@@ -584,8 +602,11 @@ migrate, but never with the live file as the only copy:
 4. Rename `index.csv` to `index.csv.bak`, then `index.csv.new` to `index.csv`.
 5. Delete `index.csv.bak` only after step 4 succeeds.
 
-If any step fails, leave the original in place and log it. A failed migration must be a
-no-op, never a partial file.
+If a step fails before `index.csv.new` is renamed to the live path, restore or retain the
+original and log it; such a pre-commit failure must be a no-op, never a partial file. The
+second rename is the commit point. Failure to delete `index.csv.bak` afterward is
+committed cleanup-pending state, not grounds to roll back the new live index; the next
+recovery pass removes the stale backup.
 
 Empty `hazards`/`obs` on a migrated row means *not recorded*, which is truthful — those
 rounds were played before penalties were tracked. It does not mean zero, and trends must
@@ -794,3 +815,273 @@ Every new screen uses `mappedInput.mapLabels()` + `GUI.drawButtonHints()`, exact
 `UiListActivity::drawFooter()` and the v3.4 scoring screen do. **No screen hand-draws
 footer geometry.** Beyond matching the app's sizing, `mapLabels()` is what honours the
 owner's front-button remapping — a hand-drawn footer silently ignores it.
+
+
+## 16. Fixed-roster multiplayer (v4 wire format)
+
+This section supersedes every singular-player `GolfRound`, `tees`, `yards`, score-array,
+and cursor example in both contract files. Score arithmetic, penalty semantics, blank
+holes, and gross-score statistics remain unchanged; they now apply independently to each
+enabled player.
+
+### 16.1 Stable slots and tee selection
+
+A round always owns exactly four slots, numbered 0 through 3. Slots never move when a
+player is disabled, so a stored score, UI selection, and archive entry always identify
+the same person. Each slot has a round-specific, null-terminated UTF-8 `char[24]` name.
+`initializeGolfPlayerDefaults()` installs these defaults:
+
+| Slot | Default name |
+| ---: | --- |
+| 0 | Noah |
+| 1 | Player B |
+| 2 | Player C |
+| 3 | Player D |
+
+The domain tee type is fixed and language-independent:
+
+```cpp
+enum class TeeSelection : uint8_t { NotPlay = 0, Blue = 1, White = 2 };
+```
+
+A player is active **if and only if** the tee is not `NotPlay`. There is no stored
+`enabled` flag. `initializeGolfPlayerDefaults()` remains neutral: it installs names and
+leaves all four zero-valued tees at `NotPlay`, as do legacy decode defaults. After the
+user selects a course, setup applies this device-feedback policy:
+
+1. P1 Noah starts on Blue when `CourseStore::resolveTee()` resolves Blue.
+2. If Blue is unavailable but exact White resolves, P1 starts on White.
+3. When both `course.tees` is empty and `hasYards` is false, Blue and White are valid
+   selection-only choices with zero yards and P1 defaults to Blue.
+4. Noncanonical tee text and unlabeled nonzero yardage resolve neither choice; P1 stays
+   `NotPlay` rather than guessing.
+
+P2–P4 always start `NotPlay`. Complete is enabled on the first setup render whenever P1
+received one of those truthful choices; otherwise the four-disabled state remains a
+valid draft only. Before saving or entering scoring, `currentPlayer` is normalized to
+the first enabled stable slot.
+
+Names are copied and safely truncated at UI and persistence boundaries without splitting
+a UTF-8 sequence. They are never represented by `std::string` in the round. `Blue`,
+`White`, and `NotPlay` are wire/domain tokens; user-facing labels use the normal `tr()`
+translation path rather than serializing translated text.
+
+There is no player handicap and no net score. Stroke index is retained as one shared
+course fact for display and round reconstruction, not as input to handicap arithmetic.
+
+### 16.2 Fixed-memory ownership
+
+`GolfPlayerScore` owns only one player's mutable score and packed penalty arrays.
+`GolfPlayer` adds that slot's fixed name, tee, and tee-specific yards. `GolfRound` owns
+shared course data plus all four players:
+
+```cpp
+struct GolfPlayerScore {
+  uint8_t putts[18];
+  uint8_t in100[18];
+  uint8_t out100[18];
+  uint8_t penaltyCount[18];
+  uint8_t penaltyEvents[18][4];
+};
+
+struct GolfPlayer {
+  char name[24];
+  TeeSelection tee;
+  uint16_t yards[18];
+  GolfPlayerScore score;
+};
+
+struct GolfRound {
+  char courseName[40];
+  uint16_t dateYmd;
+  uint8_t holeCount;
+  uint8_t currentHole;
+  uint8_t currentPlayer;
+  uint8_t par[18];
+  uint8_t si[18];
+  bool hasSi;
+  GolfPlayer players[4];
+};
+```
+
+The actual declarations also retain the named bounds and `NO_PLAYER`. Compile-time
+assertions fix `sizeof(GolfPlayerScore) == 144`, `sizeof(GolfPlayer) == 206`, and
+`sizeof(GolfRound) == 906`, and require standard-layout, trivially-copyable aggregates.
+The RAM mechanism is deliberately simple: all four worst-case records are reserved once
+inside the round, so enabling another player performs **no allocation** and cannot
+fragment the C3 heap. The cost over the old 254-byte round is a fixed 652 bytes.
+
+A 906-byte `GolfRound` must not be an automatic local on an embedded task stack. Keep it
+in the persistent singleton or as a member of an already heap-allocated activity, and
+pass references. Do not create temporary whole-round copies in rendering or mutation
+paths.
+
+`par`, `si`, and `hasSi` are shared. `CourseStore::applyGolfCourse()` snapshots all
+three and keeps neutral player defaults; the setup-only selection helper then applies
+§16.1. When `hasSi` is false, the shared `si` array stays zero. Each player's `yards`
+array is selected from that player's tee and is independent of every other player. A
+selection-only tee keeps that player's fixed yard array zero.
+
+### 16.3 Explicit per-player APIs
+
+Mutation cannot select a player implicitly. Rules and penalty calls take an explicit
+`GolfPlayerScore&`; per-player statistics take both the shared `const GolfRound&` and an
+explicit `const GolfPlayerScore&`. In particular, none of these APIs reads
+`currentPlayer` to decide whose data to modify.
+
+Representative calls are:
+
+```cpp
+incrementGolfCounter(player.score, hole, field);
+seedGolfHoleAtPar(player.score, hole, round.par[hole]);
+golfAppendPenalty(player.score, hole, field, kind);
+golfHoleScore(round, player.score, hole);
+golfScore(round, player.score);
+```
+
+Validation follows the same ownership boundary. `validateGolfPlayerScore()` repairs one
+explicit score and returns that player's hole masks. `validateGolfRound()` validates all
+four scores and retains four separate result records, so a repair can be logged with both
+slot and hole. A persisted or playable round is rejected if no player is enabled or if a
+tee token is invalid. An out-of-range or disabled `currentPlayer` is repaired to the
+first enabled slot.
+
+### 16.4 Flattened turn order and blank advance
+
+The scoring order is the Cartesian sequence `(hole, enabled player)` in ascending stable
+slot order. These allocation-free helpers are authoritative:
+
+```cpp
+uint8_t golfFirstEnabledPlayer(const GolfRound& round);
+uint8_t golfNextEnabledPlayer(const GolfRound& round, uint8_t player);
+uint8_t golfPreviousEnabledPlayer(const GolfRound& round, uint8_t player);
+bool advanceGolfTurn(GolfRound& round);
+```
+
+The index helpers wrap and return `GolfRound::NO_PLAYER` when no slot is enabled.
+`advanceGolfTurn()` moves to the next enabled slot on the same hole. From the last
+enabled slot it moves to the first enabled slot on the next hole; the final hole wraps
+to hole 0. With one enabled slot, every advance changes the hole exactly as the v3
+single-player implementation did.
+
+The positional `Out100` confirm rule still applies per turn. An unentered player/hole
+with preview values commits that player's values before advancing. An unentered
+player/hole with all-zero values advances without creating a score. No other player's
+arrays are read or changed by either path.
+
+### 16.5 State and completed-round JSON v4
+
+Both codecs share one multiplayer payload. State files include `currentHole` and
+`currentPlayer`; completed archives omit both cursor fields. `players` always has exactly
+four ordered slot objects so disabled-player names survive:
+
+```json
+{
+  "v": 4,
+  "date": null,
+  "course": "Sanyang Golf Club",
+  "holes": 18,
+  "currentHole": 6,
+  "currentPlayer": 2,
+  "par": [4,5,3,4,5,3,4,4,4,4,4,5,3,4,4,4,3,5],
+  "hasSi": true,
+  "si": [15,7,13,11,9,17,3,1,5,6,12,18,16,10,14,2,4,8],
+  "players": [
+    {"name":"Noah",     "tee":"Blue",    "yards":[0], "putts":[0], "in100":[0], "out100":[0], "penalties":[[]]},
+    {"name":"Player B", "tee":"White",   "yards":[0], "putts":[0], "in100":[0], "out100":[0], "penalties":[[]]},
+    {"name":"Player C", "tee":"NotPlay", "yards":[0], "putts":[0], "in100":[0], "out100":[0], "penalties":[[]]},
+    {"name":"Player D", "tee":"NotPlay", "yards":[0], "putts":[0], "in100":[0], "out100":[0], "penalties":[[]]}
+  ]
+}
+```
+
+The one-element arrays above abbreviate the shape only; on disk every per-hole array is
+exactly `holes` elements and `penalties` has exactly `holes` subarrays. `par` and `si`
+are also exactly `holes` elements. Disabled players use `NotPlay` and canonical zero
+yards/scores/penalties. A writer may omit a disabled zero-only array only if its decoder
+specifies and applies that same all-zero default; writing the full shape is preferred.
+
+Legacy v2/v3 input migrates into slot 0. It receives the decoded canonical Blue or White
+tee; an absent or malformed legacy label uses the defined Blue fallback. Its yards,
+scores, and penalties move unchanged, slots 1–3 use their default names and remain
+`NotPlay`, and absent SI becomes `hasSi = false` with a zero SI array. v1 remains
+rejected because its `in100` meaning is incompatible. The `archivedAs` commit marker is
+still inspected before version, metadata, or score parsing and before allocating a
+staging round.
+
+Transactional decode uses one checked `makeUniqueNoThrow<GolfRound>()` staging object.
+This allocation is required because a 906-byte automatic local exceeds the embedded task
+stack policy, while decoding directly into the live store would expose partial state on
+failure. File loading follows the same one-allocation rule; archive uses one larger
+checked scratch allocation containing the round and its reusable CSV row buffers. No
+allocation occurs inside a player or hole loop. The streaming index migrator contains
+two 255-byte line buffers, so firmware also creates each migrator with one checked
+`makeUniqueNoThrow` allocation per pass instead of placing it on the task stack; rows
+still stream one at a time.
+
+### 16.6 Normalized history index v4
+
+The exact header is:
+
+```text
+date,course,holes,playerSlot,playerName,strokes,par,putts,in100,out100,hazards,obs,file
+```
+
+A completed group round owns one JSON file but contributes one index row for each enabled
+stable slot. `playerSlot` is decimal `0..3`; `playerName` is the round-time name snapshot
+and uses the same RFC-4180 quoting as `course`. Every row for the group carries the same
+`file`. Disabled slots produce no row. The score aggregates are computed from the
+explicit player's `GolfPlayerScore`; there is no group total and no implicit use of
+`currentPlayer`.
+
+A v2 or v3 index is migrated through `index.csv.new` and `index.csv.bak` before a v4
+append. Every legacy row becomes slot `0`, name `Noah`; existing aggregate and penalty
+recording semantics are preserved. The staged file must parse as v4 and retain the
+expected row count before it replaces the live index. An unknown header is never mixed
+with v4 rows.
+
+Archiving stages the old index plus all 1–4 enabled-player rows, verifies their total
+count, shared filename, and distinct slot mask, and only then swaps the staged file into
+place. Thus a partial player group is never visible in live History. Recovery never
+promotes a lone `index.csv.new` when both the live index and backup are absent: a first
+multi-player append can lose power at a complete-row boundary and still be syntactically
+valid v4 while containing only part of the group. The lone stage is discarded; failure
+to remove it fails recovery, and the still-open round can retry by constructing the whole
+group again. When a backup exists it remains the pre-transaction authority and is
+restored before staging is touched; when a live index exists it remains authoritative.
+
+Whole-round delete performs the inverse staged rewrite: it requires 1–4 distinct rows
+for the filename, removes all of them, verifies none remain, and commits at the
+`index.csv.new` to `index.csv` rename. Removing `index.csv.bak` is post-commit cleanup;
+its failure does not suppress the JSON unlink or turn the already-published deletion
+into a pre-commit failure. A retry that finds no matching rows treats the index side as
+already committed and removes any remaining group JSON instead of stranding it. A JSON
+unlink failure may still leave an invisible orphan but cannot leave a visible partial
+group; later index recovery removes stale staging or backup artifacts.
+
+History and Trends are always selected by stable slot. `GolfHistoryReader::reset(slot)`
+rejects an invalid slot and filters matching rows **before** its 50-entry ring and
+overflow count. `GolfIndexFileLocator::reset(slot, newestIndex, totalFilteredRows)`
+applies the identical filter when resolving a row's shared filename.
+
+`GolfPlayerNamesReader` scans chronologically with one fixed row buffer, starts with the
+four default names, and keeps only the latest valid snapshot and presence bit for each
+slot. The one shared selector owns this reader, a retained recovery migrator, and one
+fixed I/O chunk. Each selector scan on entry and post-child rescan of an existing index
+performs one necessary, checked `HalFile::Impl` handle allocation; allocation failure is
+logged and publishes the rows as unavailable. There is no per-row allocation. A release/acquire
+atomic refresh flag hides the previously published rows until the rescan publishes under
+`RenderLock`, so whole-group deletion can disable the last affected selector row without
+a stale activation window.
+
+History and Trends constructors copy only the selected slot and its fallback name. Their
+active/staging states stream and atomically pointer-publish only that slot; neither owns a
+four-name snapshot or scans for a first-present slot. On the ESP32-C3 target the selector
+object is 3,076 bytes. While it is retained beneath a child, the explicit object/scratch
+payload is 17,100 bytes for History (3,076-byte selector + 7,488-byte activity +
+6,536-byte checked scratch) or 15,156 bytes for Trends (3,076 + 6,756 + 5,324). These
+figures exclude allocator metadata and the transient checked file-handle allocation and
+are current accounting, not a net-saving claim. History preserves its selected-slot
+second-pass locator and post-deletion reload. Trends folds only its already filtered
+reader and keeps the rounds-count subtitle in content while the header identifies the
+selected player.

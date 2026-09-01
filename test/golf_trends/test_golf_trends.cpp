@@ -7,36 +7,39 @@
 
 namespace {
 
-constexpr char HEADER[] = "date,course,holes,strokes,par,putts,in100,out100,hazards,obs,file\r\n";
+constexpr char HEADER[] =
+    "date,course,holes,playerSlot,playerName,strokes,par,putts,in100,out100,hazards,obs,file\r\n";
 
 std::string row(const uint8_t holes, const uint16_t strokes, const uint16_t par, const uint16_t putts,
-                const uint16_t in100, const uint16_t out100) {
-  char output[160];
-  snprintf(output, sizeof(output), ",Course,%u,%u,%u,%u,%u,%u,0,0,round.json\r\n", holes, strokes, par, putts, in100,
-           out100);
+                const uint16_t in100, const uint16_t out100, const uint8_t slot = 0, const char* name = "Noah") {
+  char output[GOLF_CSV_ROW_BUFFER_SIZE];
+  snprintf(output, sizeof(output), ",Course,%u,%u,%s,%u,%u,%u,%u,%u,0,0,round.json\r\n", holes, slot, name,
+           strokes, par, putts, in100, out100);
   return output;
 }
 
 // A round that recorded penalty data (real hazards/obs counts).
 std::string penaltyRow(const uint16_t strokes, const uint16_t par, const uint16_t putts, const uint16_t in100,
                        const uint16_t out100, const uint16_t hazards, const uint16_t obs) {
-  char output[160];
-  snprintf(output, sizeof(output), ",Course,18,%u,%u,%u,%u,%u,%u,%u,round.json\r\n", strokes, par, putts, in100, out100,
-           hazards, obs);
+  char output[GOLF_CSV_ROW_BUFFER_SIZE];
+  snprintf(output, sizeof(output), ",Course,18,0,Noah,%u,%u,%u,%u,%u,%u,%u,round.json\r\n", strokes, par, putts,
+           in100, out100, hazards, obs);
   return output;
 }
 
-// A round played before penalty tracking: v2 row shape, no penalty cells.
+// A migrated pre-penalty round uses the strict v4 shape with both penalty
+// cells empty; normal readers never accept the original 9-column row here.
 std::string prePenaltyRow(const uint16_t strokes, const uint16_t par, const uint16_t putts, const uint16_t in100,
                           const uint16_t out100) {
   char output[160];
-  snprintf(output, sizeof(output), ",Course,18,%u,%u,%u,%u,%u,round.json\r\n", strokes, par, putts, in100, out100);
+  snprintf(output, sizeof(output), ",Course,18,0,Noah,%u,%u,%u,%u,%u,,,round.json\r\n", strokes, par, putts,
+           in100, out100);
   return output;
 }
 
-GolfTrendStats calculate(const std::string& rows) {
+GolfTrendStats calculate(const std::string& rows, const uint8_t playerSlot = 0) {
   GolfHistoryReader history;
-  history.reset();
+  history.reset(playerSlot);
   const std::string input = std::string(HEADER) + rows;
   history.feed(input.data(), input.size());
   history.finish();
@@ -170,9 +173,24 @@ TEST(GolfTrends, HeadlineAveragesStillIncludePrePenaltyRounds) {
 }
 
 TEST(GolfTrends, NineHolePenaltyRoundsDoNotCountTowardPenaltyFigures) {
-  const std::string nineWithPenalty = ",Course,9,44,36,18,28,16,3,1,round.json\r\n";
+  const std::string nineWithPenalty = ",Course,9,0,Noah,44,36,18,28,16,3,1,round.json\r\n";
   const GolfTrendStats stats =
       calculate(penaltyRow(86, 72, 33, 52, 30, 2, 1) + penaltyRow(90, 72, 34, 54, 30, 4, 1) + nineWithPenalty);
   EXPECT_EQ(stats.penaltyRounds, 2);
   EXPECT_EQ(stats.penaltyStrokesAverageTenths, 50u);
+}
+
+TEST(GolfTrends, SelectedSlotNeverConsumesInterleavedPlayers) {
+  const std::string rows = row(18, 80, 72, 30, 50, 30, 0, "Noah") +
+                           row(18, 120, 72, 45, 80, 40, 2, "Guest") +
+                           row(18, 82, 72, 31, 51, 31, 0, "Noah") +
+                           row(18, 122, 72, 46, 81, 41, 2, "Guest");
+  const GolfTrendStats noah = calculate(rows, 0);
+  const GolfTrendStats guest = calculate(rows, 2);
+  EXPECT_EQ(noah.rounds, 2);
+  EXPECT_EQ(noah.scoringAverageTenths, 810u);
+  EXPECT_EQ(guest.rounds, 2);
+  EXPECT_EQ(guest.scoringAverageTenths, 1210u);
+  EXPECT_EQ(noah.best, 80);
+  EXPECT_EQ(guest.best, 120);
 }

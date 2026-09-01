@@ -11,111 +11,125 @@ require a deviation, stop and report it.
 
 `src/golf/GolfRound.h`
 
-```cpp
-#pragma once
+The live model has exactly four stable player slots. Slots are never compacted or
+renumbered; disabling slot 1 does not move slots 2 or 3. `CONTRACTS-V2.md` §16 defines
+the corresponding v4 wire format.
 
-#include <cstdint>
+```cpp
+enum class TeeSelection : uint8_t { NotPlay = 0, Blue = 1, White = 2 };
+
+struct GolfPlayerScore {
+  uint8_t putts[18];
+  uint8_t in100[18];
+  uint8_t out100[18];
+  uint8_t penaltyCount[18];
+  uint8_t penaltyEvents[18][4];
+};
+
+struct GolfPlayer {
+  static constexpr uint8_t NAME_CAPACITY = 24;
+  char name[NAME_CAPACITY];
+  TeeSelection tee;
+  uint16_t yards[18];
+  GolfPlayerScore score;
+};
 
 struct GolfRound {
   static constexpr uint8_t MAX_HOLES = 18;
+  static constexpr uint8_t MAX_PLAYERS = 4;
+  static constexpr uint8_t MAX_PENALTIES_PER_HOLE = 8;
+  static constexpr uint8_t NO_PLAYER = UINT8_MAX;
 
-  char     courseName[40];
-  char     tees[12];
+  char courseName[40];
   uint16_t dateYmd;               // (year-2000)<<9 | month<<5 | day
-  uint8_t  holeCount;             // 9 or 18
-  uint8_t  currentHole;           // 0-based index into the arrays
-
-  uint8_t  par[MAX_HOLES];
-  uint16_t yards[MAX_HOLES];
-  uint8_t  strokes[MAX_HOLES];    // 0 == hole not entered
-  uint8_t  putts[MAX_HOLES];
-  uint8_t  in100[MAX_HOLES];
+  uint8_t holeCount;              // 9 or 18
+  uint8_t currentHole;            // 0-based index into the shared hole arrays
+  uint8_t currentPlayer;          // stable slot index 0..3
+  uint8_t par[MAX_HOLES];         // shared course facts
+  uint8_t si[MAX_HOLES];
+  bool hasSi;
+  GolfPlayer players[MAX_PLAYERS];
 };
 ```
 
 Rules:
 
-* **Plain aggregate, no heap.** No `std::string`, no `std::vector`, no virtuals. It is
-  passed by reference, never by value into a function that stores it.
-* **`strokes[i] == 0` is the not-entered sentinel.** A hole can never legitimately take
-  zero strokes, so there is no parallel "entered" array. Any code asking "has this hole
-  been scored?" asks `strokes[i] != 0`.
-* **Long game is never stored.** It is computed at the point of display:
-  `long = strokes - putts - in100`.
+* **Plain fixed-size aggregates, no heap.** No `std::string`, `std::vector`, virtuals,
+  or per-player allocation. `GolfPlayerScore` is 144 bytes, `GolfPlayer` is 206 bytes,
+  and `GolfRound` is 906 bytes; compile-time assertions lock those bounds.
+* Do not create `GolfRound` as a local automatic variable on embedded task stacks. Keep
+  it in the singleton store or an already heap-allocated activity and pass it by
+  reference. Small `GolfPlayerScore` references are the unit of mutation.
+* Slot names are round data in fixed null-terminated `char[24]` buffers. The defaults,
+  installed by `initializeGolfPlayerDefaults()`, are `Noah`, `Player B`, `Player C`,
+  and `Player D`.
+* A slot is active **if and only if** `tee != TeeSelection::NotPlay`; there is no second
+  enabled flag. The neutral `initializeGolfPlayerDefaults()` and legacy decode paths keep
+  all four tees at `NotPlay`. After an explicit course selection, player setup enables P1
+  on the first truthful tee described below; P2–P4 remain `NotPlay`.
+* `par`, `si`, and `hasSi` belong to the course and are shared. `yards` belongs to a
+  player because it follows that player's Blue or White tee.
+* Handicap and net-score fields do not exist. All scores and comparisons are gross.
 * Arrays are always `MAX_HOLES` long regardless of `holeCount`. Entries at or beyond
-  `holeCount` are zero and must be ignored, not rendered.
+  `holeCount` are zero and ignored.
 
-## 2. The invariant
+## 2. Scoring invariant and ownership
+
+For every player and hole:
 
 ```
-For every hole i:   putts[i] + in100[i] <= strokes[i]
+putts <= in100
+score  = in100 + out100 + penalty strokes
+entered iff in100 + out100 != 0
 ```
 
-This holds at **every moment**, not merely at save time. It is enforced by the mutation
-helpers, which are the only sanctioned way to change a counter:
+`in100` includes putts. Raising putts carries `in100` upward when needed; lowering
+`in100` below putts carries putts down. A counter clamps at 0 and 99. Penalty semantics
+remain those in `CONTRACTS-V2.md` §12.
 
-| Operation | Behaviour |
-| --- | --- |
-| Increment `putts` or `in100` when `putts + in100 == strokes` | **Also increments `strokes`.** Adding a putt means a shot was taken. |
-| Increment `strokes` | Always allowed, up to a ceiling of 99. |
-| Decrement `strokes` below `putts + in100` | **Refused.** Returns a "blocked" result naming **every** field jointly holding the floor, so the UI can flash them inverse for one frame. |
-| Decrement any counter below 0 | Refused, no-op. |
-| Increment any counter on an unentered hole | Marks the hole entered (`strokes` becomes non-zero). |
+Every scoring, penalty, and per-player statistics API receives an explicit
+`GolfPlayerScore&` (or `const GolfPlayerScore&`). No helper infers a player from
+`GolfRound::currentPlayer`; therefore a caller cannot accidentally mutate one slot while
+another is selected. Helpers that also need shared par or `holeCount` receive the round
+as a separate const reference.
 
-Workers implement these as pure functions over `GolfRound` in `src/golf/GolfStats.{h,cpp}`
-or a dedicated mutation header, **not** inline inside the activity. They must be
-unit-testable without a display.
+A hole remains unentered until `in100 + out100 != 0`, even when a par preview is visible.
+A penalty always adds a real field shot, so a penalty-only entered state cannot be
+created through the mutation API.
 
-### 2.1 The mutation result type
-
-*Amended 2026-08-29 in response to a worker question during M0. The original text said
-the result named "the field that holds the floor", singular. When `putts` and `in100`
-are both positive and `strokes == putts + in100`, they hold it jointly, and naming only
-one of them reports something untrue. There is no correct priority order to pick, so
-the result carries a set instead.*
+## 3. Field focus and turn order
 
 ```cpp
-struct GolfMutationResult {
-  bool     changed;            // a counter actually moved
-  bool     blocked;            // refused by the invariant (not by a plain 0/99 clamp)
-  uint8_t  blockingFields;     // bitmask of (1u << static_cast<uint8_t>(GolfField))
-  bool     autoBumpedStrokes;  // a putts/in100 increment also raised strokes
-};
+enum class GolfField : uint8_t { Putts = 0, In100 = 1, Out100 = 2 };
 ```
 
-Rules for `blockingFields`:
+Field focus cycles `Putts -> In100 -> Out100`; leaving `Out100` advances one flattened
+turn. Turns are ordered `(hole, enabled player)` in stable slot order. The next enabled
+player stays on the same hole; advancing from the last enabled player moves to the next
+hole and the first enabled player. The final hole wraps to hole 0. With one enabled
+player this is exactly the original one-player hole advance.
 
-* Set a bit for **every** field that is jointly holding the floor. With
-  `strokes == putts + in100` and both positive, both `Putts` and `In100` bits are set —
-  reducing either one unblocks the decrement, so both are genuinely actionable.
-* If only one of `putts` / `in100` is positive, only that bit is set.
-* `blockingFields` is `0` whenever `blocked` is false.
-* A plain clamp is **not** a block: decrementing a counter that is already `0`, or
-  incrementing `strokes` at the 99 ceiling, returns `changed = false`, `blocked = false`,
-  `blockingFields = 0`. Only the invariant sets `blocked`.
-
-`autoBumpedStrokes` lets the scoring screen show why the strokes figure moved when the
-user was pressing Up on putts. It is not optional — M1 needs it.
-
-## 3. Field focus
-
-```cpp
-enum class GolfField : uint8_t { Strokes = 0, Putts = 1, In100 = 2 };
-```
-
-Confirm cycles `Strokes -> Putts -> In100 -> Strokes`. Focus resets to `Strokes` on
-every hole change.
+`golfFirstEnabledPlayer()`, `golfNextEnabledPlayer()`, and
+`golfPreviousEnabledPlayer()` return stable slot indexes or `GolfRound::NO_PLAYER`.
+`advanceGolfTurn()` owns the flattened forward rule. A completed/persisted round must
+have at least one enabled slot, and `currentPlayer` must name one; setup may temporarily
+hold all four slots at `NotPlay` before Complete is allowed.
 
 ## 4. Pre-seeding to par
 
-On first arrival at a hole where `strokes[i] == 0`, the scoring screen **displays** the
-hole's par in a visually lighter/outlined style. The hole stays unentered until a
-counter is actually mutated. Walking past a hole without pressing anything must leave
-it blank on the card, never a silent par.
+On first arrival at a player/hole where `in100 + out100 == 0`, the scoring screen
+**displays** that player's par reconstruction in a visually lighter/outlined style:
+`putts = 2`, `in100 = 2`, `out100 = par - 2`. The score remains unentered until the
+preview is committed or a counter/penalty mutation seeds and changes that explicit
+player score. Advancing through a blank, par-free hole does not create a score.
 
 This is a setting, `Start hole at par`, default **on**.
 
 ## 5. On-disk layout
+
+The v1 examples retained in this section document the original files only.
+`CONTRACTS-V2.md` §16.5 supersedes their singular `tees` and score arrays with the
+multiplayer v4 wire shape.
 
 ```
 /golf/
@@ -123,7 +137,7 @@ This is a setting, `Start hole at par`, default **on**.
   courses/
     <slug>.json
   rounds/
-    index.csv                      one row per round; History's only input
+    index.csv                      one row per enabled stable slot; selector/review input
     <YYYY-MM-DD>-<slug>.json
   export/
     holes.csv                      generated on demand
@@ -156,6 +170,20 @@ slug identically are separated by the §5.5 collision suffix, so nothing is lost
 exactly `holes` entries. A file failing validation is skipped with a log line, never
 crashes the list.
 
+Course selection applies this setup-only tee policy without changing neutral round or
+legacy decode defaults:
+
+1. If `CourseStore::resolveTee(..., Blue, ...)` succeeds, P1 Noah starts on Blue.
+2. Otherwise, if the course's exact White row resolves, P1 starts on White.
+3. An empty `tees` value with no `yards` offers both Blue and White as selection-only
+   choices with zero player yardages and defaults P1 to Blue.
+4. A noncanonical tee label (for example `Blue/White`) or nonzero yardage without a tee
+   label resolves neither tee. P1 remains `NotPlay`, as do P2–P4.
+
+Complete is available immediately exactly when this policy found a truthful P1 tee.
+A resolver must never infer a label for yardage data or borrow a built-in alternate for
+an SD override.
+
 ### 5.2 Completed round file
 
 ```json
@@ -175,7 +203,10 @@ crashes the list.
 Par is copied into the round file so a round stays readable after its course file is
 edited or deleted. Unentered holes are written as `0` in `strokes`.
 
-### 5.3 History index
+### 5.3 History index (historical v1–v3)
+
+`CONTRACTS-V2.md` §16.6 defines the authoritative normalized v4 header, migration,
+and grouped transaction rules.
 
 ```
 date,course,holes,strokes,par,putts,in100,file
@@ -186,8 +217,23 @@ date,course,holes,strokes,par,putts,in100,file
 * Appended to on finish; never rewritten wholesale during normal operation.
 * Course names containing a comma or quote are quoted per RFC 4180.
 * `strokes` / `putts` / `in100` are round totals over entered holes only.
-* **The History screen reads this file and nothing else.** Parsing every round JSON to
-  render a list is explicitly forbidden — it is too slow on the C3.
+* **The player selector and History list read this file and nothing else.** Parsing every
+  round JSON to render either list is explicitly forbidden — it is too slow on the C3.
+  Only activation of one selected History row may load that row's one round JSON.
+
+Golf Home opens the same four-row stable-slot selector before either History or Trends.
+One recovered streaming pass retains the latest name and presence bit for P1–P4. Missing
+slots remain visible and disabled with the short translated value `No rounds`; logical
+Next/Previous navigation skips them, and an all-missing selector still accepts Back.
+Touch and Confirm recheck the live presence bit before opening a child.
+
+The selected data activity receives an immutable slot plus a copied fallback name. It
+loads only that slot and shows its identity at the right of the header; there are no
+player tabs, left/right player switching, all-player name copies, or first-present
+fallback inside History or Trends. Before pushing a child, the selector marks its tiny
+atomic refresh flag. On return it recovers and streams again while stale rows are hidden,
+then publishes the new fixed-capacity row snapshot. Deleting a slot's final round
+therefore disables that row before it can be selected again.
 
 ### 5.4 The in-progress round file
 
@@ -254,8 +300,8 @@ filename tidiness.
    `enterDeepSleep()`.
 4. Before deliberately navigating away from the scoring screen — the activity flushes
    itself, outside any lock, before calling `finish()` or `replaceActivity()`.
-5. Finish round — writes the round file and appends the index row, then clears
-   `state.json`.
+5. Finish round — writes one group round file, atomically publishes all enabled-player
+   index rows per `CONTRACTS-V2.md` §16.6, then clears `state.json`.
 
 **`onExit()` must not perform SD I/O.** `ActivityManager::exitActivity()` calls
 `onExit()` while holding the global `RenderLock` (`ActivityManager.cpp:206-210`, whose
@@ -277,12 +323,12 @@ never its failure semantics. This is a contract gap, not an implementation defec
 Finishing a round is three writes that cannot be made atomic on an SD card:
 
 1. Write the round file to `/golf/rounds/<name>.json`.
-2. Append its row to `index.csv`.
+2. Atomically publish its 1–4 enabled-player rows to `index.csv`.
 3. Clear `/golf/state.json`.
 
 If step 3 fails, the round is safely archived but the open round still exists on disk. A
 caller that blindly retries would write a *second* round file under a `-2` suffix and a
-second index row — a duplicate round.
+second index group — a duplicate round.
 
 **Rules:**
 
@@ -297,14 +343,15 @@ second index row — a duplicate round.
   after M1b-1 identified it — the original §6.1 text left the ordering implicit.
 * **Never auto-retry `archive()` after the round file has been written.** Surface the
   failure to the user instead. A retry that finds `archivedAs` already set must skip
-  straight to deleting `state.json`.
+  straight to deleting `state.json`, before allocating archive scratch or recovering
+  the history index.
 
 **The bias is deliberate: prefer a duplicate round over a lost one.** A duplicate is
 recoverable — delete a file, drop a CSV row. A round the golfer already played and
 cannot reconstruct from memory is gone for good. Where the two risks conflict, protect
 against loss.
 
-Residual, accepted: a crash between steps 1 and 2 leaves a round file with no index row,
+Residual, accepted: a crash between steps 1 and 2 leaves a round file with no index rows,
 so it will not appear in History. The round data itself survives on the card. A future
 milestone may add an index rebuild that scans `/golf/rounds/`; it is not required now.
 
@@ -323,8 +370,8 @@ All computed by pure functions in `src/golf/GolfStats.{h,cpp}`, none stored:
 
 | Figure | Definition |
 | --- | --- |
-| Long game (hole) | `strokes - putts - in100` |
-| Score | sum of `strokes` over entered holes |
+| Long game (hole) | `out100` for the selected player |
+| Score | sum of `in100 + out100 + penaltyStrokes` over that player's entered holes |
 | To par | `score - sum(par over entered holes)` |
 | Thru | count of entered holes |
 | Putts / In100 / Long totals | sums over entered holes |
@@ -345,7 +392,8 @@ choices are ratified here as the contract.*
 ```cpp
 struct GolfWorstHole { uint8_t hole; int16_t toPar; };
 
-uint8_t golfWorstHoles(const GolfRound& round, GolfWorstHole* holes, uint8_t capacity);
+uint8_t golfWorstHoles(const GolfRound& round, const GolfPlayerScore& score,
+                       GolfWorstHole* holes, uint8_t capacity);
 ```
 
 * Storage is **caller-provided**; the function never allocates. It returns the number
@@ -358,35 +406,26 @@ uint8_t golfWorstHoles(const GolfRound& round, GolfWorstHole* holes, uint8_t cap
 
 ## 9. Validating externally-loaded rounds
 
-*Added 2026-08-29 by the architect during M0 review. This is a gap I found in my own
-contract, not something the worker got wrong — M0 has no file I/O, so nothing here was
-in its scope.*
-
-The §2 invariant is airtight **through the mutation API**: no sequence of increments and
-decrements can reach a state where `putts + in100 > strokes`. It is *not* airtight
-against a `GolfRound` filled in from outside — a truncated, corrupt, or hand-edited
-`/golf/state.json` or round file.
-
-A concrete failure: a round loaded with `strokes = 0`, `putts = 1` is already invalid.
-Incrementing putts then sees `shortShots (1) >= strokes (0)`, bumps strokes to 1 and
-putts to 2, leaving `putts (2) > strokes (1)`. The rules layer is not at fault; it is
-entitled to assume a valid starting state.
-
-**Therefore M1 must not hand deserialized data to the rules layer unvalidated.** Any
-loader (`GolfRoundStore`, `RoundArchive`) must pass every round through a validation and
-repair step before use:
+The §2 invariant is airtight through the mutation API but not against a truncated,
+corrupt, or hand-edited file. Every state or archive loader validates before exposing a
+round:
 
 * `holeCount` is 9 or 18; anything else rejects the file.
-* `currentHole < holeCount`, else clamp to 0.
-* For every hole: if `strokes == 0`, force `putts` and `in100` to 0 — an unentered hole
-  cannot have short-game counts.
-* For every hole: if `putts + in100 > strokes`, the record is inconsistent. Preserve
-  `strokes` (the number the golfer is surest of) and reduce `in100` first, then `putts`,
-  until the invariant holds.
-* Every repair emits a log line naming the hole and what changed. Silent repair of a
-  score is not acceptable.
+* Every tee is one of `NotPlay`, `Blue`, or `White`; an unknown enum/token rejects it.
+* At least one player is enabled. A four-`NotPlay` setup draft is not a valid persisted
+  or playable round.
+* `currentHole < holeCount`, else reset it to 0.
+* `currentPlayer` identifies an enabled stable slot, else reset it to the first enabled
+  slot.
+* Validate each `GolfPlayerScore` independently. If `in100 + out100 == 0`, force putts
+  to 0; otherwise reduce putts to `in100` when needed. Repair invalid/capped penalty
+  records only inside the owning player's score.
+* Every repair log names both the player slot and hole. Silent repair of a score is not
+  acceptable.
 
-M1's brief will carry this as an explicit deliverable with its own test suite.
+`validateGolfPlayerScore()` returns per-hole repair masks for one explicit score.
+`validateGolfRound()` returns four such result records plus cursor repairs; it cannot
+collapse player results into one bitmap because that would hide which score changed.
 
 
 ## 10. Course enumeration

@@ -103,6 +103,10 @@ class PersistableStore : public PersistableStoreBase {
     std::lock_guard<std::mutex> lock(storeMutex);
     JsonDocument doc;
     static_cast<const T*>(this)->toJson(doc);
+    if (doc.overflowed()) {
+      LOG_ERR("PERSIST", "JSON allocation failed for %s", T::getFilePath());
+      return false;
+    }
     return writeDocToFile(T::getFilePath(), doc);
   }
 

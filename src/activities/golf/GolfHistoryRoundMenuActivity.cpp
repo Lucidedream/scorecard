@@ -2,6 +2,7 @@
 
 #if defined(CROSSPOINT_GOLF)
 
+#include <I18n.h>
 #include <Logging.h>
 #include <Memory.h>
 
@@ -11,34 +12,51 @@
 #include "GolfHoleReviewActivity.h"
 #include "GolfReviewFormat.h"
 #include "GolfStatisticsActivity.h"
-#include "GolfStrings.h"
+#include "GolfUiLayout.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
-#include "golf/GolfPenalty.h"
-#include "golf/GolfStats.h"
 #include "golf/RoundArchive.h"
 
 namespace fui = freeink::ui;
 
+namespace {
+
+const char* teeLabel(const TeeSelection tee) {
+  return tee == TeeSelection::White ? tr(STR_GOLF_WHITE) : tr(STR_GOLF_BLUE);
+}
+
+}  // namespace
+
 GolfHistoryRoundMenuActivity::GolfHistoryRoundMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                                           const GolfRound& archivedRound, const char* filename)
-    : UiListActivity("GolfHistoryRoundMenu", renderer, mappedInput), round(archivedRound) {
+                                                           const GolfRound& archivedRound, const char* filename,
+                                                           const uint8_t selectedPlayerSlot)
+    : UiListActivity("GolfHistoryMenu", renderer, mappedInput),
+      round(archivedRound),
+      playerSlot(selectedPlayerSlot) {
   if (filename != nullptr) snprintf(archiveFilename, sizeof(archiveFilename), "%s", filename);
 }
 
 void GolfHistoryRoundMenuActivity::onEnter() {
-  rows[0].label = GolfStrings::SCORECARD;
-  rows[1].label = GolfStrings::HOLE_BY_HOLE;
-  rows[2].label = GolfStrings::STATISTICS;
-  rows[3].label = GolfStrings::DELETE_ROUND;
+  rows[0].label = tr(STR_GOLF_APP_TITLE);
+  rows[1].label = tr(STR_GOLF_HOLE_BY_HOLE);
+  rows[2].label = tr(STR_GOLF_STATISTICS);
+  rows[3].label = tr(STR_GOLF_DELETE_ROUND);
   for (uint8_t i = 0; i < ROW_COUNT; ++i) {
-    rows[i].value = GolfStrings::CHEVRON;
+    rows[i].value = ">";
     rows[i].actionValue = i;
   }
-  golfFormatRoundStatus(round, status, sizeof(status));
-  snprintf(infoLine1, sizeof(infoLine1), GolfStrings::ROUND_INFO_HOLES_FORMAT, round.holeCount, round.tees);
-  snprintf(infoLine2, sizeof(infoLine2), GolfStrings::ROUND_INFO_STATS_FORMAT, golfPuttsTotal(round),
-           golfPenaltyStrokesForRound(round));
+  if (playerSlot >= GolfRound::MAX_PLAYERS || !golfPlayerIsEnabled(round.players[playerSlot])) {
+    LOG_ERR("GOLF", "Archived menu selected invalid player slot %u", playerSlot);
+    finish();
+    return;
+  }
+  const GolfPlayer& player = selectedPlayer();
+  golfFormatRoundStatus(round, player.score, tr(STR_GOLF_EVEN), tr(STR_GOLF_TO_PAR_POSITIVE_FORMAT),
+                        tr(STR_GOLF_TO_PAR_NEGATIVE_FORMAT), tr(STR_GOLF_ROUND_STATUS_FORMAT), status,
+                        sizeof(status));
+  golfFormatPlayerLabel(playerSlot, player.name, tr(STR_GOLF_PLAYER_LABEL_FORMAT), infoLine1, sizeof(infoLine1));
+  snprintf(infoLine2, sizeof(infoLine2), tr(STR_GOLF_ROUND_INFO_HOLES_FORMAT),
+           static_cast<unsigned>(round.holeCount), teeLabel(player.tee));
   UiListActivity::onEnter();
 }
 
@@ -54,7 +72,7 @@ void GolfHistoryRoundMenuActivity::activateIndex(const int index) {
     return;
   }
   if (index == 1) {
-    auto holes = makeUniqueNoThrow<GolfHoleReviewActivity>(renderer, mappedInput, round);
+    auto holes = makeUniqueNoThrow<GolfHoleReviewActivity>(renderer, mappedInput, round, playerSlot);
     if (!holes) {
       LOG_ERR("GOLF", "OOM: hole review activity");
       return;
@@ -63,7 +81,7 @@ void GolfHistoryRoundMenuActivity::activateIndex(const int index) {
     return;
   }
   if (index == 2) {
-    auto statistics = makeUniqueNoThrow<GolfStatisticsActivity>(renderer, mappedInput, round);
+    auto statistics = makeUniqueNoThrow<GolfStatisticsActivity>(renderer, mappedInput, round, playerSlot);
     if (!statistics) {
       LOG_ERR("GOLF", "OOM: statistics activity");
       return;
@@ -78,12 +96,12 @@ void GolfHistoryRoundMenuActivity::confirmDelete() {
   deleteFailed = false;
   char date[GOLF_DATE_BUFFER_SIZE];
   if (golfFormatDate(round.dateYmd, date, sizeof(date))) {
-    snprintf(deletePrompt, sizeof(deletePrompt), GolfStrings::DELETE_DATED_PROMPT, round.courseName, date);
+    snprintf(deletePrompt, sizeof(deletePrompt), tr(STR_GOLF_DELETE_DATED_PROMPT_FORMAT), round.courseName, date);
   } else {
-    snprintf(deletePrompt, sizeof(deletePrompt), GolfStrings::DELETE_UNDATED_PROMPT, round.courseName);
+    snprintf(deletePrompt, sizeof(deletePrompt), tr(STR_GOLF_DELETE_UNDATED_PROMPT_FORMAT), round.courseName);
   }
   auto confirmation =
-      makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, GolfStrings::DELETE_ROUND, deletePrompt);
+      makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_GOLF_DELETE_ROUND), deletePrompt);
   if (!confirmation) {
     LOG_ERR("GOLF", "OOM: delete confirmation");
     return;
@@ -104,24 +122,32 @@ void GolfHistoryRoundMenuActivity::completeDelete(const bool confirmed) {
 
 void GolfHistoryRoundMenuActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  screen.setContentMargin(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
-                                      static_cast<int16_t>(metrics.buttonHintsHeight), 0});
-  fui::ListProps props;
-  props.items = rows;
-  props.count = ROW_COUNT;
-  props.action = ACTION_ROW;
-  props.inputMask = fui::InputTouch;
-  syncListViewport(screen, props);
-  props.rowHeight = MENU_ROW_HEIGHT;
-  props.rowGap = 0;
-  props.scrollIndicator = false;
-  screen.list(props, static_cast<int16_t>(ROW_COUNT * MENU_ROW_HEIGHT));
+  const auto chrome = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding,
+                                            metrics.headerHeight);
+  screen.setContentMargin(chrome.contentMargins);
+
+  const int16_t smallLine = screen.target().lineHeight(screen.theme().smallText.font);
+  const int16_t bodyLine = screen.target().lineHeight(screen.theme().bodyText.font);
+  const int16_t rowMinimum = bodyLine > smallLine ? bodyLine : smallLine;
+  const auto layout = golfui::makeMenuInfoLayout(screen.body(), ROW_COUNT, rowMinimum, smallLine * 2 + 16);
+  screen.takeBottom(layout.info.height);
+
+  listProps = {};
+  listProps.items = rows;
+  listProps.count = ROW_COUNT;
+  listProps.action = ACTION_ROW;
+  listProps.inputMask = fui::InputTouch;
+  listProps.rowHeight = layout.rowHeight;
+  listProps.rowGap = 0;
+  listProps.scrollIndicator = false;
+  syncListViewport(screen, listProps);
+  screen.list(listProps, layout.menu.height);
 
   auto infoStyle = screen.theme().smallText;
   infoStyle.align = fui::TextAlign::Left;
-  const fui::Rect band = screen.takeTop(INFO_BAND_HEIGHT).inset(fui::Insets{8, 18, 8, 18});
+  const fui::Rect band = golfui::inset(layout.info, fui::Insets{8, 18, 8, 18});
   if (deleteFailed) {
-    screen.target().text(band, GolfStrings::DELETE_ERROR, infoStyle);
+    screen.target().text(band, tr(STR_GOLF_DELETE_ERROR), infoStyle);
     return;
   }
   const int16_t lineHeight = static_cast<int16_t>(band.height / 2);
@@ -132,13 +158,14 @@ void GolfHistoryRoundMenuActivity::buildScreen(UiScreen& screen) {
 
 void GolfHistoryRoundMenuActivity::drawChrome() {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, renderer.getScreenWidth(), metrics.headerHeight},
+  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding, metrics.headerHeight);
+  GUI.drawHeader(renderer, Rect{layout.header.x, layout.header.y, layout.header.width, layout.header.height},
                  round.courseName, status);
 }
 
 void GolfHistoryRoundMenuActivity::drawFooter() {
-  const auto labels =
-      mappedInput.mapLabels(GolfStrings::BACK, GolfStrings::SELECT, GolfStrings::UP, GolfStrings::DOWN);
+  const auto labels = mappedInput.mapLabels(tr(STR_GOLF_BUTTON_BACK), tr(STR_GOLF_BUTTON_SELECT),
+                                            tr(STR_GOLF_BUTTON_UP), tr(STR_GOLF_BUTTON_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
