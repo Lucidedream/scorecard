@@ -4,6 +4,8 @@
 
 #include <I18n.h>
 
+#include <cstdio>
+
 #include "GolfNavigation.h"
 #include "GolfUiLayout.h"
 #include "components/UITheme.h"
@@ -44,6 +46,9 @@ void GolfSetupActivity::loadCourses() {
   for (; row < courseCount; ++row) {
     rows[row] = {};
     rows[row].label = courses[row].courseName;
+    formatCourseRow(row);
+    rows[row].subtitle = courseDetails[row];
+    rows[row].value = parLabels[row];
     rows[row].actionValue = row;
   }
   if (overflow) {
@@ -51,6 +56,34 @@ void GolfSetupActivity::loadCourses() {
     rows[row].label = tr(STR_GOLF_COURSE_OVERFLOW);
     rows[row].enabled = false;
   }
+}
+
+void GolfSetupActivity::formatCourseRow(const uint8_t row) {
+  if (row >= courseCount) return;
+  const GolfCourse& course = courses[row];
+  GolfTeeResolution resolved{};
+  const bool hasBlue = CourseStore::resolveTee(files[row], course, TeeSelection::Blue, resolved);
+  const bool hasWhite = CourseStore::resolveTee(files[row], course, TeeSelection::White, resolved);
+  char tees[24]{};
+  if (hasBlue && hasWhite) {
+    snprintf(tees, sizeof(tees), tr(STR_GOLF_TEE_PAIR_FORMAT), tr(STR_GOLF_BLUE), tr(STR_GOLF_WHITE));
+  } else {
+    snprintf(tees, sizeof(tees), "%s",
+             hasBlue    ? tr(STR_GOLF_BLUE)
+             : hasWhite ? tr(STR_GOLF_WHITE)
+                        : tr(STR_GOLF_EM_DASH));
+  }
+  snprintf(courseDetails[row], sizeof(courseDetails[row]), tr(STR_GOLF_COURSE_ROW_FORMAT), course.holeCount, tees);
+
+  uint16_t par = 0;
+  for (uint8_t hole = 0; hole < course.holeCount; ++hole) par += course.par[hole];
+  char parValue[8]{};
+  if (par == 0) {
+    snprintf(parValue, sizeof(parValue), "%s", tr(STR_GOLF_EM_DASH));
+  } else {
+    snprintf(parValue, sizeof(parValue), "%u", par);
+  }
+  snprintf(parLabels[row], sizeof(parLabels[row]), tr(STR_GOLF_PAR_VALUE_FORMAT), parValue);
 }
 
 int GolfSetupActivity::listCount() const { return courseCount + (overflow ? 1 : 0); }
@@ -77,7 +110,8 @@ void GolfSetupActivity::buildScreen(UiScreen& screen) {
   listProps.count = static_cast<uint16_t>(listCount());
   listProps.action = ACTION_ROW;
   listProps.inputMask = fui::InputTouch;
-  syncListViewport(screen, listProps);
+  listProps.rowHeight = 96;
+  syncListViewport(screen, listProps, true);
   screen.list(listProps);
 }
 

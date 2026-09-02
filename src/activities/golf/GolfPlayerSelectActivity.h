@@ -29,16 +29,18 @@ class GolfPlayerSelectActivity final : public UiListActivity {
   freeink::ui::ListProps listProps{};
   char playerNamesSnapshot[ROW_COUNT][GolfPlayer::NAME_CAPACITY]{};
   char playerLabels[ROW_COUNT][GOLF_PLAYER_LABEL_CAPACITY]{};
+  char roundCountLabels[ROW_COUNT][24]{};
+  uint8_t rowSlots[ROW_COUNT]{};
   char chunk[128]{};
   std::atomic<bool> refreshPending{true};
   uint8_t presentMask = 0;
+  uint8_t rowCount = 0;
   bool loadError = false;
 
-  int listCount() const override { return ROW_COUNT; }
+  int listCount() const override { return rowCount; }
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
   void onRowAction(const freeink::ui::ActionEvent& event) override;
-  void navigateButtons() override;
   void drawChrome() override;
   void drawFooter() override;
   const char* headerTitle() const override;

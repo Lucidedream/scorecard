@@ -233,13 +233,25 @@ void GolfPlayerSetupActivity::onBackButton() {
     return;
   }
   if (phase == Phase::Players) {
-    completeRound();
+    {
+      RenderLock lock(*this);
+      phase = Phase::Count;
+      saveFailed = false;
+      teeResolutionFailed = false;
+      closeRouting();
+      nav.reset();
+    }
+    requestUpdate();
     return;
   }
   openGolfSetup(activityManager, renderer, mappedInput);
 }
 
 bool GolfPlayerSetupActivity::handleButtons() {
+  if (phase == Phase::Players && mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    completeRound();
+    return true;
+  }
   if (phase != Phase::Count) return UiListActivity::handleButtons();
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     onBackButton();
@@ -362,6 +374,8 @@ void GolfPlayerSetupActivity::drawFooter() {
         golfCountConfirmLabel(playerCount) == GolfCountConfirmLabel::Start ? tr(STR_GOLF_START) : tr(STR_GOLF_NEXT);
     previous = tr(STR_GOLF_BUTTON_PREVIOUS);
     next = tr(STR_GOLF_BUTTON_NEXT);
+  } else if (phase == Phase::Players) {
+    confirm = tr(STR_GOLF_START);
   }
   const auto labels = mappedInput.mapLabels(tr(STR_GOLF_BUTTON_BACK), confirm, previous, next);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

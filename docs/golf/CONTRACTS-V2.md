@@ -1395,3 +1395,63 @@ The drift is only possible because appending never revisits the header. Whenever
 live index's version is recognised but older than current, the append path migrates it —
 staged, verified, renamed, as §12.7 already does — rather than appending a new-format row
 under an old-format header.
+
+
+## 22. Navigation pass (v5)
+
+Design with 1:1 mocks: `docs/golf/design/navigation-ux.html`. Owner-approved.
+
+### 22.1 The main menu is three horizontal tiles
+
+New round / History / Trends is a fixed set of three that never grows. A vertical list
+is built for an unknown number of items; with three it wastes the screen and puts the
+third destination two scrolls away.
+
+Three tiles across the top, moved between with Left/Right, so **every destination is
+visible and one Confirm away**.
+
+Beneath the tiles sits a **detail panel describing the focused tile** — the last round's
+course and score under New round, the recorded round count under Trends. Going horizontal
+frees most of the panel; the detail is what that space buys, and without it the change is
+only a rearrangement.
+
+The Confirm hint follows the tile: **Start** for New round, **Open** for the two review
+screens, so the button names its own effect.
+
+### 22.2 Course rows carry par, holes and tees
+
+The vertical list stays — the owner can see every course at once, which is the point.
+What it lacked was content: a course was a bare name.
+
+Each row now shows the name, its hole count and available tees, and **par as a figure on
+the right**. Four courses still fit without scrolling. A par-free course shows an em dash,
+never a zero, matching §18.1 and the card.
+
+### 22.3 Back returns; Confirm starts
+
+On the roster, Back currently tees off. It is the only Back in the app that goes forwards,
+and that — not its label — is why it reads as confusing.
+
+| Button | Action |
+| --- | --- |
+| **Back** | returns to the player count |
+| **Confirm** | starts the round, hinted as **Start** |
+
+Renaming Back to *Complete* was considered and rejected: it leaves one button doing two
+unrelated jobs, and a button called Complete that moves backwards is its own puzzle.
+§16.3 already made the roster a review step where every player is playable, so there is
+nothing to complete — only "go back" and "start".
+
+### 22.4 Player pickers list only players who have rounds
+
+History and Trends share a picker that draws all four slots, disabling absent ones with
+*No rounds*. On a single-user device three of four rows are permanent dead ends.
+
+`publishPlayers()` already computes `presentMask` from the index and then draws every row
+anyway. **Emit rows only for present slots**, and give each a round count, which is what
+the owner would want to know before opening it.
+
+**The empty case needs a real state.** If no player has rounds, filtering leaves nothing
+to show, and a blank screen is not an answer. It must also stay distinguishable from the
+existing load-failure message: *"no rounds yet"* and *"couldn't read your rounds"* call
+for different reactions.

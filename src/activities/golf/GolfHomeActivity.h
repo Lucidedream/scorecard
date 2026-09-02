@@ -1,27 +1,47 @@
 #pragma once
 
-#include "activities/UiListActivity.h"
+#include "activities/Activity.h"
+#include "components/UiAppHost.h"
+#include "golf/GolfHistory.h"
+#include "golf/GolfIndexMigrate.h"
 
-class GolfHomeActivity final : public UiListActivity {
+class GolfHomeActivity final : public Activity, protected UiAppHost {
  public:
   GolfHomeActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : UiListActivity("GolfHome", renderer, mappedInput) {}
+      : Activity("GolfHome", renderer, mappedInput), UiAppHost(renderer) {}
 
   void onEnter() override;
+  void loop() override;
+  void render(RenderLock&&) override;
 
  private:
-  static constexpr uint8_t MAX_ROWS = 4;
-  freeink::ui::ListItem rows[MAX_ROWS]{};
-  freeink::ui::ListProps listProps{};
+  enum class Destination : uint8_t { NewRound, History, Trends };
+  static constexpr freeink::ui::ActionId ACTION_TILE = 1;
+  static constexpr freeink::ui::ActionId ACTION_RESUME = 2;
+
+  GolfPlayerNamesReader indexSummary{};
+  GolfIndexMigrator recovery{};
+  char chunk[128]{};
+  char detailLine[96]{};
+  Destination destinations[3]{};
+  uint8_t destinationCount = 0;
+  uint8_t selected = 0;
+  bool resumeFocused = false;
   bool hasOpenRound = false;
   bool showNewRound = true;
   bool stateError = false;
   bool cleanupError = false;
+  bool indexLoadError = false;
 
-  int listCount() const override { return (hasOpenRound ? 1 : 0) + (showNewRound ? 1 : 0) + 2; }
-  void buildScreen(UiScreen& screen) override;
-  void activateIndex(int index) override;
-  const char* headerTitle() const override;
-  void drawChrome() override;
-  void onBackButton() override { onGoHome(); }
+  static void screenTrampoline(UiScreen& screen, void* user);
+  static void actionTrampoline(const freeink::ui::ActionEvent& event, void* user);
+  void buildScreen(UiScreen& screen);
+  void scanIndexSummary();
+  void refreshDetail();
+  void moveSelection(int delta);
+  void activateSelected();
+  void activateDestination(Destination destination);
+  const char* destinationLabel(Destination destination) const;
+  const char* headerTitle() const;
+  void drawFooter() const;
 };

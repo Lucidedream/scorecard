@@ -17,6 +17,8 @@ class GolfSetupActivity final : public UiListActivity {
   GolfCourse courses[GOLF_MAX_COURSES]{};
   freeink::ui::ListItem rows[MAX_ROWS]{};
   freeink::ui::ListProps listProps{};
+  char courseDetails[GOLF_MAX_COURSES][48]{};
+  char parLabels[GOLF_MAX_COURSES][16]{};
   uint8_t courseCount = 0;
   bool overflow = false;
   bool noCourses = false;
@@ -29,4 +31,5 @@ class GolfSetupActivity final : public UiListActivity {
   void drawChrome() override;
 
   void loadCourses();
+  void formatCourseRow(uint8_t row);
 };

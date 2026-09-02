@@ -150,10 +150,15 @@ void GolfIndexFileLocator::acceptLine() {
 void GolfPlayerNamesReader::reset() {
   memcpy(names_, GOLF_DEFAULT_PLAYER_NAMES, sizeof(names_));
   memset(present_, 0, sizeof(present_));
+  memset(roundCounts_, 0, sizeof(roundCounts_));
+  latestRound_ = {};
+  latestFile_[0] = '\0';
+  totalRounds_ = 0;
   line_[0] = '\0';
   lineLength_ = 0;
   lineNumber_ = 1;
   lineOverflow_ = false;
+  hasLatestRound_ = false;
 }
 
 void GolfPlayerNamesReader::feed(const char* data, const size_t size) {
@@ -189,6 +194,18 @@ bool GolfPlayerNamesReader::present(const uint8_t playerSlot) const {
   return playerSlot < GolfRound::MAX_PLAYERS && present_[playerSlot];
 }
 
+uint32_t GolfPlayerNamesReader::roundCount(const uint8_t playerSlot) const {
+  return playerSlot < GolfRound::MAX_PLAYERS ? roundCounts_[playerSlot] : 0;
+}
+
+uint8_t GolfPlayerNamesReader::playerCount() const {
+  uint8_t count = 0;
+  for (const bool present : present_) {
+    if (present) ++count;
+  }
+  return count;
+}
+
 uint8_t GolfPlayerNamesReader::firstPresent() const {
   for (uint8_t slot = 0; slot < GolfRound::MAX_PLAYERS; ++slot) {
     if (present_[slot]) return slot;
@@ -203,6 +220,13 @@ void GolfPlayerNamesReader::acceptLine() {
   if (lineOverflow_ || !golfParseIndexRow(line_, parsed) || parsed.playerSlot >= GolfRound::MAX_PLAYERS) return;
   memcpy(names_[parsed.playerSlot], parsed.playerName, sizeof(names_[parsed.playerSlot]));
   present_[parsed.playerSlot] = true;
+  ++roundCounts_[parsed.playerSlot];
+  if (strcmp(latestFile_, parsed.file) != 0) {
+    memcpy(latestFile_, parsed.file, sizeof(latestFile_));
+    latestRound_ = parsed;
+    ++totalRounds_;
+    hasLatestRound_ = true;
+  }
 }
 
 #endif

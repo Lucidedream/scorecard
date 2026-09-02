@@ -172,4 +172,31 @@ TEST(GolfPlayerNamesReader, KeepsLatestSnapshotPerStableSlotWithDefaults) {
   EXPECT_STREQ(names.name(1), "Player 2");
   EXPECT_STREQ(names.name(2), "Latest Guest");
   EXPECT_STREQ(names.name(3), "Player 4");
+  EXPECT_EQ(names.roundCount(0), 2u);
+  EXPECT_EQ(names.roundCount(2), 2u);
+  EXPECT_EQ(names.roundCount(1), 0u);
+  EXPECT_EQ(names.totalRounds(), 2u);
+  EXPECT_EQ(names.playerCount(), 2);
+  ASSERT_TRUE(names.hasLatestRound());
+  EXPECT_STREQ(names.latestRound().course, "Course 2");
+  EXPECT_EQ(names.latestRound().strokes, 82);
+}
+
+TEST(GolfPlayerNamesReader, CountsMultiplayerRowsAsOneRound) {
+  const GolfPlayerNamesReader names =
+      readNames(std::string(HEADER) + row(1, 0, "Noah") + row(1, 2, "Guest") + row(2, 0, "Noah"));
+
+  EXPECT_EQ(names.roundCount(0), 2u);
+  EXPECT_EQ(names.roundCount(2), 1u);
+  EXPECT_EQ(names.totalRounds(), 2u);
+  EXPECT_EQ(names.playerCount(), 2);
+}
+
+TEST(GolfPlayerNamesReader, EmptyIndexHasNoLatestRoundOrCounts) {
+  const GolfPlayerNamesReader names = readNames(HEADER);
+
+  EXPECT_EQ(names.totalRounds(), 0u);
+  EXPECT_EQ(names.playerCount(), 0);
+  EXPECT_FALSE(names.hasLatestRound());
+  for (uint8_t slot = 0; slot < GolfRound::MAX_PLAYERS; ++slot) EXPECT_EQ(names.roundCount(slot), 0u);
 }

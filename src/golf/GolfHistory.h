@@ -90,6 +90,11 @@ class GolfPlayerNamesReader {
 
   const char* name(uint8_t playerSlot) const;
   bool present(uint8_t playerSlot) const;
+  uint32_t roundCount(uint8_t playerSlot) const;
+  uint32_t totalRounds() const { return totalRounds_; }
+  uint8_t playerCount() const;
+  const GolfIndexRow& latestRound() const { return latestRound_; }
+  bool hasLatestRound() const { return hasLatestRound_; }
   uint8_t firstPresent() const;
 
  private:
@@ -98,7 +103,12 @@ class GolfPlayerNamesReader {
   uint16_t lineLength_ = 0;
   uint32_t lineNumber_ = 1;
   bool present_[GolfRound::MAX_PLAYERS]{};
+  uint32_t roundCounts_[GolfRound::MAX_PLAYERS]{};
+  GolfIndexRow latestRound_{};
+  char latestFile_[GOLF_ROUND_FILENAME_BUFFER_SIZE]{};
+  uint32_t totalRounds_ = 0;
   bool lineOverflow_ = false;
+  bool hasLatestRound_ = false;
 
   void acceptLine();
 };

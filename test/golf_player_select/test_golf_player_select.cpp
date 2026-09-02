@@ -31,3 +31,18 @@ TEST(GolfPlayerSelectPolicy, AllAbsentRemainsStableAndBackable) {
   EXPECT_EQ(golfPlayerSelectNextPresent(0, 3, -1), 3);
   EXPECT_EQ(golfPlayerSelectNextPresent(0, 99, 1), 0);
 }
+
+TEST(GolfPlayerSelectPolicy, CompactsSparsePresentSlotsIntoRows) {
+  constexpr uint8_t present = static_cast<uint8_t>((1U << 0) | (1U << 2));
+  EXPECT_EQ(golfPlayerSelectCount(present), 2);
+  EXPECT_EQ(golfPlayerSelectSlotAt(present, 0), 0);
+  EXPECT_EQ(golfPlayerSelectSlotAt(present, 1), 2);
+  EXPECT_EQ(golfPlayerSelectSlotAt(present, 2), GolfRound::NO_PLAYER);
+}
+
+TEST(GolfPlayerSelectPolicy, DistinguishesEmptyFromLoadFailure) {
+  EXPECT_EQ(golfPlayerSelectState(true, 0), GolfPlayerSelectState::Empty);
+  EXPECT_EQ(golfPlayerSelectState(false, 0), GolfPlayerSelectState::LoadError);
+  EXPECT_EQ(golfPlayerSelectState(true, 1), GolfPlayerSelectState::Ready);
+  EXPECT_EQ(golfPlayerSelectState(false, 1), GolfPlayerSelectState::LoadError);
+}
