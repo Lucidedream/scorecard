@@ -10,8 +10,7 @@ bool emit(const GolfIndexMigrateSink sink, void* user, const char* text) {
   return sink == nullptr || sink(text, strlen(text), user);
 }
 
-GolfIndexTransactionError stageWriteError(const GolfIndexStagePurpose purpose,
-                                          const GolfIndexStageWriteStatus status) {
+GolfIndexTransactionError stageWriteError(const GolfIndexStagePurpose purpose, const GolfIndexStageWriteStatus status) {
   if (purpose == GolfIndexStagePurpose::Delete) return GolfIndexTransactionError::InvalidState;
   if (purpose == GolfIndexStagePurpose::Migration) {
     switch (status) {
@@ -56,21 +55,20 @@ GolfIndexTransactionError stageVerifyError(const GolfIndexStagePurpose purpose) 
 }
 
 GolfIndexTransactionError publishTransactionError(const GolfIndexStagePurpose purpose,
-                                                   const GolfIndexPublishError error) {
+                                                  const GolfIndexPublishError error) {
   if (purpose == GolfIndexStagePurpose::Delete) return GolfIndexTransactionError::InvalidState;
   switch (error) {
     case GolfIndexPublishError::None:
       return GolfIndexTransactionError::None;
     case GolfIndexPublishError::PreserveFailed:
       return purpose == GolfIndexStagePurpose::Migration ? GolfIndexTransactionError::MigrationPreserveFailed
-                                                          : GolfIndexTransactionError::AppendPreserveFailed;
+                                                         : GolfIndexTransactionError::AppendPreserveFailed;
     case GolfIndexPublishError::PublishFailed:
       return purpose == GolfIndexStagePurpose::Migration ? GolfIndexTransactionError::MigrationPublishFailed
-                                                          : GolfIndexTransactionError::AppendPublishFailed;
+                                                         : GolfIndexTransactionError::AppendPublishFailed;
     case GolfIndexPublishError::BackupRemoveFailed:
-      return purpose == GolfIndexStagePurpose::Migration
-                 ? GolfIndexTransactionError::MigrationBackupRemoveFailed
-                 : GolfIndexTransactionError::AppendBackupRemoveFailed;
+      return purpose == GolfIndexStagePurpose::Migration ? GolfIndexTransactionError::MigrationBackupRemoveFailed
+                                                         : GolfIndexTransactionError::AppendBackupRemoveFailed;
     case GolfIndexPublishError::InvalidState:
       return GolfIndexTransactionError::InvalidState;
   }
@@ -125,8 +123,7 @@ GolfIndexPublishResult golfPublishStagedIndex(const bool hadOriginal, const Golf
     return result;
   }
 
-  if (hadOriginal &&
-      !storage.rename(GolfIndexArtifact::Live, GolfIndexArtifact::Backup, purpose, storage.user)) {
+  if (hadOriginal && !storage.rename(GolfIndexArtifact::Live, GolfIndexArtifact::Backup, purpose, storage.user)) {
     result.error = GolfIndexPublishError::PreserveFailed;
     if (!storage.remove(GolfIndexArtifact::Staged, purpose, storage.user)) result.cleanupPending = true;
     return result;
@@ -188,8 +185,7 @@ GolfIndexTransactionResult golfRunIndexTransaction(GolfIndexLiveState live, cons
   }
 
   const uint32_t expectedRows = live.rows + appendRows;
-  const StageTransactionResult append =
-      runStageTransaction(GolfIndexStagePurpose::Append, live, expectedRows, storage);
+  const StageTransactionResult append = runStageTransaction(GolfIndexStagePurpose::Append, live, expectedRows, storage);
   result.cleanupPending = append.cleanupPending;
   if (append.published) {
     result.appendCommitted = true;
@@ -200,15 +196,27 @@ GolfIndexTransactionResult golfRunIndexTransaction(GolfIndexLiveState live, cons
 }
 
 GolfIndexRecoveryStatus golfRecoverIndexArtifacts(const GolfIndexRecoveryOps& storage, const char* livePath,
-                                                   const char* stagedPath, const char* backupPath) {
+                                                  const char* stagedPath, const char* backupPath) {
   if (storage.exists == nullptr || storage.validate == nullptr || storage.remove == nullptr ||
-      storage.rename == nullptr || livePath == nullptr || stagedPath == nullptr || backupPath == nullptr) {
+      storage.rename == nullptr || storage.quarantine == nullptr || livePath == nullptr || stagedPath == nullptr ||
+      backupPath == nullptr) {
     return GolfIndexRecoveryStatus::Failed;
   }
 
   const bool liveExists = storage.exists(livePath, storage.user);
   if (liveExists) {
-    if (!storage.validate(livePath, false, storage.user)) return GolfIndexRecoveryStatus::Failed;
+    const GolfIndexRecoveryOps::ValidationStatus validation = storage.validate(livePath, false, storage.user);
+    if (validation == GolfIndexRecoveryOps::ValidationStatus::Unreadable) {
+      if (!storage.quarantine(livePath, storage.user)) return GolfIndexRecoveryStatus::Failed;
+      if (storage.exists(stagedPath, storage.user) && !storage.remove(stagedPath, storage.user)) {
+        return GolfIndexRecoveryStatus::Failed;
+      }
+      if (storage.exists(backupPath, storage.user) && !storage.remove(backupPath, storage.user)) {
+        return GolfIndexRecoveryStatus::Failed;
+      }
+      return GolfIndexRecoveryStatus::NoIndex;
+    }
+    if (validation != GolfIndexRecoveryOps::ValidationStatus::Valid) return GolfIndexRecoveryStatus::Failed;
     if (storage.exists(stagedPath, storage.user) && !storage.remove(stagedPath, storage.user)) {
       return GolfIndexRecoveryStatus::Failed;
     }
@@ -222,7 +230,15 @@ GolfIndexRecoveryStatus golfRecoverIndexArtifacts(const GolfIndexRecoveryOps& st
   // staging so a cut between the two publish renames always rolls back.
   if (storage.exists(backupPath, storage.user)) {
     if (!storage.rename(backupPath, livePath, storage.user)) return GolfIndexRecoveryStatus::Failed;
-    if (!storage.validate(livePath, false, storage.user)) return GolfIndexRecoveryStatus::Failed;
+    const GolfIndexRecoveryOps::ValidationStatus validation = storage.validate(livePath, false, storage.user);
+    if (validation == GolfIndexRecoveryOps::ValidationStatus::Unreadable) {
+      if (!storage.quarantine(livePath, storage.user)) return GolfIndexRecoveryStatus::Failed;
+      if (storage.exists(stagedPath, storage.user) && !storage.remove(stagedPath, storage.user)) {
+        return GolfIndexRecoveryStatus::Failed;
+      }
+      return GolfIndexRecoveryStatus::NoIndex;
+    }
+    if (validation != GolfIndexRecoveryOps::ValidationStatus::Valid) return GolfIndexRecoveryStatus::Failed;
     if (storage.exists(stagedPath, storage.user) && !storage.remove(stagedPath, storage.user)) {
       return GolfIndexRecoveryStatus::Failed;
     }
@@ -346,8 +362,7 @@ bool GolfIndexMigrator::acceptLine(const GolfIndexMigrateSink sink, void* user) 
   if (lineNumber_ == 1) {
     sourceVersion_ = lineOverflow_ ? GolfIndexVersion::Unknown : golfIndexHeaderVersion(line_);
     if ((deleting_ || strictValidation_) &&
-        (sourceVersion_ == GolfIndexVersion::Unknown ||
-         (requireV4_ && sourceVersion_ != GolfIndexVersion::V4))) {
+        (sourceVersion_ == GolfIndexVersion::Unknown || (requireV4_ && sourceVersion_ != GolfIndexVersion::V4))) {
       aborted_ = true;
       return false;
     }

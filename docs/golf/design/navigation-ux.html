@@ -1,0 +1,500 @@
+<title>Scorecard Navigation Pass</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Libre+Franklin:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+:root {
+  --paper:#F1F4F1; --card:#FBFCFA; --ink:#13181A; --ink-2:#4C5654; --ink-3:#737E7A;
+  --rule:#D2D9D2; --rule-soft:#E3E8E2;
+  --accent:#1E5C3E; --accent-wash:#E2ECE4;
+  --flag:#A93826; --flag-wash:#F4E4E0;
+  --panel-bg:#FFFFFF; --panel-ink:#000000; --panel-edge:#98A29C;
+  --measure:68ch; --gutter:13rem;
+  --step--1:clamp(0.78rem,0.76rem + 0.10vw,0.84rem);
+  --step-0:clamp(1.00rem,0.97rem + 0.14vw,1.08rem);
+  --step-1:clamp(1.22rem,1.15rem + 0.32vw,1.42rem);
+  --step-2:clamp(1.55rem,1.40rem + 0.68vw,2.05rem);
+  --step-3:clamp(2.05rem,1.72rem + 1.55vw,3.30rem);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:#0F1412; --card:#161C19; --ink:#E6EBE6; --ink-2:#A3AEA8; --ink-3:#7B8681;
+    --rule:#29322D; --rule-soft:#1E2622;
+    --accent:#6FC08D; --accent-wash:#17251D;
+    --flag:#E1745F; --flag-wash:#2A1A16;
+    --panel-bg:#E9EBE7; --panel-ink:#0B0E0C; --panel-edge:#3A433D;
+  }
+}
+:root[data-theme="dark"] {
+  --paper:#0F1412; --card:#161C19; --ink:#E6EBE6; --ink-2:#A3AEA8; --ink-3:#7B8681;
+  --rule:#29322D; --rule-soft:#1E2622;
+  --accent:#6FC08D; --accent-wash:#17251D;
+  --flag:#E1745F; --flag-wash:#2A1A16;
+  --panel-bg:#E9EBE7; --panel-ink:#0B0E0C; --panel-edge:#3A433D;
+}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:"Libre Franklin",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:var(--step-0);line-height:1.62;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{font-family:Archivo,"Libre Franklin",system-ui,sans-serif;text-wrap:balance;margin:0;line-height:1.14;letter-spacing:-.014em}
+p{margin:0}
+code{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace}
+.wrap{max-width:78rem;margin:0 auto;padding:0 clamp(1.15rem,4vw,3rem)}
+
+.masthead{padding:clamp(3rem,8vw,5.5rem) 0 clamp(2rem,4vw,3rem);border-bottom:2px solid var(--ink)}
+.eyebrow{font-family:Archivo,system-ui,sans-serif;font-size:var(--step--1);font-weight:600;
+  letter-spacing:.15em;text-transform:uppercase;color:var(--accent);margin-bottom:1.15rem}
+.masthead h1{font-size:var(--step-3);font-weight:700;letter-spacing:-.03em;max-width:18ch}
+.standfirst{margin-top:1.4rem;max-width:60ch;font-size:var(--step-1);line-height:1.5;color:var(--ink-2)}
+.meta-strip{margin-top:2.4rem;display:flex;flex-wrap:wrap;gap:0 2.5rem;row-gap:1.1rem;font-size:var(--step--1)}
+.meta-strip div{display:flex;flex-direction:column;gap:.2rem}
+.meta-strip .k{font-family:Archivo,system-ui,sans-serif;font-weight:600;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--ink-3);font-size:.72rem}
+.meta-strip .v{font-weight:500;color:var(--ink)}
+
+section.doc{display:grid;grid-template-columns:var(--gutter) minmax(0,1fr);gap:0 3rem;
+  padding:clamp(2.6rem,6vw,4.4rem) 0;border-bottom:1px solid var(--rule)}
+section.doc:last-of-type{border-bottom:0}
+.rail{position:sticky;top:1.5rem;align-self:start}
+.rail .idx{font-family:Archivo,system-ui,sans-serif;font-size:var(--step--1);font-weight:700;
+  letter-spacing:.12em;color:var(--accent);display:block;margin-bottom:.5rem}
+.rail .label{font-size:var(--step--1);color:var(--ink-3);line-height:1.4;max-width:15ch}
+.body>*+*{margin-top:1.35rem}
+.body h2{font-size:var(--step-2);font-weight:700;max-width:24ch}
+.body h4{font-family:Archivo,system-ui,sans-serif;font-size:var(--step--1);font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-top:2rem}
+.body p,.body li{max-width:var(--measure)}
+.body ul,.body ol{margin:0;padding-left:1.25rem}
+.body li+li{margin-top:.5rem}
+strong{font-weight:600}
+@media (max-width:860px){
+  section.doc{grid-template-columns:minmax(0,1fr);gap:1.2rem}
+  .rail{position:static;display:flex;align-items:baseline;gap:.85rem}
+  .rail .idx{margin-bottom:0}
+}
+
+.callout{border-left:3px solid var(--accent);background:var(--accent-wash);padding:1.05rem 1.3rem;
+  max-width:var(--measure);font-size:.96rem}
+.callout.warn{border-left-color:var(--flag);background:var(--flag-wash)}
+.callout h4{margin-top:0;color:var(--ink-2)}
+.callout>*+*{margin-top:.6rem}
+
+.scroller{overflow-x:auto;max-width:100%;padding-bottom:.4rem}
+table{border-collapse:collapse;width:100%;min-width:30rem;font-size:.93rem}
+th,td{text-align:left;padding:.6rem 1rem .6rem 0;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+thead th{font-family:Archivo,system-ui,sans-serif;font-size:.74rem;font-weight:600;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--ink-3);border-bottom:1px solid var(--rule);white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+
+.mockrow{display:flex;gap:2rem;align-items:flex-start;overflow-x:auto;padding-bottom:.6rem}
+figure{margin:0}
+figcaption{margin-top:.85rem;font-size:var(--step--1);color:var(--ink-3);max-width:29rem}
+figcaption b{display:block;font-family:Archivo,system-ui,sans-serif;font-weight:600;letter-spacing:.09em;
+  text-transform:uppercase;font-size:.72rem;color:var(--ink-2);margin-bottom:.3rem}
+
+.panel{width:480px;height:800px;flex:none;background:var(--panel-bg);color:var(--panel-ink);
+  border:1px solid var(--panel-edge);display:flex;flex-direction:column;
+  font-family:Archivo,system-ui,sans-serif;overflow:hidden;position:relative}
+.hdr{display:flex;justify-content:space-between;align-items:center;padding:0 16px;height:46px;
+  border-bottom:2px solid var(--panel-ink);font-size:15px;font-weight:600;letter-spacing:.04em;flex:none}
+.hdr .batt{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600}
+.hdr .cell{display:inline-block;width:22px;height:12px;border:2px solid var(--panel-ink);position:relative}
+.hdr .cell::after{content:"";position:absolute;right:-4px;top:3px;width:2px;height:4px;background:var(--panel-ink)}
+.hdr .cell i{position:absolute;left:1px;top:1px;bottom:1px;width:62%;background:var(--panel-ink)}
+
+/* horizontal tile menu */
+.tiles{display:flex;flex:none;border-bottom:2px solid var(--panel-ink)}
+.tile{flex:1;border-right:2px solid var(--panel-ink);padding:26px 10px 22px;text-align:center;
+  display:flex;flex-direction:column;align-items:center;gap:12px;min-height:210px;justify-content:center}
+.tile:last-child{border-right:0}
+.tile.on{background:var(--panel-ink);color:var(--panel-bg)}
+.tile .gl{font-size:52px;line-height:1;font-weight:700}
+.tile .nm{font-size:16px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.tile .sub{font-size:12px;font-weight:500;opacity:.72;line-height:1.35}
+.arrows{display:flex;align-items:center;justify-content:center;gap:26px;padding:16px 0;flex:none;
+  border-bottom:1px solid var(--panel-ink);font-size:19px;font-weight:700}
+.arrows .pips{display:flex;gap:9px}
+.arrows .pips span{width:11px;height:11px;border:2px solid var(--panel-ink);border-radius:50%}
+.arrows .pips span.on{background:var(--panel-ink)}
+.detail{flex:1;padding:24px 22px;font-size:15px;line-height:1.65}
+.detail .t{font-size:21px;font-weight:700;margin-bottom:10px}
+.detail .m{opacity:.75}
+
+/* course list */
+.crow{display:flex;align-items:center;gap:14px;padding:0 18px;height:96px;
+  border-bottom:1px solid var(--panel-ink);flex:none}
+.crow.sel{background:var(--panel-ink);color:var(--panel-bg)}
+.crow .main{flex:1;min-width:0}
+.crow .t{font-size:21px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crow .s{font-size:12px;font-weight:500;opacity:.72;margin-top:4px;letter-spacing:.07em;text-transform:uppercase}
+.crow .par{text-align:right;line-height:1.25}
+.crow .par .n{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
+.crow .par .k{font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;opacity:.72}
+
+/* roster */
+.prow{display:flex;align-items:center;gap:12px;padding:0 18px;height:92px;
+  border-bottom:1px solid var(--panel-ink);flex:none}
+.prow.sel{background:var(--panel-ink);color:var(--panel-bg)}
+.prow .idx{font-size:13px;font-weight:700;width:24px}
+.prow .main{flex:1;min-width:0}
+.prow .t{font-size:22px;font-weight:700}
+.prow .s{font-size:12px;font-weight:500;opacity:.72;margin-top:3px;letter-spacing:.06em;text-transform:uppercase}
+.prow .chev{font-size:17px;opacity:.55}
+
+.empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+  padding:30px;text-align:center}
+.empty .big{font-size:19px;font-weight:700}
+.empty .sm{font-size:14px;font-weight:500;opacity:.72;line-height:1.6}
+
+.foot{margin-top:auto;display:flex;border-top:2px solid var(--panel-ink);font-size:12px;font-weight:600;flex:none}
+.foot div{flex:1;text-align:center;padding:13px 4px;border-right:1px solid var(--panel-ink)}
+.foot div:last-child{border-right:0}
+
+footer.end{padding:3.5rem 0 5rem;border-top:2px solid var(--ink);font-size:var(--step--1);color:var(--ink-3)}
+footer.end p{max-width:var(--measure)}
+footer.end p+p{margin-top:.8rem}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <div class="eyebrow">Design · Scorecard · Navigation</div>
+  <h1>Show what exists, hide what doesn't</h1>
+  <p class="standfirst">
+    Four changes to how you move through the app: a horizontal main menu, a course list
+    that earns its vertical space, a setup screen whose Back button stops teeing off, and
+    player pickers that stop advertising players who have never played.
+  </p>
+  <div class="meta-strip">
+    <div><span class="k">Main menu</span><span class="v">Vertical → horizontal</span></div>
+    <div><span class="k">Courses</span><span class="v">Stays vertical, redrawn</span></div>
+    <div><span class="k">Roster exit</span><span class="v">Back no longer starts</span></div>
+    <div><span class="k">Empty players</span><span class="v">Hidden, not greyed</span></div>
+  </div>
+</header>
+
+<!-- ============================================ 1 -->
+<section class="doc">
+  <div class="rail"><span class="idx">§ 1</span><span class="label">Main menu</span></div>
+  <div class="body">
+    <h2>Three tiles, not three rows</h2>
+    <p>
+      The menu has exactly three destinations and never grows. A vertical list is built for
+      an unknown number of items; with three fixed ones it wastes the screen and makes you
+      scroll past two things to reach the third.
+    </p>
+    <p>
+      Three tiles across the top show <strong>all options at once</strong>, and
+      <kbd>◂</kbd> <kbd>▸</kbd> moves between them. Nothing is ever hidden, and every
+      destination is one Confirm away.
+    </p>
+
+    <div class="mockrow">
+      <figure>
+        <div class="panel">
+          <div class="hdr"><span>SCORECARD</span>
+            <span class="batt"><span class="cell"><i></i></span>62%</span></div>
+          <div class="tiles">
+            <div class="tile on">
+              <div class="gl">⛳</div>
+              <div class="nm">New<br>round</div>
+            </div>
+            <div class="tile">
+              <div class="gl">▤</div>
+              <div class="nm">History</div>
+            </div>
+            <div class="tile">
+              <div class="gl">◭</div>
+              <div class="nm">Trends</div>
+            </div>
+          </div>
+          <div class="arrows">
+            <span>◂</span>
+            <span class="pips"><span class="on"></span><span></span><span></span></span>
+            <span>▸</span>
+          </div>
+          <div class="detail">
+            <div class="t">New round</div>
+            <div class="m">
+              Pick a course, then how many are playing.<br><br>
+              Last round: Sanyang Golf Club, 86 (+14), 2 September.
+            </div>
+          </div>
+          <div class="foot"><div>BACK</div><div>START</div><div>◂ PREV</div><div>NEXT ▸</div></div>
+        </div>
+        <figcaption>
+          <b>Main menu — horizontal, with a detail panel</b>
+          The tile row is fixed height; the panel beneath it describes the focused tile.
+          That panel is the reason this beats three bare rows — the space freed by going
+          horizontal gets spent telling you something useful, like when you last played,
+          rather than sitting empty.
+        </figcaption>
+      </figure>
+
+      <figure>
+        <div class="panel">
+          <div class="hdr"><span>SCORECARD</span>
+            <span class="batt"><span class="cell"><i></i></span>62%</span></div>
+          <div class="tiles">
+            <div class="tile">
+              <div class="gl">⛳</div>
+              <div class="nm">New<br>round</div>
+            </div>
+            <div class="tile">
+              <div class="gl">▤</div>
+              <div class="nm">History</div>
+            </div>
+            <div class="tile on">
+              <div class="gl">◭</div>
+              <div class="nm">Trends</div>
+            </div>
+          </div>
+          <div class="arrows">
+            <span>◂</span>
+            <span class="pips"><span></span><span></span><span class="on"></span></span>
+            <span>▸</span>
+          </div>
+          <div class="detail">
+            <div class="t">Trends</div>
+            <div class="m">
+              Scoring, putting and penalties across your recent rounds.<br><br>
+              6 rounds recorded · Noah only.
+            </div>
+          </div>
+          <div class="foot"><div>BACK</div><div>OPEN</div><div>◂ PREV</div><div>NEXT ▸</div></div>
+        </div>
+        <figcaption>
+          <b>Third tile focused</b>
+          The Confirm hint changes with the tile — <em>Start</em> for a new round,
+          <em>Open</em> for the two review screens — so the button says what will happen
+          rather than a generic word. The detail line also tells you Trends currently has
+          only one player's data, before you go looking for the others.
+        </figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================ 2 -->
+<section class="doc">
+  <div class="rail"><span class="idx">§ 2</span><span class="label">Courses</span></div>
+  <div class="body">
+    <h2>Vertical is right; the rows were just thin</h2>
+    <p>
+      You said the vertical list works because you can see every course at once — agreed,
+      and the list stays. What it lacked was anything to look at: a course was a bare name
+      on a row.
+    </p>
+    <p>
+      Each row now carries what you actually choose between — <strong>par, hole count and
+      tees</strong> — so you can pick without opening anything.
+    </p>
+
+    <div class="mockrow">
+      <figure>
+        <div class="panel">
+          <div class="hdr"><span>CHOOSE A COURSE</span>
+            <span class="batt"><span class="cell"><i></i></span>62%</span></div>
+          <div class="crow sel">
+            <div class="main"><div class="t">Sanyang Golf Club</div>
+              <div class="s">18 holes · Blue / White</div></div>
+            <div class="par"><div class="n">72</div><div class="k">Par</div></div>
+          </div>
+          <div class="crow">
+            <div class="main"><div class="t">MoganShan Gowin</div>
+              <div class="s">18 holes · Blue</div></div>
+            <div class="par"><div class="n">72</div><div class="k">Par</div></div>
+          </div>
+          <div class="crow">
+            <div class="main"><div class="t">Pebble Beach</div>
+              <div class="s">18 holes · Blue</div></div>
+            <div class="par"><div class="n">72</div><div class="k">Par</div></div>
+          </div>
+          <div class="crow">
+            <div class="main"><div class="t">Template course</div>
+              <div class="s">18 holes · no par</div></div>
+            <div class="par"><div class="n">—</div><div class="k">Par</div></div>
+          </div>
+          <div class="foot"><div>BACK</div><div>SELECT</div><div>▴ UP</div><div>DOWN ▾</div></div>
+        </div>
+        <figcaption>
+          <b>Courses — same list, more to read</b>
+          Row height goes from a text line to 96 px, which fits a name, its holes and tees,
+          and the par as a figure on the right. Four courses still fit without scrolling.
+          The par-free Template course shows an em dash rather than a zero — the same rule
+          the card and totals band already follow.
+        </figcaption>
+      </figure>
+
+      <figure>
+        <div class="panel">
+          <div class="hdr"><span>WHO IS PLAYING?</span>
+            <span class="batt"><span class="cell"><i></i></span>62%</span></div>
+          <div class="prow sel">
+            <div class="idx">1</div>
+            <div class="main"><div class="t">Noah</div><div class="s">Blue tees · 6,466 yds</div></div>
+            <div class="chev">&rsaquo;</div>
+          </div>
+          <div class="prow">
+            <div class="idx">2</div>
+            <div class="main"><div class="t">Player 2</div><div class="s">Blue tees · 6,466 yds</div></div>
+            <div class="chev">&rsaquo;</div>
+          </div>
+          <div style="padding:20px 18px;font-size:14px;line-height:1.6;opacity:.75;
+                      border-bottom:1px solid var(--panel-ink)">
+            Everyone is ready to play. Edit a name or tee, or start the round.
+          </div>
+          <div class="foot"><div>BACK</div><div>START</div><div>▴ UP</div><div>DOWN ▾</div></div>
+        </div>
+        <figcaption>
+          <b>Roster — Back goes back, Start starts</b>
+          Today Back tees off, which is why it feels wrong. Splitting them fixes the
+          confusion without needing a button labelled <em>Complete</em> that moves
+          backwards: <strong>Back</strong> returns to the player count,
+          <strong>Start</strong> begins the round. See §3.
+        </figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================ 3 -->
+<section class="doc">
+  <div class="rail"><span class="idx">§ 3</span><span class="label">Leaving setup</span></div>
+  <div class="body">
+    <h2>A Back button that starts a round is the actual bug</h2>
+    <p>
+      On the roster, Back currently tees off. That is why it reads as confusing — not
+      because of its label, but because it is the only Back in the app that goes forwards.
+    </p>
+    <p>
+      You suggested renaming it <em>Complete</em>. That fixes the wording, but it leaves one
+      button doing two unrelated jobs, and a button called Complete that returns you to
+      player selection would be its own puzzle. The cleaner split, which is also what your
+      "maybe I'll add a short press as confirm" instinct points at:
+    </p>
+
+    <div class="scroller">
+      <table>
+        <thead><tr><th style="width:22%">Button</th><th style="width:34%">Does</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Back</strong></td><td>Returns to the player count</td>
+            <td>Back means back, on every screen, with no exception here</td></tr>
+          <tr><td><strong>Confirm</strong></td><td>Starts the round → hole 1</td>
+            <td>Labelled <em>Start</em>, so the button says what happens</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout">
+      <h4>Why not "Complete"</h4>
+      <p>
+        Every player on the roster is already playable — §16.3 made it a review step, not a
+        form. So there is nothing to <em>complete</em>; there is only "go back" and "start".
+        Naming the two actions after what they do needs no new vocabulary.
+      </p>
+      <p>
+        If you would still rather have the word, say so and it becomes the Confirm label
+        instead of Start — but it should be on the button that finishes setup, not the one
+        that retreats from it.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================ 4 -->
+<section class="doc">
+  <div class="rail"><span class="idx">§ 4</span><span class="label">Empty players</span></div>
+  <div class="body">
+    <h2>Don't advertise players who have never played</h2>
+    <p>
+      History and Trends both open on a four-row picker, with every slot listed and the
+      empty ones marked <em>No rounds</em>. On a device only you have used, three of the
+      four rows are permanent dead ends.
+    </p>
+    <p>
+      The data to fix this already exists: <code>publishPlayers()</code> builds a
+      <code>presentMask</code> from the index and then draws all four rows anyway, disabling
+      the absent ones. <strong>Only emit rows for present slots.</strong>
+    </p>
+
+    <div class="mockrow">
+      <figure>
+        <div class="panel">
+          <div class="hdr"><span>HISTORY</span>
+            <span class="batt"><span class="cell"><i></i></span>62%</span></div>
+          <div class="prow sel">
+            <div class="idx">1</div>
+            <div class="main"><div class="t">Noah</div><div class="s">6 rounds</div></div>
+            <div class="chev">&rsaquo;</div>
+          </div>
+          <div style="padding:22px 18px;font-size:14px;line-height:1.65;opacity:.75">
+            Only players with recorded rounds appear here. Others show up once they have
+            played.
+          </div>
+          <div class="foot"><div>BACK</div><div>OPEN</div><div>▴ UP</div><div>DOWN ▾</div></div>
+        </div>
+        <figcaption>
+          <b>One player — one row</b>
+          Your device today. The other three slots are gone rather than greyed, and the row
+          gains a round count, which is the thing you would want before opening it.
+        </figcaption>
+      </figure>
+
+      <figure>
+        <div class="panel">
+          <div class="hdr"><span>TRENDS</span>
+            <span class="batt"><span class="cell"><i></i></span>62%</span></div>
+          <div class="prow sel">
+            <div class="idx">1</div>
+            <div class="main"><div class="t">Noah</div><div class="s">6 rounds</div></div>
+            <div class="chev">&rsaquo;</div>
+          </div>
+          <div class="prow">
+            <div class="idx">2</div>
+            <div class="main"><div class="t">Wei</div><div class="s">2 rounds</div></div>
+            <div class="chev">&rsaquo;</div>
+          </div>
+          <div class="empty" style="flex:0;padding:22px 18px;text-align:left">
+            <div class="sm" style="opacity:.75">
+              Players 3 and 4 have no rounds yet and are not listed.
+            </div>
+          </div>
+          <div class="foot"><div>BACK</div><div>OPEN</div><div>▴ UP</div><div>DOWN ▾</div></div>
+        </div>
+        <figcaption>
+          <b>Two players, after a round together</b>
+          The list grows as people play; it never shows a name that leads nowhere. Same rule
+          for History and Trends, because they share the picker.
+        </figcaption>
+      </figure>
+    </div>
+
+    <div class="callout warn">
+      <h4>The case this must not break</h4>
+      <p>
+        If <em>nobody</em> has rounds — a fresh device, or an index that failed to load —
+        filtering leaves an empty list. That needs a real empty state saying so, not a blank
+        screen. It also must stay distinguishable from the load-failure case, which already
+        has its own message: "no rounds yet" and "couldn't read your rounds" call for
+        different reactions from you.
+      </p>
+    </div>
+  </div>
+</section>
+
+<footer class="end">
+  <p>
+    Mockups render at true 480 × 800 in pure black and white, matching the panel. Figures use
+    the owner's real courses and round counts.
+  </p>
+  <p>
+    Glyphs in the tile row are placeholders for whatever the icon set provides; the layout
+    does not depend on them.
+  </p>
+</footer>
+
+</div>

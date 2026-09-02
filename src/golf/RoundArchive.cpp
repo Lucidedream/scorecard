@@ -17,6 +17,7 @@
 #include "GolfPaths.h"
 #include "GolfPenalty.h"
 #include "GolfRoundDecode.h"
+#include "GolfRoundFile.h"
 #include "GolfRoundRepairLog.h"
 #include "GolfRoundStore.h"
 #include "GolfValidate.h"
@@ -27,6 +28,7 @@ constexpr char ROUNDS_DIRECTORY[] = "/golf/rounds";
 constexpr char INDEX_PATH[] = "/golf/rounds/index.csv";
 constexpr char INDEX_NEW_PATH[] = "/golf/rounds/index.csv.new";
 constexpr char INDEX_BAK_PATH[] = "/golf/rounds/index.csv.bak";
+constexpr char INDEX_UNREADABLE_PATH[] = "/golf/rounds/index.csv.unreadable";
 
 struct ArchiveScratch {
   GolfRound round{};
@@ -128,11 +130,11 @@ IndexStreamStatus runMigrator(const char* path, GolfIndexMigrator& migrator, con
 
 bool indexExists(const char* path, void*) { return Storage.exists(path); }
 
-bool indexValid(const char* path, const bool requireV4, void* user) {
+GolfIndexRecoveryOps::ValidationStatus indexValid(const char* path, const bool requireV4, void* user) {
   auto* verifier = static_cast<GolfIndexMigrator*>(user);
   if (verifier == nullptr) {
     LOG_ERR("GOLF", "index recovery verify missing scratch: %s", path);
-    return false;
+    return GolfIndexRecoveryOps::ValidationStatus::Failed;
   }
   if (requireV4) {
     verifier->resetForStrictValidation(true);
@@ -146,10 +148,14 @@ bool indexValid(const char* path, const bool requireV4, void* user) {
   const bool valid = stream == IndexStreamStatus::Complete && !verifier->aborted() &&
                      (requireV4 ? version == GolfIndexVersion::V4 : version != GolfIndexVersion::Unknown);
   if (!valid) {
-    LOG_ERR("GOLF", "index recovery verify failed: %s (stream=%u version=%u)", path,
-            static_cast<unsigned>(stream), static_cast<unsigned>(version));
+    LOG_ERR("GOLF", "index recovery verify failed: %s (stream=%u version=%u)", path, static_cast<unsigned>(stream),
+            static_cast<unsigned>(version));
   }
-  return valid;
+  if (valid) return GolfIndexRecoveryOps::ValidationStatus::Valid;
+  if (stream == IndexStreamStatus::OpenFailed || stream == IndexStreamStatus::ReadFailed) {
+    return GolfIndexRecoveryOps::ValidationStatus::Failed;
+  }
+  return GolfIndexRecoveryOps::ValidationStatus::Unreadable;
 }
 
 bool indexRemove(const char* path, void*) {
@@ -161,6 +167,25 @@ bool indexRemove(const char* path, void*) {
 bool indexRename(const char* from, const char* to, void*) {
   if (Storage.rename(from, to)) return true;
   LOG_ERR("GOLF", "index recovery rename failed: %s -> %s", from, to);
+  return false;
+}
+
+bool quarantineIndex(const char* path, void*) {
+  char quarantinePath[sizeof(INDEX_UNREADABLE_PATH) + 6]{};
+  for (uint16_t suffix = 0; suffix < UINT16_MAX; ++suffix) {
+    const int length = suffix == 0 ? snprintf(quarantinePath, sizeof(quarantinePath), "%s", INDEX_UNREADABLE_PATH)
+                                   : snprintf(quarantinePath, sizeof(quarantinePath), "%s.%u", INDEX_UNREADABLE_PATH,
+                                              static_cast<unsigned>(suffix + 1));
+    if (length < 0 || static_cast<size_t>(length) >= sizeof(quarantinePath)) break;
+    if (Storage.exists(quarantinePath)) continue;
+    if (Storage.rename(path, quarantinePath)) {
+      LOG_ERR("GOLF", "Unreadable index quarantined: %s", quarantinePath);
+      return true;
+    }
+    LOG_ERR("GOLF", "Unreadable index quarantine failed: %s -> %s", path, quarantinePath);
+    return false;
+  }
+  LOG_ERR("GOLF", "Unreadable index quarantine names exhausted: %s", path);
   return false;
 }
 
@@ -195,8 +220,8 @@ bool transactionRemove(const GolfIndexArtifact artifact, const GolfIndexStagePur
   return false;
 }
 
-bool transactionRename(const GolfIndexArtifact from, const GolfIndexArtifact to,
-                       const GolfIndexStagePurpose purpose, void*) {
+bool transactionRename(const GolfIndexArtifact from, const GolfIndexArtifact to, const GolfIndexStagePurpose purpose,
+                       void*) {
   const char* fromPath = indexArtifactPath(from);
   const char* toPath = indexArtifactPath(to);
   if (Storage.rename(fromPath, toPath)) return true;
@@ -232,22 +257,21 @@ IndexRewriteResult commitStagedIndex(const bool hadOriginal, const uint32_t expe
   }
   const IndexStreamStatus stream = runMigrator(INDEX_NEW_PATH, verifier, nullptr, nullptr);
   const bool rowsMatch = verifier.dataRows() == expectedRows;
-  const bool groupMatches = groupFilename == nullptr ||
-                            (expectedGroupMask == 0
-                                 ? verifier.groupRows() == 0
-                                 : verifier.groupValid() && verifier.groupSlotMask() == expectedGroupMask);
+  const bool groupMatches =
+      groupFilename == nullptr ||
+      (expectedGroupMask == 0 ? verifier.groupRows() == 0
+                              : verifier.groupValid() && verifier.groupSlotMask() == expectedGroupMask);
   if (stream != IndexStreamStatus::Complete || verifier.sourceVersion() != GolfIndexVersion::V4 || !rowsMatch ||
       !groupMatches) {
-    LOG_ERR("GOLF", "index %s verify failed: %s (stream=%u rows=%lu expected=%lu)", operation,
-            INDEX_NEW_PATH, static_cast<unsigned>(stream), static_cast<unsigned long>(verifier.dataRows()),
+    LOG_ERR("GOLF", "index %s verify failed: %s (stream=%u rows=%lu expected=%lu)", operation, INDEX_NEW_PATH,
+            static_cast<unsigned>(stream), static_cast<unsigned long>(verifier.dataRows()),
             static_cast<unsigned long>(expectedRows));
     removeStagedIndex(operation);
     return {};
   }
 
   const GolfIndexPublicationOps storage{nullptr, &transactionRemove, &transactionRename};
-  const GolfIndexPublishResult published =
-      golfPublishStagedIndex(hadOriginal, GolfIndexStagePurpose::Delete, storage);
+  const GolfIndexPublishResult published = golfPublishStagedIndex(hadOriginal, GolfIndexStagePurpose::Delete, storage);
   if (!published.committed()) {
     LOG_ERR("GOLF", "index %s publication failed before commit: error=%u cleanupPending=%u", operation,
             static_cast<unsigned>(published.error), published.cleanupPending ? 1U : 0U);
@@ -286,8 +310,7 @@ GolfIndexStageWriteStatus writeIndexStage(const GolfIndexStagePurpose purpose, c
                                           void* user) {
   auto* context = static_cast<IndexTransactionContext*>(user);
   if (context == nullptr || context->migrator == nullptr) {
-    LOG_ERR("GOLF", "index %s stage missing transaction scratch: %s", indexPurposeName(purpose),
-            INDEX_NEW_PATH);
+    LOG_ERR("GOLF", "index %s stage missing transaction scratch: %s", indexPurposeName(purpose), INDEX_NEW_PATH);
     return GolfIndexStageWriteStatus::WriteFailed;
   }
 
@@ -301,14 +324,13 @@ GolfIndexStageWriteStatus writeIndexStage(const GolfIndexStagePurpose purpose, c
     context->migrator->reset();
     const IndexStreamStatus stream = runMigrator(INDEX_PATH, *context->migrator, &migrateSink, &staged);
     if (stream == IndexStreamStatus::OpenFailed || stream == IndexStreamStatus::ReadFailed) {
-      LOG_ERR("GOLF", "index migration source read failed: %s (stream=%u)", INDEX_PATH,
-              static_cast<unsigned>(stream));
+      LOG_ERR("GOLF", "index migration source read failed: %s (stream=%u)", INDEX_PATH, static_cast<unsigned>(stream));
       return GolfIndexStageWriteStatus::ReadFailed;
     }
     if (stream != IndexStreamStatus::Complete || context->migrator->aborted() ||
         context->migrator->sourceVersion() != live.version || context->migrator->dataRows() != live.rows) {
-      LOG_ERR("GOLF", "index migration stage write failed: %s -> %s (stream=%u)", INDEX_PATH,
-              INDEX_NEW_PATH, static_cast<unsigned>(stream));
+      LOG_ERR("GOLF", "index migration stage write failed: %s -> %s (stream=%u)", INDEX_PATH, INDEX_NEW_PATH,
+              static_cast<unsigned>(stream));
       return GolfIndexStageWriteStatus::WriteFailed;
     }
   } else {
@@ -325,9 +347,8 @@ GolfIndexStageWriteStatus writeIndexStage(const GolfIndexStagePurpose purpose, c
       return GolfIndexStageWriteStatus::WriteFailed;
     }
 
-    const GolfIndexGroupWriteResult group =
-        golfWriteIndexGroupRows(*context->round, context->filename, *context->indexRow, context->csv,
-                                context->csvSize, &migrateSink, &staged);
+    const GolfIndexGroupWriteResult group = golfWriteIndexGroupRows(
+        *context->round, context->filename, *context->indexRow, context->csv, context->csvSize, &migrateSink, &staged);
     if (!group.complete || group.slotMask != context->expectedMask ||
         !golfIndexGroupRowsValid(group.rowCount, group.slotMask)) {
       LOG_ERR("GOLF", "index append group write failed: %s (rows=%u mask=0x%02x)", INDEX_NEW_PATH,
@@ -360,15 +381,15 @@ bool verifyIndexStage(const GolfIndexStagePurpose purpose, const uint32_t expect
   }
   const IndexStreamStatus stream = runMigrator(INDEX_NEW_PATH, *context->migrator, nullptr, nullptr);
   const bool rowsMatch = context->migrator->dataRows() == expectedRows;
-  const bool groupMatches = purpose != GolfIndexStagePurpose::Append ||
-                            (context->migrator->groupValid() &&
-                             context->migrator->groupSlotMask() == context->expectedMask);
+  const bool groupMatches =
+      purpose != GolfIndexStagePurpose::Append ||
+      (context->migrator->groupValid() && context->migrator->groupSlotMask() == context->expectedMask);
   const bool valid = stream == IndexStreamStatus::Complete &&
                      context->migrator->sourceVersion() == GolfIndexVersion::V4 && rowsMatch && groupMatches;
   if (!valid) {
-    LOG_ERR("GOLF", "index %s stage verify failed: %s (stream=%u rows=%lu expected=%lu)",
-            indexPurposeName(purpose), INDEX_NEW_PATH, static_cast<unsigned>(stream),
-            static_cast<unsigned long>(context->migrator->dataRows()), static_cast<unsigned long>(expectedRows));
+    LOG_ERR("GOLF", "index %s stage verify failed: %s (stream=%u rows=%lu expected=%lu)", indexPurposeName(purpose),
+            INDEX_NEW_PATH, static_cast<unsigned>(stream), static_cast<unsigned long>(context->migrator->dataRows()),
+            static_cast<unsigned long>(expectedRows));
   }
   return valid;
 }
@@ -379,8 +400,7 @@ GolfIndexTransactionOps indexTransactionOps(IndexTransactionContext& context) {
 
 void logIndexTransactionFailure(const GolfIndexTransactionResult& result) {
   LOG_ERR("GOLF", "index transaction failed: error=%u committed=%u cleanupPending=%u",
-          static_cast<unsigned>(result.error), result.appendCommitted ? 1U : 0U,
-          result.cleanupPending ? 1U : 0U);
+          static_cast<unsigned>(result.error), result.appendCommitted ? 1U : 0U, result.cleanupPending ? 1U : 0U);
 }
 
 bool migrateIndexToV4IfNeeded(GolfIndexLiveState& live, GolfIndexMigrator& migrator) {
@@ -407,10 +427,73 @@ uint8_t enabledPlayerCount(const uint8_t mask) {
   return count;
 }
 
+bool hasJsonSuffix(const char* filename) {
+  if (filename == nullptr) return false;
+  const size_t length = strlen(filename);
+  return length > 5 && strcmp(filename + length - 5, ".json") == 0;
+}
+
+// Rebuild one decoded round at a time; ArchiveScratch and the decoder's
+// transactional GolfRound are the only fixed-size operation allocations.
+[[gnu::noinline]] bool rebuildIndexFromRoundFiles(ArchiveScratch& scratch, GolfIndexLiveState& live) {
+  if (!Storage.exists(ROUNDS_DIRECTORY)) return true;
+  HalFile directory = Storage.open(ROUNDS_DIRECTORY);
+  if (!directory || !directory.isDirectory()) {
+    LOG_ERR("GOLF", "index rebuild directory open failed: %s", ROUNDS_DIRECTORY);
+    return false;
+  }
+
+  HalFile staged = Storage.open(INDEX_NEW_PATH, O_WRONLY | O_CREAT | O_TRUNC);
+  if (!staged) {
+    LOG_ERR("GOLF", "index rebuild stage open failed: %s", INDEX_NEW_PATH);
+    return false;
+  }
+  if (!writeText(staged, GOLF_INDEX_HEADER)) {
+    LOG_ERR("GOLF", "index rebuild header write failed: %s", INDEX_NEW_PATH);
+    return false;
+  }
+
+  uint32_t rows = 0;
+  uint32_t rounds = 0;
+  for (HalFile entry = directory.openNextFile(); entry; entry = directory.openNextFile()) {
+    if (entry.isDirectory()) continue;
+    scratch.filename[0] = '\0';
+    if (entry.getName(scratch.filename, sizeof(scratch.filename)) == 0 || !hasJsonSuffix(scratch.filename)) continue;
+    const int pathLength = snprintf(scratch.path, sizeof(scratch.path), "%s/%s", ROUNDS_DIRECTORY, scratch.filename);
+    if (pathLength < 0 || static_cast<size_t>(pathLength) >= sizeof(scratch.path)) {
+      LOG_ERR("GOLF", "index rebuild path too long: %s", scratch.filename);
+      continue;
+    }
+    entry.close();
+    if (!loadGolfRoundFile(scratch.path, scratch.round)) continue;
+
+    const GolfIndexGroupWriteResult group = golfWriteIndexGroupRows(
+        scratch.round, scratch.filename, scratch.indexRow, scratch.csv, sizeof(scratch.csv), &migrateSink, &staged);
+    if (!group.complete || !golfIndexGroupRowsValid(group.rowCount, group.slotMask) ||
+        UINT32_MAX - rows < group.rowCount) {
+      LOG_ERR("GOLF", "index rebuild group write failed: %s", scratch.filename);
+      return false;
+    }
+    rows += group.rowCount;
+    ++rounds;
+  }
+  if (!staged.sync()) {
+    LOG_ERR("GOLF", "index rebuild stage sync failed: %s", INDEX_NEW_PATH);
+    return false;
+  }
+  staged.close();
+
+  const IndexRewriteResult published = commitStagedIndex(false, rows, "rebuild", scratch.indexMigrator);
+  if (!published.committed()) return false;
+  live = {rows, GolfIndexVersion::V4, true};
+  LOG_INF("GOLF", "index.csv rebuilt from %lu rounds (%lu rows)", static_cast<unsigned long>(rounds),
+          static_cast<unsigned long>(rows));
+  return true;
+}
+
 // Keep staged-index handles in their own bounded frame under LTO.
 [[gnu::noinline]] GolfIndexTransactionResult appendIndexGroup(const GolfRound& round, const char* filename,
-                                                              ArchiveScratch& scratch,
-                                                              const GolfIndexLiveState live) {
+                                                              ArchiveScratch& scratch, const GolfIndexLiveState live) {
   const uint8_t expectedMask = golfEnabledPlayerMask(round);
   const uint8_t expectedRows = enabledPlayerCount(expectedMask);
   if (!golfIndexGroupRowsValid(expectedRows, expectedMask)) {
@@ -429,14 +512,12 @@ uint8_t enabledPlayerCount(const uint8_t mask) {
   context.round = &round;
   context.filename = filename;
   context.expectedMask = expectedMask;
-  const GolfIndexTransactionResult result =
-      golfRunIndexTransaction(live, expectedRows, indexTransactionOps(context));
+  const GolfIndexTransactionResult result = golfRunIndexTransaction(live, expectedRows, indexTransactionOps(context));
   if (!result.ok()) logIndexTransactionFailure(result);
   return result;
 }
 
-IndexRewriteResult rewriteIndexWithout(const char* filename, GolfIndexMigrator& rewrite,
-                                       GolfIndexLiveState& live) {
+IndexRewriteResult rewriteIndexWithout(const char* filename, GolfIndexMigrator& rewrite, GolfIndexLiveState& live) {
   if (!live.present) {
     LOG_ERR("GOLF", "index delete has no recovered live index: %s", INDEX_PATH);
     return {};
@@ -467,11 +548,11 @@ IndexRewriteResult rewriteIndexWithout(const char* filename, GolfIndexMigrator& 
   }
   if (groupAbsent) {
     return {removeStagedIndex("delete retry") ? IndexRewriteStatus::Complete
-                                               : IndexRewriteStatus::CommittedCleanupPending};
+                                              : IndexRewriteStatus::CommittedCleanupPending};
   }
   if (stream != IndexStreamStatus::Complete || rewrite.aborted() || !rewrite.groupValid() || !synced) {
-    LOG_ERR("GOLF", "index delete stage write failed: %s -> %s (stream=%u matched=%u)", INDEX_PATH,
-            INDEX_NEW_PATH, static_cast<unsigned>(stream), static_cast<unsigned>(rewrite.deletedRows()));
+    LOG_ERR("GOLF", "index delete stage write failed: %s -> %s (stream=%u matched=%u)", INDEX_PATH, INDEX_NEW_PATH,
+            static_cast<unsigned>(stream), static_cast<unsigned>(rewrite.deletedRows()));
     removeStagedIndex("delete");
     return {};
   }
@@ -531,21 +612,20 @@ bool writeArray(ArchiveWriter& file, const T* values, const uint8_t count, const
   return writeText(file, "]");
 }
 
-bool writePenalties(ArchiveWriter& file, const GolfPlayerScore& score, const uint8_t holeCount,
-                    const bool writeZeros) {
+bool writePenalties(ArchiveWriter& file, const GolfPlayerScore& score, const uint8_t holeCount, const bool writeZeros) {
   if (!writeText(file, "[")) return false;
   for (uint8_t hole = 0; hole < holeCount; ++hole) {
     if (!writeText(file, hole == 0 ? "[" : ",[")) return false;
-    const uint8_t count = writeZeros ? 0
-                                     : (score.penaltyCount[hole] < GolfRound::MAX_PENALTIES_PER_HOLE
-                                            ? score.penaltyCount[hole]
-                                            : GolfRound::MAX_PENALTIES_PER_HOLE);
+    const uint8_t count =
+        writeZeros ? 0
+                   : (score.penaltyCount[hole] < GolfRound::MAX_PENALTIES_PER_HOLE ? score.penaltyCount[hole]
+                                                                                   : GolfRound::MAX_PENALTIES_PER_HOLE);
     for (uint8_t index = 0; index < count; ++index) {
       GolfPenaltyEvent event{};
       if (!golfPenaltyEventAt(score, hole, index, event)) continue;
       char pair[12];
-      snprintf(pair, sizeof(pair), index == 0 ? "[%u,%u]" : ",[%u,%u]",
-               static_cast<unsigned>(event.field), static_cast<unsigned>(event.kind));
+      snprintf(pair, sizeof(pair), index == 0 ? "[%u,%u]" : ",[%u,%u]", static_cast<unsigned>(event.field),
+               static_cast<unsigned>(event.kind));
       if (!writeText(file, pair)) return false;
     }
     if (!writeText(file, "]")) return false;
@@ -645,17 +725,17 @@ bool removeCompletedRound(const char* path, const char* phase) {
   return highest >= 9999 ? 0 : static_cast<uint16_t>(highest + 1);
 }
 
-bool recoverIndexState(GolfIndexMigrator& scratch, GolfIndexLiveState& live) {
+bool recoverIndexState(GolfIndexMigrator& scratch, GolfIndexLiveState& live, ArchiveScratch* rebuildScratch) {
   live = {};
-  const GolfIndexRecoveryOps ops{&scratch, &indexExists, &indexValid, &indexRemove, &indexRename};
-  const GolfIndexRecoveryStatus status =
-      golfRecoverIndexArtifacts(ops, INDEX_PATH, INDEX_NEW_PATH, INDEX_BAK_PATH);
+  const GolfIndexRecoveryOps ops{&scratch, &indexExists, &indexValid, &indexRemove, &indexRename, &quarantineIndex};
+  const GolfIndexRecoveryStatus status = golfRecoverIndexArtifacts(ops, INDEX_PATH, INDEX_NEW_PATH, INDEX_BAK_PATH);
   if (status == GolfIndexRecoveryStatus::Failed) {
-    LOG_ERR("GOLF", "index recovery failed: live=%s staged=%s backup=%s", INDEX_PATH, INDEX_NEW_PATH,
-            INDEX_BAK_PATH);
+    LOG_ERR("GOLF", "index recovery failed: live=%s staged=%s backup=%s", INDEX_PATH, INDEX_NEW_PATH, INDEX_BAK_PATH);
     return false;
   }
-  if (status == GolfIndexRecoveryStatus::NoIndex) return true;
+  if (status == GolfIndexRecoveryStatus::NoIndex) {
+    return rebuildScratch == nullptr || rebuildIndexFromRoundFiles(*rebuildScratch, live);
+  }
 
   const GolfIndexVersion version = scratch.sourceVersion();
   if (version == GolfIndexVersion::Unknown) {
@@ -670,13 +750,12 @@ bool recoverIndexState(GolfIndexMigrator& scratch, GolfIndexLiveState& live) {
 
 bool RoundArchive::recoverIndex(GolfIndexMigrator& scratch) {
   GolfIndexLiveState live{};
-  return recoverIndexState(scratch, live);
+  return recoverIndexState(scratch, live, nullptr);
 }
 
 RoundArchiveResult RoundArchive::archive(const GolfRound& source) {
   if (GOLF_ROUND_STORE.isArchived()) {
-    return GOLF_ROUND_STORE.clear() ? RoundArchiveResult::Complete
-                                    : RoundArchiveResult::CommittedCleanupPending;
+    return GOLF_ROUND_STORE.clear() ? RoundArchiveResult::Complete : RoundArchiveResult::CommittedCleanupPending;
   }
 
   // Validation, index migration, row formatting, and path construction share
@@ -687,7 +766,7 @@ RoundArchiveResult RoundArchive::archive(const GolfRound& source) {
     return RoundArchiveResult::FailedBeforeCommit;
   }
   GolfIndexLiveState liveIndex{};
-  if (!recoverIndexState(scratch->indexMigrator, liveIndex)) {
+  if (!recoverIndexState(scratch->indexMigrator, liveIndex, scratch.get())) {
     return RoundArchiveResult::FailedBeforeCommit;
   }
 
@@ -792,7 +871,7 @@ bool RoundArchive::remove(const char* filename) {
     return false;
   }
   GolfIndexLiveState liveIndex{};
-  if (!recoverIndexState(scratch->indexMigrator, liveIndex)) return false;
+  if (!recoverIndexState(scratch->indexMigrator, liveIndex, nullptr)) return false;
   if (filename == nullptr || filename[0] == '\0' || strchr(filename, '/') != nullptr ||
       strchr(filename, '\\') != nullptr) {
     LOG_ERR("GOLF", "index delete rejected invalid round filename");

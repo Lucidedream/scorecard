@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <fstream>
 #include <map>
 #include <string>
 #include <vector>
@@ -45,6 +46,24 @@ GolfIndexMigrator rewriteDelete(const std::string& input, const char* filename, 
   return rewrite;
 }
 
+GolfRound completedSinglePlayerRound(const char* course) {
+  GolfRound round{};
+  initializeGolfPlayerDefaults(round);
+  snprintf(round.courseName, sizeof(round.courseName), "%s", course);
+  round.holeCount = 18;
+  round.currentHole = round.holeCount;
+  round.currentPlayer = GolfRound::NO_PLAYER;
+  round.players[0].tee = TeeSelection::Blue;
+  for (uint8_t slot = 1; slot < GolfRound::MAX_PLAYERS; ++slot) round.players[slot].tee = TeeSelection::NotPlay;
+  for (uint8_t hole = 0; hole < round.holeCount; ++hole) {
+    round.par[hole] = 4;
+    round.players[0].score.putts[hole] = 2;
+    round.players[0].score.in100[hole] = 2;
+    round.players[0].score.out100[hole] = 2;
+  }
+  return round;
+}
+
 bool simulatedAtomicDelete(std::string& live, const char* filename, const size_t allowBytes = SIZE_MAX) {
   Sink staged;
   staged.allowBytes = allowBytes;
@@ -65,6 +84,7 @@ std::string v3Row(const char* course, const char* file) {
 constexpr char LIVE[] = "index.csv";
 constexpr char STAGED[] = "index.csv.new";
 constexpr char BACKUP[] = "index.csv.bak";
+constexpr char UNREADABLE[] = "index.csv.unreadable";
 
 const char* artifactPath(const GolfIndexArtifact artifact) {
   switch (artifact) {
@@ -99,11 +119,15 @@ struct FakeIndexStorage {
     return self->files.find(path) != self->files.end();
   }
 
-  static bool validate(const char* path, const bool requireV4, void* user) {
+  static GolfIndexRecoveryOps::ValidationStatus validate(const char* path, const bool requireV4, void* user) {
     auto* self = static_cast<FakeIndexStorage*>(user);
     self->operations.emplace_back(std::string("validate:") + path);
     const auto found = self->files.find(path);
-    return found != self->files.end() && found->second.valid && (!requireV4 || found->second.v4);
+    if (found == self->files.end()) return GolfIndexRecoveryOps::ValidationStatus::Failed;
+    if (!found->second.valid || (requireV4 && !found->second.v4)) {
+      return GolfIndexRecoveryOps::ValidationStatus::Unreadable;
+    }
+    return GolfIndexRecoveryOps::ValidationStatus::Valid;
   }
 
   static bool remove(const char* path, void* user) {
@@ -125,6 +149,15 @@ struct FakeIndexStorage {
     return true;
   }
 
+  static bool quarantine(const char* path, void* user) {
+    auto* self = static_cast<FakeIndexStorage*>(user);
+    std::string destination = UNREADABLE;
+    for (uint16_t suffix = 2; self->files.find(destination) != self->files.end(); ++suffix) {
+      destination = std::string(UNREADABLE) + "." + std::to_string(suffix);
+    }
+    return rename(path, destination.c_str(), user);
+  }
+
   static bool removeArtifact(const GolfIndexArtifact artifact, GolfIndexStagePurpose, void* user) {
     return remove(artifactPath(artifact), user);
   }
@@ -135,8 +168,12 @@ struct FakeIndexStorage {
   }
 
   GolfIndexRecoveryOps ops() {
-    return {this, &FakeIndexStorage::exists, &FakeIndexStorage::validate, &FakeIndexStorage::remove,
-            &FakeIndexStorage::rename};
+    return {this,
+            &FakeIndexStorage::exists,
+            &FakeIndexStorage::validate,
+            &FakeIndexStorage::remove,
+            &FakeIndexStorage::rename,
+            &FakeIndexStorage::quarantine};
   }
 
   GolfIndexPublicationOps publicationOps() {
@@ -187,9 +224,8 @@ struct FakeIndexTransaction {
   static GolfIndexStageWriteStatus writeStage(const GolfIndexStagePurpose purpose, const GolfIndexLiveState live,
                                               void* user) {
     auto* self = static_cast<FakeIndexTransaction*>(user);
-    const GolfIndexStageWriteStatus status = purpose == GolfIndexStagePurpose::Migration
-                                                 ? self->migrationWrite
-                                                 : self->appendWrite;
+    const GolfIndexStageWriteStatus status =
+        purpose == GolfIndexStagePurpose::Migration ? self->migrationWrite : self->appendWrite;
     self->operations.emplace_back(std::string("open:") + purposeName(purpose));
     if (status == GolfIndexStageWriteStatus::OpenFailed) return status;
     if (status == GolfIndexStageWriteStatus::ReadFailed) {
@@ -209,8 +245,7 @@ struct FakeIndexTransaction {
 
   static bool verifyStage(const GolfIndexStagePurpose purpose, const uint32_t expectedRows, void* user) {
     auto* self = static_cast<FakeIndexTransaction*>(user);
-    self->operations.emplace_back(std::string("verify:") + purposeName(purpose) + ":" +
-                                  std::to_string(expectedRows));
+    self->operations.emplace_back(std::string("verify:") + purposeName(purpose) + ":" + std::to_string(expectedRows));
     return purpose == GolfIndexStagePurpose::Migration ? self->migrationVerify : self->appendVerify;
   }
 
@@ -220,8 +255,8 @@ struct FakeIndexTransaction {
     return !self->failRemove || artifact != self->failedRemove;
   }
 
-  static bool rename(const GolfIndexArtifact from, const GolfIndexArtifact to,
-                     const GolfIndexStagePurpose purpose, void* user) {
+  static bool rename(const GolfIndexArtifact from, const GolfIndexArtifact to, const GolfIndexStagePurpose purpose,
+                     void* user) {
     auto* self = static_cast<FakeIndexTransaction*>(user);
     self->operations.emplace_back(std::string("rename:") + artifactName(from) + ":" + artifactName(to) + ":" +
                                   purposeName(purpose));
@@ -229,8 +264,8 @@ struct FakeIndexTransaction {
   }
 
   GolfIndexTransactionOps ops() {
-    return {this, &FakeIndexTransaction::writeStage, &FakeIndexTransaction::verifyStage,
-            &FakeIndexTransaction::remove, &FakeIndexTransaction::rename};
+    return {this, &FakeIndexTransaction::writeStage, &FakeIndexTransaction::verifyStage, &FakeIndexTransaction::remove,
+            &FakeIndexTransaction::rename};
   }
 
   GolfIndexPublicationOps publicationOps() {
@@ -274,8 +309,8 @@ TEST(GolfIndexHeaderVersion, ClassifiesAllHeaders) {
 }
 
 TEST(GolfIndexMigrate, V2RowsNormalizeToSlotZeroNoah) {
-  const std::string input = std::string(GOLF_INDEX_HEADER_V2) + "\r\n" +
-                            v2Row("Pebble", "round-0001.json") + v2Row("Sanyang", "round-0002.json");
+  const std::string input = std::string(GOLF_INDEX_HEADER_V2) + "\r\n" + v2Row("Pebble", "round-0001.json") +
+                            v2Row("Sanyang", "round-0002.json");
   Sink output;
   const GolfIndexMigrator migrator = migrate(input, output);
 
@@ -322,8 +357,7 @@ TEST(GolfIndexMigrate, AlreadyV4FileIsOnlyVerified) {
 }
 
 TEST(GolfIndexMigrate, V4RejectsLegacyShapeAndMalformedNonemptyRows) {
-  const std::string legacyUnderV4 =
-      std::string(GOLF_INDEX_HEADER) + v2Row("Legacy", "round-old.json");
+  const std::string legacyUnderV4 = std::string(GOLF_INDEX_HEADER) + v2Row("Legacy", "round-old.json");
   Sink output;
   const GolfIndexMigrator legacy = migrate(legacyUnderV4, output);
   EXPECT_EQ(legacy.sourceVersion(), GolfIndexVersion::V4);
@@ -344,8 +378,8 @@ TEST(GolfIndexMigrate, V4RejectsUnterminatedTailAsIncomplete) {
 }
 
 TEST(GolfIndexMigrate, ExplicitLegacyMigrationRetainsMixedV2V3Tolerance) {
-  const std::string input = std::string(GOLF_INDEX_HEADER_V2) + "\r\n" +
-                            v2Row("Old", "round-old.json") + v3Row("New", "round-new.json");
+  const std::string input =
+      std::string(GOLF_INDEX_HEADER_V2) + "\r\n" + v2Row("Old", "round-old.json") + v3Row("New", "round-new.json");
   Sink output;
   const GolfIndexMigrator migrator = migrate(input, output);
   EXPECT_FALSE(migrator.aborted());
@@ -354,8 +388,8 @@ TEST(GolfIndexMigrate, ExplicitLegacyMigrationRetainsMixedV2V3Tolerance) {
 }
 
 TEST(GolfIndexMigrate, QuotedLegacyCourseAndV4PlayerNameRoundTrip) {
-  const std::string legacy = std::string(GOLF_INDEX_HEADER_V2) + "\r\n" +
-                             ",\"Course, \"\"One\"\"\",18,82,72,33,52,30,round-old.json\r\n";
+  const std::string legacy =
+      std::string(GOLF_INDEX_HEADER_V2) + "\r\n" + ",\"Course, \"\"One\"\"\",18,82,72,33,52,30,round-old.json\r\n";
   Sink migrated;
   const GolfIndexMigrator migration = migrate(legacy, migrated);
   ASSERT_FALSE(migration.aborted());
@@ -411,8 +445,8 @@ TEST(GolfIndexGroup, ValidatesOneToFourDistinctStableSlots) {
 
 TEST(GolfIndexGroup, CounterFindsExactFilenameAndDistinctSlotMask) {
   const char* target = "round-0002.json";
-  const std::string input = std::string(GOLF_INDEX_HEADER) + v4Row(0, "Noah", target) +
-                            v4Row(2, "Guest", target) + v4Row(1, "Other", "round-0003.json");
+  const std::string input = std::string(GOLF_INDEX_HEADER) + v4Row(0, "Noah", target) + v4Row(2, "Guest", target) +
+                            v4Row(1, "Other", "round-0003.json");
   GolfIndexMigrator counter;
   ASSERT_TRUE(counter.resetForGroupCount(target));
   ASSERT_TRUE(counter.feed(input.data(), input.size(), nullptr, nullptr));
@@ -454,8 +488,8 @@ TEST(GolfIndexTransaction, ValidV4SkipsThrowawayMigrationStage) {
   EXPECT_EQ(result.live.rows, 8u);
   EXPECT_FALSE(traceContains(transaction.operations, "migration"));
   const std::vector<std::string> expected{
-      "open:append",           "write:append:with-live",      "sync:append:ok",
-      "verify:append:8",       "rename:live:backup:append",   "rename:staged:live:append",
+      "open:append",          "write:append:with-live",    "sync:append:ok",
+      "verify:append:8",      "rename:live:backup:append", "rename:staged:live:append",
       "remove:backup:append",
   };
   EXPECT_EQ(transaction.operations, expected);
@@ -630,8 +664,8 @@ TEST(GolfIndexTransaction, StaleBackupRecoveryFailurePreventsAppendUntilCleanupS
 TEST(GolfIndexDelete, RemovesAllRowsForOneGroupAndPreservesOthers) {
   const char* target = "round-0002.json";
   const std::string input = std::string(GOLF_INDEX_HEADER) + v4Row(0, "Noah", "round-0001.json") +
-                            v4Row(0, "Noah", target) + v4Row(2, "Guest", target) +
-                            v4Row(3, "Fourth", target) + v4Row(1, "B", "round-0003.json");
+                            v4Row(0, "Noah", target) + v4Row(2, "Guest", target) + v4Row(3, "Fourth", target) +
+                            v4Row(1, "B", "round-0003.json");
   Sink staged;
   const GolfIndexMigrator rewrite = rewriteDelete(input, target, staged);
   ASSERT_FALSE(rewrite.aborted());
@@ -645,8 +679,8 @@ TEST(GolfIndexDelete, RemovesAllRowsForOneGroupAndPreservesOthers) {
 }
 
 TEST(GolfIndexDelete, DuplicateSlotOrMissingGroupNeverBecomesLive) {
-  std::string duplicate = std::string(GOLF_INDEX_HEADER) + v4Row(0, "Noah", "round.json") +
-                          v4Row(0, "Duplicate", "round.json");
+  std::string duplicate =
+      std::string(GOLF_INDEX_HEADER) + v4Row(0, "Noah", "round.json") + v4Row(0, "Duplicate", "round.json");
   const std::string before = duplicate;
   EXPECT_FALSE(simulatedAtomicDelete(duplicate, "round.json"));
   EXPECT_EQ(duplicate, before);
@@ -658,8 +692,8 @@ TEST(GolfIndexDelete, DuplicateSlotOrMissingGroupNeverBecomesLive) {
 }
 
 TEST(GolfIndexDelete, FailedStagedWriteLeavesLiveIndexByteIdentical) {
-  std::string live = std::string(GOLF_INDEX_HEADER) + v4Row(0, "Noah", "round.json") +
-                     v4Row(2, "Guest", "round.json") + v4Row(1, "Keep", "other.json");
+  std::string live = std::string(GOLF_INDEX_HEADER) + v4Row(0, "Noah", "round.json") + v4Row(2, "Guest", "round.json") +
+                     v4Row(1, "Keep", "other.json");
   const std::string before = live;
   EXPECT_FALSE(simulatedAtomicDelete(live, "round.json", sizeof(GOLF_INDEX_HEADER) + 4));
   EXPECT_EQ(live, before);
@@ -776,20 +810,101 @@ TEST(GolfIndexRecovery, FailedBackupRestoreNeverTouchesRecoverableStaging) {
   EXPECT_EQ(storage.operations[0], "rename:index.csv.bak:index.csv");
 }
 
-TEST(GolfIndexRecovery, InvalidLivePreservesEveryArtifactForManualRecovery) {
+TEST(GolfIndexRecovery, InvalidLiveIsQuarantinedAndStaleArtifactsAreRemoved) {
   FakeIndexStorage storage;
   storage.files.emplace(LIVE, FakeArtifact{2, false, true});
   storage.files.emplace(BACKUP, FakeArtifact{1, true, true});
   storage.files.emplace(STAGED, FakeArtifact{3, true, true});
-  EXPECT_EQ(recover(storage), GolfIndexRecoveryStatus::Failed);
-  EXPECT_EQ(storage.files.size(), 3u);
-  ASSERT_EQ(storage.operations.size(), 1u);
+  EXPECT_EQ(recover(storage), GolfIndexRecoveryStatus::NoIndex);
+  EXPECT_EQ(storage.files.size(), 1u);
+  EXPECT_EQ(storage.files.count(LIVE), 0u);
+  EXPECT_EQ(storage.files.count(UNREADABLE), 1u);
+  ASSERT_EQ(storage.operations.size(), 4u);
   EXPECT_EQ(storage.operations[0], "validate:index.csv");
+  EXPECT_EQ(storage.operations[1], "rename:index.csv:index.csv.unreadable");
+  EXPECT_EQ(storage.operations[2], "remove:index.csv.new");
+  EXPECT_EQ(storage.operations[3], "remove:index.csv.bak");
+}
+
+TEST(GolfIndexRecovery, RepeatedUnreadableIndexesUseNonCollidingQuarantineNames) {
+  FakeIndexStorage storage;
+  storage.files.emplace(LIVE, FakeArtifact{1, false, false});
+  ASSERT_EQ(recover(storage), GolfIndexRecoveryStatus::NoIndex);
+  storage.files.emplace(LIVE, FakeArtifact{2, false, false});
+  ASSERT_EQ(recover(storage), GolfIndexRecoveryStatus::NoIndex);
+
+  ASSERT_EQ(storage.files.count(UNREADABLE), 1u);
+  ASSERT_EQ(storage.files.count(std::string(UNREADABLE) + ".2"), 1u);
+  EXPECT_EQ(storage.files.at(UNREADABLE).generation, 1);
+  EXPECT_EQ(storage.files.at(std::string(UNREADABLE) + ".2").generation, 2);
+}
+
+TEST(GolfIndexRecovery, MatchingLegacyHeadersRemainReadyForMigration) {
+  FakeIndexStorage v2;
+  v2.files.emplace(LIVE, FakeArtifact{1, true, false});
+  EXPECT_EQ(recover(v2), GolfIndexRecoveryStatus::Ready);
+  EXPECT_EQ(v2.files.count(UNREADABLE), 0u);
+
+  FakeIndexStorage v3;
+  v3.files.emplace(LIVE, FakeArtifact{2, true, false});
+  EXPECT_EQ(recover(v3), GolfIndexRecoveryStatus::Ready);
+  EXPECT_EQ(v3.files.count(UNREADABLE), 0u);
+}
+
+TEST(GolfIndexRecovery, OwnersMixedSchemaSampleIsUnreadableAndQuarantined) {
+  std::ifstream input(std::string(GOLF_TEST_REPO_ROOT) + "/docs/golf/examples/index-legacy-mixed-schema.csv");
+  ASSERT_TRUE(input.good());
+  const std::string contents((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+  Sink ignored;
+  const GolfIndexMigrator migrator = migrate(contents, ignored);
+  EXPECT_EQ(migrator.sourceVersion(), GolfIndexVersion::Unknown);
+  EXPECT_FALSE(migrator.aborted());
+
+  FakeIndexStorage storage;
+  storage.files.emplace(LIVE, FakeArtifact{1, false, false});
+  EXPECT_EQ(recover(storage), GolfIndexRecoveryStatus::NoIndex);
+  EXPECT_EQ(storage.files.count(LIVE), 0u);
+  EXPECT_EQ(storage.files.count(UNREADABLE), 1u);
+}
+
+TEST(GolfIndexRebuild, SixRoundFilesProduceOneValidV4GroupEachIncludingLegacyFilename) {
+  constexpr const char* filenames[] = {
+      "2026-01-01-quick-round-all-par-4.json", "round-0001-sanyang-golf-club.json", "round-0002-moganshan-gowin.json",
+      "round-0003-moganshan-gowin.json",       "round-0004-moganshan-gowin.json",   "round-0005-sanyang-golf-club.json",
+  };
+  Sink rebuilt;
+  rebuilt.out = GOLF_INDEX_HEADER;
+  GolfIndexRow row{};
+  char csv[GOLF_CSV_ROW_BUFFER_SIZE]{};
+  for (const char* filename : filenames) {
+    const GolfRound round = completedSinglePlayerRound("Recovered course");
+    const GolfIndexGroupWriteResult group =
+        golfWriteIndexGroupRows(round, filename, row, csv, sizeof(csv), &sink, &rebuilt);
+    ASSERT_TRUE(group.complete);
+    EXPECT_EQ(group.rowCount, 1);
+    EXPECT_EQ(group.slotMask, 0x01);
+  }
+
+  GolfIndexMigrator verifier;
+  verifier.resetForStrictValidation(true);
+  ASSERT_TRUE(verifier.feed(rebuilt.out.data(), rebuilt.out.size(), nullptr, nullptr));
+  ASSERT_TRUE(verifier.finish());
+  EXPECT_FALSE(verifier.aborted());
+  EXPECT_EQ(verifier.sourceVersion(), GolfIndexVersion::V4);
+  EXPECT_EQ(verifier.dataRows(), 6u);
+  for (const char* filename : filenames) {
+    GolfIndexMigrator group;
+    ASSERT_TRUE(group.resetForGroupCount(filename));
+    ASSERT_TRUE(group.feed(rebuilt.out.data(), rebuilt.out.size(), nullptr, nullptr));
+    ASSERT_TRUE(group.finish());
+    EXPECT_TRUE(group.groupValid());
+    EXPECT_EQ(group.groupRows(), 1);
+    EXPECT_EQ(group.groupSlotMask(), 0x01);
+  }
 }
 
 TEST(GolfIndexDelete, DeletingOnlyGroupLeavesValidHeaderOnlyIndex) {
-  std::string live = std::string(GOLF_INDEX_HEADER) + v4Row(0, "Noah", "round.json") +
-                     v4Row(2, "Guest", "round.json");
+  std::string live = std::string(GOLF_INDEX_HEADER) + v4Row(0, "Noah", "round.json") + v4Row(2, "Guest", "round.json");
   ASSERT_TRUE(simulatedAtomicDelete(live, "round.json"));
   EXPECT_EQ(live, GOLF_INDEX_HEADER);
 }

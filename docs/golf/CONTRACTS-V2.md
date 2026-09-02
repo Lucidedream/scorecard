@@ -1333,3 +1333,65 @@ under `Noah`.
 
 Repair, not silent acceptance: the round stays valid only because it was fixed, and the
 repair is logged through `golfLogRoundRepairs` like every other.
+
+
+## 21. An unreadable index is quarantined and rebuilt, never fatal (v4.5)
+
+### 21.1 What went wrong on the owner's device
+
+Finishing a round failed with *"Archive failed"*. Serial gave the exact cause:
+
+```
+[ERR] [GOLF] index recovery verify failed: /golf/rounds/index.csv (stream=0 version=0)
+[ERR] [GOLF] index recovery failed: live=... staged=... backup=...
+```
+
+`stream=0` is `Complete` — the file read fine. `version=0` is `Unknown` — no header
+matched. The owner's real file is kept at
+`docs/golf/examples/index-legacy-mixed-schema.csv`:
+
+| Line | Columns | Shape |
+| --- | --- | --- |
+| 1 (header) | 8 | pre-V2, no `out100` |
+| 2 | 8 | matches the header |
+| 3-6 | 9 | V2 |
+| 7 | 11 | V3 |
+
+**Three row schemas under a header describing none of them.** The header was written by
+an early build and never migrated, while later builds appended rows in their own current
+format. §5.3's append-only rule is what allowed the drift: appending never rewrites the
+header, so once the row format moved on, the header could only fall further behind.
+
+The row data itself is sound — line 4 reads `strokes=75, in100=37, out100=38` and
+`37+38=75`; line 7 gives `36+36=72`. Only the header is stale.
+
+### 21.2 A present-but-invalid index must never be fatal
+
+Recovery today treats a missing index as `NoIndex` (fine, create a fresh one) but a
+present-and-unrecognisable one as `Failed`. So a corrupt index is *worse than no index*,
+and it bricks archiving permanently with no route out from the device.
+
+An index that cannot be recognised is **renamed aside** — to a non-colliding
+`index.csv.unreadable` — and a fresh one started. Saving a round must never become
+impossible because a derived file is malformed.
+
+### 21.3 Rebuild the index from the round files
+
+`index.csv` is **derived**; `/golf/rounds/*.json` are the source of truth. After
+quarantine, rebuild the index by scanning the round files, which the decoder already
+reads at v2, v3 and v4.
+
+Do not attempt to parse the quarantined file. No single header describes lines 2, 3-6
+and 7, so a header-keyed parser mis-reads most rows; the round files are both simpler
+and correct. The owner's six rounds — `round-0001` through `round-0005` plus
+`2026-01-01-quick-round-all-par-4.json` — must all come back.
+
+Rebuild is also the honest general answer: any index that disagrees with the round files
+should lose, because the rounds are the data and the index is a cache.
+
+### 21.4 Migrate the header when the format changes
+
+The drift is only possible because appending never revisits the header. Whenever the
+live index's version is recognised but older than current, the append path migrates it —
+staged, verified, renamed, as §12.7 already does — rather than appending a new-format row
+under an old-format header.

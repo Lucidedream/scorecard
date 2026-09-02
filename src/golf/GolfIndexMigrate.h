@@ -10,9 +10,11 @@ using GolfIndexMigrateSink = bool (*)(const char* data, size_t size, void* user)
 struct GolfIndexRecoveryOps {
   void* user;
   bool (*exists)(const char* path, void* user);
-  bool (*validate)(const char* path, bool requireV4, void* user);
+  enum class ValidationStatus : uint8_t { Valid, Unreadable, Failed };
+  ValidationStatus (*validate)(const char* path, bool requireV4, void* user);
   bool (*remove)(const char* path, void* user);
   bool (*rename)(const char* from, const char* to, void* user);
+  bool (*quarantine)(const char* path, void* user);
 };
 
 enum class GolfIndexRecoveryStatus : uint8_t { NoIndex, Ready, Failed };
@@ -20,7 +22,7 @@ enum class GolfIndexRecoveryStatus : uint8_t { NoIndex, Ready, Failed };
 // Live is authoritative when present; otherwise backup is restored. A lone
 // stage is discarded because syntax cannot prove a complete first group.
 GolfIndexRecoveryStatus golfRecoverIndexArtifacts(const GolfIndexRecoveryOps& storage, const char* livePath,
-                                                   const char* stagedPath, const char* backupPath);
+                                                  const char* stagedPath, const char* backupPath);
 
 struct GolfIndexLiveState {
   uint32_t rows = 0;
