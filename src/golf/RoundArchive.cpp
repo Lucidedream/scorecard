@@ -25,6 +25,7 @@
 namespace {
 
 constexpr char ROUNDS_DIRECTORY[] = "/golf/rounds";
+constexpr char BACKUP_ROUNDS_DIRECTORY[] = "/golf-backup/rounds";
 constexpr char INDEX_PATH[] = "/golf/rounds/index.csv";
 constexpr char INDEX_NEW_PATH[] = "/golf/rounds/index.csv.new";
 constexpr char INDEX_BAK_PATH[] = "/golf/rounds/index.csv.bak";
@@ -38,6 +39,7 @@ struct ArchiveScratch {
   char csv[GOLF_CSV_ROW_BUFFER_SIZE]{};
   char filename[GOLF_ROUND_FILENAME_BUFFER_SIZE]{};
   char path[sizeof(ROUNDS_DIRECTORY) + GOLF_ROUND_FILENAME_BUFFER_SIZE + 1]{};
+  char backupPath[sizeof(BACKUP_ROUNDS_DIRECTORY) + GOLF_ROUND_FILENAME_BUFFER_SIZE + 1]{};
 };
 
 struct RemoveScratch {
@@ -701,6 +703,37 @@ bool removeCompletedRound(const char* path, const char* phase) {
   return false;
 }
 
+[[gnu::noinline]] bool writeVerifiedRound(const char* path, const GolfRound& round, const char* phase) {
+  ArchiveDigest expectedDigest{};
+  bool opened = false;
+  bool written = false;
+  bool synced = false;
+  {
+    HalFile file = Storage.open(path, O_WRONLY | O_CREAT | O_TRUNC);
+    opened = static_cast<bool>(file);
+    if (!opened) {
+      LOG_ERR("GOLF", "%s open failed: %s", phase, path);
+    } else {
+      ArchiveWriter writer(file);
+      written = writeCompletedRound(writer, round);
+      if (!written) {
+        LOG_ERR("GOLF", "%s write failed: %s", phase, path);
+      } else {
+        expectedDigest = writer.digest();
+        synced = file.sync();
+        if (!synced) LOG_ERR("GOLF", "%s sync failed: %s", phase, path);
+      }
+    }
+  }
+  if (!opened || !written || !synced) {
+    if (opened) removeCompletedRound(path, phase);
+    return false;
+  }
+  if (verifyCompletedRound(path, expectedDigest)) return true;
+  removeCompletedRound(path, phase);
+  return false;
+}
+
 // Keep directory iteration handles in their own bounded frame under LTO.
 [[gnu::noinline]] uint16_t nextRoundSequence() {
   HalFile directory = Storage.open(ROUNDS_DIRECTORY);
@@ -780,8 +813,8 @@ RoundArchiveResult RoundArchive::archive(const GolfRound& source) {
     return RoundArchiveResult::FailedBeforeCommit;
   }
   golfLogRoundRepairs(scratch->round, scratch->validation);
-  if (!Storage.ensureDirectoryExists(ROUNDS_DIRECTORY)) {
-    LOG_ERR("GOLF", "Failed to create %s", ROUNDS_DIRECTORY);
+  if (!Storage.ensureDirectoryExists(ROUNDS_DIRECTORY) || !Storage.ensureDirectoryExists(BACKUP_ROUNDS_DIRECTORY)) {
+    LOG_ERR("GOLF", "Failed to create round archive directories");
     return RoundArchiveResult::FailedBeforeCommit;
   }
 
@@ -798,40 +831,19 @@ RoundArchiveResult RoundArchive::archive(const GolfRound& source) {
       return RoundArchiveResult::FailedBeforeCommit;
     }
     snprintf(scratch->path, sizeof(scratch->path), "%s/%s", ROUNDS_DIRECTORY, scratch->filename);
+    snprintf(scratch->backupPath, sizeof(scratch->backupPath), "%s/%s", BACKUP_ROUNDS_DIRECTORY, scratch->filename);
     collisionSuffix = collisionSuffix == 0 ? 2 : static_cast<uint16_t>(collisionSuffix + 1);
     if (collisionSuffix == 0) {
       LOG_ERR("GOLF", "Exhausted round filename suffixes");
       return RoundArchiveResult::FailedBeforeCommit;
     }
-  } while (Storage.exists(scratch->path));
+  } while (Storage.exists(scratch->path) || Storage.exists(scratch->backupPath));
 
-  ArchiveDigest expectedDigest{};
-  bool archiveOpened = false;
-  bool archiveWritten = false;
-  bool archiveSynced = false;
-  {
-    HalFile file = Storage.open(scratch->path, O_WRONLY | O_CREAT | O_TRUNC);
-    archiveOpened = static_cast<bool>(file);
-    if (!archiveOpened) {
-      LOG_ERR("GOLF", "completed round open failed: %s", scratch->path);
-    } else {
-      ArchiveWriter writer(file);
-      archiveWritten = writeCompletedRound(writer, scratch->round);
-      if (!archiveWritten) {
-        LOG_ERR("GOLF", "completed round write failed: %s", scratch->path);
-      } else {
-        expectedDigest = writer.digest();
-        archiveSynced = file.sync();
-        if (!archiveSynced) LOG_ERR("GOLF", "completed round sync failed: %s", scratch->path);
-      }
-    }
-  }
-  if (!archiveOpened || !archiveWritten || !archiveSynced) {
-    if (archiveOpened) removeCompletedRound(scratch->path, "write rollback");
+  if (!writeVerifiedRound(scratch->path, scratch->round, "completed round")) {
     return RoundArchiveResult::FailedBeforeCommit;
   }
-  if (!verifyCompletedRound(scratch->path, expectedDigest)) {
-    removeCompletedRound(scratch->path, "verify rollback");
+  if (!writeVerifiedRound(scratch->backupPath, scratch->round, "round backup")) {
+    removeCompletedRound(scratch->path, "backup rollback");
     return RoundArchiveResult::FailedBeforeCommit;
   }
 
@@ -842,6 +854,7 @@ RoundArchiveResult RoundArchive::archive(const GolfRound& source) {
       LOG_ERR("GOLF", "completed round retained while index cleanup is pending: %s", scratch->path);
     } else {
       removeCompletedRound(scratch->path, "index rollback");
+      removeCompletedRound(scratch->backupPath, "index rollback");
     }
     return RoundArchiveResult::FailedBeforeCommit;
   }
@@ -887,6 +900,7 @@ bool RoundArchive::remove(const char* filename) {
   if (rewrite.status == IndexRewriteStatus::CommittedCleanupPending) {
     LOG_ERR("GOLF", "completed round delete committed with index cleanup pending: %s", filename);
   }
+  // Backups are append-only recovery copies and are not removed with History entries.
   return true;
 }
 

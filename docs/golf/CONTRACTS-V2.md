@@ -1674,3 +1674,44 @@ scale down to fit the map body and remain centered when smaller than it.
 
 The map activity is read-only: it receives copied course and hole identity, never mutates
 the round, and Back returns to scoring on the same hole and player.
+
+## 27. Append-only completed-round recovery copies (v6.2)
+
+Every completed round is written and verified twice before its rows are published to
+`/golf/rounds/index.csv`: the normal archive at `/golf/rounds/<filename>.json` and an
+identical recovery copy at `/golf-backup/rounds/<filename>.json`. The backup directory is
+outside `/golf` so deleting or replacing the primary golf directory does not remove it.
+
+Both files use the same sequence-numbered filename and v4 payload. Filename collision
+checks cover both directories, and either write or verification failure rolls the
+uncommitted pair back while `/golf/state.json` remains resumable. Once the index append is
+committed, both JSON files are authoritative recovery evidence.
+
+History deletion removes the index rows and primary JSON only. The backup is append-only;
+it is restored or purged only by an explicit recovery workflow. It deliberately has no
+second index because the primary index can be rebuilt by scanning verified JSON files.
+
+This protects against accidental deletion and isolated file damage, not failure or
+formatting of the SD card itself. A true backup still requires copying `/golf-backup` to
+another physical device.
+
+### 27.1 Restoring from the backup
+
+The firmware never reads `/golf-backup` on its own; restoring is a manual step the owner
+performs off the device, then the normal index recovery takes over:
+
+1. Pull the SD card and, on a computer, copy every file from `/golf-backup/rounds/` into
+   `/golf/rounds/`, creating `/golf/rounds/` first if it is missing. Existing files with
+   the same name may be overwritten — the payloads are identical.
+2. If `/golf/rounds/index.csv` is present but stale or damaged, delete it. A correct
+   `index.csv` is safe to keep.
+3. Reinsert the card and open the golf app. With `index.csv` absent, §21.3's rebuild
+   scans the round JSON files and regenerates it; History then shows the restored rounds.
+
+A round the owner deliberately deleted from History reappears if its backup copy is
+copied back in step 1 — the backup has no record of the deletion. Remove that round's
+JSON from `/golf/rounds/` again (and from `/golf-backup/rounds/` if the deletion should
+be permanent) before step 3.
+
+To reclaim space, `/golf-backup` can be deleted wholesale at any time; the next completed
+round recreates it.
