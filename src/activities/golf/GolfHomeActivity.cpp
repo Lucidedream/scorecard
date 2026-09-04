@@ -2,6 +2,7 @@
 
 #if defined(CROSSPOINT_GOLF)
 
+#include <FreeInkUIIcon.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Memory.h>
@@ -11,9 +12,12 @@
 #include "GolfNavigation.h"
 #include "GolfPlayerSelectActivity.h"
 #include "GolfSetupActivity.h"
+#include "GolfTipListActivity.h"
 #include "GolfUiLayout.h"
 #include "components/UITheme.h"
+#include "components/icons/golfTileIcons.h"
 #include "golf/GolfRoundStore.h"
+#include "golf/GolfTips.h"
 #include "golf/RoundArchive.h"
 
 namespace fui = freeink::ui;
@@ -52,9 +56,15 @@ void GolfHomeActivity::onEnter() {
   if (showNewRound) destinations[destinationCount++] = Destination::NewRound;
   destinations[destinationCount++] = Destination::History;
   destinations[destinationCount++] = Destination::Trends;
+  destinations[destinationCount++] = Destination::Tips;
   selected = 0;
   resumeFocused = hasOpenRound;
   scanIndexSummary();
+  {
+    const GolfTipsListResult tips = GolfTipsStore::enumerate(nullptr, GOLF_MAX_TIPS);
+    tipsError = tips.directoryError;
+    tipsNoteCount = tips.count;
+  }
   refreshDetail();
 
   Activity::onEnter();
@@ -99,8 +109,24 @@ const char* GolfHomeActivity::destinationLabel(const Destination destination) co
     case Destination::History:
       return tr(STR_GOLF_HISTORY);
     case Destination::Trends:
-    default:
       return tr(STR_GOLF_TRENDS);
+    case Destination::Tips:
+    default:
+      return tr(STR_GOLF_TIPS);
+  }
+}
+
+fui::BitmapRef GolfHomeActivity::destinationIcon(const Destination destination) const {
+  switch (destination) {
+    case Destination::NewRound:
+      return fui::bitmapFromIcon(icon_land_plot_32);
+    case Destination::History:
+      return fui::bitmapFromIcon(icon_scroll_text_32);
+    case Destination::Trends:
+      return fui::bitmapFromIcon(icon_trending_up_32);
+    case Destination::Tips:
+    default:
+      return fui::bitmapFromIcon(icon_lightbulb_32);
   }
 }
 
@@ -144,6 +170,18 @@ void GolfHomeActivity::refreshDetail() {
       snprintf(detailLine, sizeof(detailLine), tr(STR_GOLF_TRENDS_SUMMARY_FORMAT),
                static_cast<unsigned long>(indexSummary.totalRounds()), indexSummary.playerCount());
       return;
+    case Destination::Tips:
+      if (tipsError) {
+        snprintf(detailLine, sizeof(detailLine), "%s", tr(STR_GOLF_TIPS_UNAVAILABLE));
+      } else if (tipsNoteCount == 0) {
+        snprintf(detailLine, sizeof(detailLine), "%s", tr(STR_GOLF_TIPS_NONE));
+      } else if (tipsNoteCount == 1) {
+        snprintf(detailLine, sizeof(detailLine), "%s", tr(STR_GOLF_TIPS_COUNT_ONE));
+      } else {
+        snprintf(detailLine, sizeof(detailLine), tr(STR_GOLF_TIPS_COUNT_FORMAT),
+                 static_cast<unsigned long>(tipsNoteCount));
+      }
+      return;
   }
 }
 
@@ -153,6 +191,15 @@ void GolfHomeActivity::activateDestination(const Destination destination) {
     case Destination::NewRound:
       openGolfSetup(activityManager, renderer, mappedInput);
       return;
+    case Destination::Tips: {
+      auto list = makeUniqueNoThrow<GolfTipListActivity>(renderer, mappedInput);
+      if (!list) {
+        LOG_ERR("GOLF", "OOM: tip list activity");
+        return;
+      }
+      startActivityForResult(std::move(list), nullptr);
+      return;
+    }
     case Destination::History:
     case Destination::Trends:
       break;
@@ -246,20 +293,41 @@ void GolfHomeActivity::buildScreen(UiScreen& screen) {
   const auto layout = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding);
   screen.setContentMargin(layout.contentMargins);
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
-  const fui::Rect tiles = screen.takeTop(120, static_cast<int16_t>(metrics.verticalSpacing));
+  // Four tiles across 480 px leave ~118 px each; the row is a little shorter
+  // than the three-tile layout so the 32 px icon and its label stay in
+  // proportion at the narrower width (CONTRACTS-V2 §25.3).
+  const fui::Rect tiles = screen.takeTop(112, static_cast<int16_t>(metrics.verticalSpacing));
+  constexpr int16_t tileIconSize = 32;
   for (uint8_t index = 0; index < destinationCount; ++index) {
     const int left = tiles.x + static_cast<int32_t>(tiles.width) * index / destinationCount;
     const int right = tiles.x + static_cast<int32_t>(tiles.width) * (index + 1) / destinationCount;
+    const fui::Rect tileRect{static_cast<int16_t>(left), tiles.y, static_cast<int16_t>(right - left), tiles.height};
+    const bool tileSelected = !resumeFocused && index == selected;
+
     fui::ButtonProps tile{};
-    tile.label = destinationLabel(destinations[index]);
     tile.action = ACTION_TILE;
     tile.value = index;
     tile.inputMask = fui::InputTouch;
-    tile.state = !resumeFocused && index == selected ? fui::StateSelected : fui::StateNormal;
-    tile.text = screen.theme().bodyText;
-    tile.text.bold = true;
-    screen.button(tile,
-                  fui::Rect{static_cast<int16_t>(left), tiles.y, static_cast<int16_t>(right - left), tiles.height});
+    tile.state = tileSelected ? fui::StateSelected : fui::StateNormal;
+    screen.button(tile, tileRect);  // box, selection fill and hit target only
+
+    const fui::Color ink = tileSelected ? fui::Color::White : fui::Color::Black;
+    const fui::BitmapRef icon = destinationIcon(destinations[index]);
+    const int16_t iconTop = static_cast<int16_t>(tileRect.y + 16);
+    if (icon) {
+      screen.target().bitmap(fui::Rect{static_cast<int16_t>(tileRect.x + (tileRect.width - tileIconSize) / 2), iconTop,
+                                       tileIconSize, tileIconSize},
+                             icon, fui::BitmapMode::Center, fui::Paint::solid(ink));
+    }
+    fui::TextStyle tileLabel = screen.theme().bodyText;
+    tileLabel.bold = true;
+    tileLabel.align = fui::TextAlign::Center;
+    tileLabel.color = ink;
+    tileLabel.maxLines = 2;
+    const int16_t labelTop = static_cast<int16_t>(iconTop + tileIconSize + 6);
+    screen.target().text(
+        fui::Rect{tileRect.x, labelTop, tileRect.width, static_cast<int16_t>(tileRect.bottom() - labelTop - 4)},
+        destinationLabel(destinations[index]), tileLabel);
   }
 
   if (hasOpenRound) {

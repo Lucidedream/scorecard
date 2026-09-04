@@ -1,0 +1,16 @@
+# Manifest for src/components/icons/golfTileIcons.h — regenerate with:
+#   python3 <freeink-sdk>/libs/assets/Icons/tools/gen_icons.py \
+#     --manifest src/components/icons/golfTileIcons.manifest \
+#     --svgdir <lucide checkout>/icons \
+#     --sizes 24,32 --out src/components/icons/golfTileIcons.h
+#   then PATH=/opt/homebrew/opt/llvm/bin:$PATH ./bin/clang-format-fix -g
+#
+# Golf (fork) main-menu / round-menu tile icons. Kept out of the upstream
+# listIcons.manifest so the fork touches no new upstream file (CONTRACTS-V2
+# §25.4, ARCHITECTURE bounded-touchpoint rule). Stock Lucide icons only; the
+# generated header is committed, so Lucide is a generation-time dependency
+# only and nobody building this firmware later needs it.
+land-plot = land-plot
+scroll-text = scroll-text
+trending-up = trending-up
+lightbulb = lightbulb

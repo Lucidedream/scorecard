@@ -1,0 +1,101 @@
+<title>Tile Icon Preview</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700&family=Libre+Franklin:wght@400;500&family=JetBrains+Mono:wght@400&display=swap">
+<style>
+:root{--paper:#F1F4F1;--ink:#13181A;--ink-3:#737E7A;--rule:#D2D9D2;--card:#FBFCFA;
+--accent:#1E5C3E;--panel-bg:#FFF;--panel-ink:#000;--panel-edge:#98A29C}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--paper:#0F1412;--ink:#E6EBE6;
+--ink-3:#7B8681;--rule:#29322D;--card:#161C19;--accent:#6FC08D;--panel-bg:#E9EBE7;--panel-ink:#0B0E0C;--panel-edge:#3A433D}}
+:root[data-theme=dark]{--paper:#0F1412;--ink:#E6EBE6;--ink-3:#7B8681;--rule:#29322D;--card:#161C19;
+--accent:#6FC08D;--panel-bg:#E9EBE7;--panel-ink:#0B0E0C;--panel-edge:#3A433D}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:"Libre Franklin",system-ui,sans-serif;line-height:1.6}
+.wrap{max-width:62rem;margin:0 auto;padding:3rem clamp(1rem,4vw,2.5rem) 5rem}
+h1{font-family:Archivo,sans-serif;font-size:clamp(1.7rem,4vw,2.4rem);margin:0 0 .6rem;letter-spacing:-.02em}
+.sub{color:var(--ink-3);max-width:60ch;margin-bottom:2.5rem}
+h2{font-family:Archivo,sans-serif;font-size:1.2rem;margin:2.8rem 0 1rem}
+.panel{width:480px;max-width:100%;background:var(--panel-bg);color:var(--panel-ink);
+border:1px solid var(--panel-edge);font-family:Archivo,sans-serif}
+.hdr{display:flex;justify-content:space-between;padding:0 16px;height:46px;align-items:center;
+border-bottom:2px solid var(--panel-ink);font-size:15px;font-weight:600}
+.tiles{display:flex;border-bottom:2px solid var(--panel-ink)}
+.tile{flex:1;border-right:2px solid var(--panel-ink);padding:20px 6px 16px;display:flex;
+flex-direction:column;align-items:center;gap:10px;min-height:150px;justify-content:center;text-align:center}
+.tile:last-child{border-right:0}
+.tile.on{background:var(--panel-ink);color:var(--panel-bg)}
+.tile .nm{font-size:14px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;line-height:1.2}
+.detail{padding:18px 20px;font-size:14px}
+.detail b{display:block;font-size:18px;margin-bottom:4px}
+.foot{display:flex;border-top:2px solid var(--panel-ink);font-size:12px;font-weight:600}
+.foot div{flex:1;text-align:center;padding:12px 4px;border-right:1px solid var(--panel-ink)}
+.foot div:last-child{border-right:0}
+table{border-collapse:collapse;width:100%;margin-top:.5rem}
+th,td{border:1px solid var(--rule);padding:.8rem .6rem;text-align:center;vertical-align:middle}
+th{font-family:Archivo,sans-serif;font-size:.8rem;text-align:left;width:8rem;background:var(--card)}
+td.pick{background:var(--card);outline:2px solid var(--accent);outline-offset:-2px}
+td code{font-family:"JetBrains Mono",monospace;font-size:.72rem;color:var(--ink-3);display:block;margin-top:.4rem}
+.ic{display:flex;justify-content:center;color:var(--ink)}
+.note{border-left:3px solid var(--accent);background:var(--card);padding:1rem 1.2rem;margin-top:2rem;font-size:.95rem}
+</style>
+<div class="wrap">
+<h1>Tile icons, rendered</h1>
+<p class="sub">The four chosen Lucide icons in the real tile layout, then every alternative
+I considered. These are the actual SVGs that would be converted to 1-bit headers — not
+stand-ins.</p>
+
+<div class="panel">
+  <div class="hdr"><span>SCORECARD</span><span>62%</span></div>
+  <div class="tiles"><div class="tile"><div class="gl"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 8 6-3-6-3v10" />
+  <path d="m8 11.99-5.5 3.14a1 1 0 0 0 0 1.74l8.5 4.86a2 2 0 0 0 2 0l8.5-4.86a1 1 0 0 0 0-1.74L16 12" />
+  <path d="m6.49 12.85 11.02 6.3" />
+  <path d="M17.51 12.85 6.5 19.15" /></svg></div><div class="nm">New<br>round</div></div><div class="tile"><div class="gl"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 12h-5" />
+  <path d="M15 8h-5" />
+  <path d="M19 17V5a2 2 0 0 0-2-2H4" />
+  <path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3" /></svg></div><div class="nm">History</div></div><div class="tile"><div class="gl"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 7h6v6" />
+  <path d="m22 7-8.5 8.5-5-5L2 17" /></svg></div><div class="nm">Trends</div></div><div class="tile on"><div class="gl"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5" />
+  <path d="M9 18h6" />
+  <path d="M10 22h4" /></svg></div><div class="nm">Tips</div></div></div>
+  <div class="detail"><b>Tips</b>Your own notes, kept on the SD card.<br>1 note · Slope Strategy, 9 sections.</div>
+  <div class="foot"><div>BACK</div><div>OPEN</div><div>◂ PREV</div><div>NEXT ▸</div></div>
+</div>
+
+<h2>Alternatives considered</h2>
+<p class="sub" style="margin-bottom:0">Green outline marks the pick. All render at 32 px,
+1-bit, so stroke count matters more than elegance.</p>
+<table><tr><th>New round</th><td><div class="ic"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22V4a1 1 0 0 1 .4-.8A6 6 0 0 1 8 2c3 0 5 2 7.333 2q2 0 3.067-.8A1 1 0 0 1 20 4v10a1 1 0 0 1-.4.8A6 6 0 0 1 16 16c-3 0-5-2-8-2a6 6 0 0 0-4 1.528" /></svg></div><code>flag</code></td><td class="pick"><div class="ic"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 8 6-3-6-3v10" />
+  <path d="m8 11.99-5.5 3.14a1 1 0 0 0 0 1.74l8.5 4.86a2 2 0 0 0 2 0l8.5-4.86a1 1 0 0 0 0-1.74L16 12" />
+  <path d="m6.49 12.85 11.02 6.3" />
+  <path d="M17.51 12.85 6.5 19.15" /></svg></div><code>land-plot</code></td><td><div class="ic"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" />
+  <circle cx="12" cy="12" r="6" />
+  <circle cx="12" cy="12" r="2" /></svg></div><code>target</code></td></tr><tr><th>History</th><td class="pick"><div class="ic"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 12h-5" />
+  <path d="M15 8h-5" />
+  <path d="M19 17V5a2 2 0 0 0-2-2H4" />
+  <path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3" /></svg></div><code>scroll-text</code></td><td><div class="ic"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" />
+  <path d="M12 6v6l4 2" /></svg></div><code>clock</code></td><td><div class="ic"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h.01" />
+  <path d="M3 12h.01" />
+  <path d="M3 19h.01" />
+  <path d="M8 5h13" />
+  <path d="M8 12h13" />
+  <path d="M8 19h13" /></svg></div><code>list</code></td><td><div class="ic"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1" />
+  <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
+  <path d="M10 12h4" /></svg></div><code>archive</code></td></tr><tr><th>Trends</th><td class="pick"><div class="ic"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 7h6v6" />
+  <path d="m22 7-8.5 8.5-5-5L2 17" /></svg></div><code>trending-up</code></td><td><div class="ic"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16" />
+  <path d="m19 9-5 5-4-4-3 3" /></svg></div><code>chart-line</code></td><td><div class="ic"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2" /></svg></div><code>activity</code></td></tr><tr><th>Tips</th><td class="pick"><div class="ic"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5" />
+  <path d="M9 18h6" />
+  <path d="M10 22h4" /></svg></div><code>lightbulb</code></td><td><div class="ic"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.4 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7.4" />
+  <path d="M2 6h4" />
+  <path d="M2 10h4" />
+  <path d="M2 14h4" />
+  <path d="M2 18h4" />
+  <path d="M21.378 5.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z" /></svg></div><code>notebook-pen</code></td><td><div class="ic"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 9a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 15 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2z" />
+  <path d="M15 3v5a1 1 0 0 0 1 1h5" /></svg></div><code>sticky-note</code></td></tr></table>
+
+<div class="note">
+<strong>Why these four.</strong> <code>land-plot</code> is the owner's pick: it reads as a green
+seen from above, which is more specific to golf than a flag, at the cost of four paths
+instead of one — worth watching at 32 px on the panel. <code>scroll-text</code> reads as “past records” where
+<code>clock</code> risks meaning time-of-day and <code>list</code> could be any list.
+<code>trending-up</code> is the simplest possible trend mark — two paths. <code>lightbulb</code>
+is three paths and unmistakably “an idea”, where <code>notebook-pen</code> has fine detail
+that will mush at 32 px on e-ink.
+</div>
+</div>

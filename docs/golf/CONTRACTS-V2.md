@@ -1401,22 +1401,28 @@ under an old-format header.
 
 Design with 1:1 mocks: `docs/golf/design/navigation-ux.html`. Owner-approved.
 
-### 22.1 The main menu is three horizontal tiles
+### 22.1 The main menu is horizontal tiles
 
-New round / History / Trends is a fixed set of three that never grows. A vertical list
-is built for an unknown number of items; with three it wastes the screen and puts the
-third destination two scrolls away.
+New round / History / Trends is a small, fixed set. A vertical list is built for an
+unknown number of items; with three or four it wastes the screen and puts the last
+destination a scroll away.
 
-Three tiles across the top, moved between with Left/Right, so **every destination is
+Tiles across the top, moved between with Left/Right, so **every destination is
 visible and one Confirm away**.
 
-Beneath the tiles sits a **detail panel describing the focused tile** — the last round's
-course and score under New round, the recorded round count under Trends. Going horizontal
-frees most of the panel; the detail is what that space buys, and without it the change is
-only a rearrangement.
+> **Amended by §25.3 (v6):** the set is now four — Tips joins as a fourth tile. The
+> reasoning was never the count; it was that the set is small, fixed, and fully visible
+> at once. Four tiles at 118 px each still satisfy that. Four is the ceiling: a fifth
+> would force awkward label wrapping, and that is the point at which the shape should
+> change — a 2×2 grid, or scrolling tiles — rather than being squeezed.
 
-The Confirm hint follows the tile: **Start** for New round, **Open** for the two review
-screens, so the button names its own effect.
+Beneath the tiles sits a **detail panel describing the focused tile** — the last round's
+course and score under New round, the recorded round count under Trends, the saved note
+count under Tips. Going horizontal frees most of the panel; the detail is what that space
+buys, and without it the change is only a rearrangement.
+
+The Confirm hint follows the tile: **Start** for New round, **Open** for the review
+screens and Tips, so the button names its own effect.
 
 ### 22.2 Course rows carry par, holes and tees
 
@@ -1577,3 +1583,75 @@ settles on the upstream wording, so the golf copies go.
 
 `STR_GOLF_BUTTON_BACK` ("Back") is **not** a duplicate — upstream's `STR_BACK` is
 "« Back". Whichever spelling §24.3 chooses, retire the other key rather than leaving both.
+
+
+## 25. Tips (v6)
+
+Design with 1:1 mocks: `docs/golf/design/tips.html`. Icon choices rendered:
+`docs/golf/design/tile-icons.html`.
+
+### 25.1 Notes are plain text files the owner writes
+
+Tips live at `/golf/tips/*.txt`, discovered by scanning the directory the way
+`/golf/courses` already is. Plain text because the owner is the author: written in any
+editor, dropped on the card, visible on the device. No schema, no build step, and no
+on-device editor to operate with seven buttons.
+
+Four rules:
+
+1. The **first line is the note's title**, shown in the list.
+2. A **blank line starts a new section**, and each section is one screen.
+3. A section's **first line is its heading**.
+4. Lines beginning `•` or `-` are bullets; anything else is a plain paragraph line.
+
+The owner's first note is committed at `docs/golf/examples/tips/slope-strategy.txt` —
+2,152 bytes, 9 sections, 37 bullets.
+
+### 25.2 A note pages by section, never by scrolled screenful
+
+Slope Strategy is nine named lie conditions, not prose. On the course the owner is not
+reading it, he is looking one condition up. So the page unit is the **section**: one per
+screen, heading at top, bullets beneath, a position counter at the bottom.
+
+No bullet is ever split across a page break, and every screen is a complete thought.
+
+Body text is set larger than anywhere else in the app — this is read outdoors, at arm's
+length, in sun, possibly with gloves.
+
+**A section that overflows its screen is marked, never silently truncated.** A note that
+quietly drops a line is worse than one that admits it.
+
+**Only the current section is held in RAM.** With 380 KB the app cannot assume a tips
+folder is small, and a round in progress must never lose memory to a note being read.
+
+### 25.3 Reached from the main menu and mid-round
+
+Tips is a fourth main-menu tile and a fourth round-menu item, reaching the same two
+screens — one implementation, one thing to learn.
+
+**§22.1's claim that the destination set is fixed at three is superseded.** The reasoning
+was never the number; it was that the set is small, fixed, and fully visible at once. Four
+tiles at 118 px each still satisfy that, and every label clears its width.
+
+Four is the ceiling. A fifth would leave 94 px and force awkward wrapping; that is the
+point at which the shape should change — a 2×2 grid, or scrolling tiles — rather than
+being squeezed.
+
+### 25.4 The tiles get icons
+
+The tiles are text-only today because the v5 brief called the mock glyphs placeholders the
+layout did not depend on. They should carry icons.
+
+Generated through the existing pipeline — `src/components/icons/listIcons.manifest` plus
+`gen_icons.py` — so they match the stroke weight and grid of every other icon in the app:
+
+| Tile | Lucide icon |
+| --- | --- |
+| New round | `land-plot` |
+| History | `scroll-text` |
+| Trends | `trending-up` |
+| Tips | `lightbulb` |
+
+The Lucide SVGs are not vendored in the repo or the SDK; the generator takes a `--svgdir`
+pointing at a Lucide checkout. The generated header is committed, so Lucide is a
+generation-time dependency only — nobody building this firmware later needs it.

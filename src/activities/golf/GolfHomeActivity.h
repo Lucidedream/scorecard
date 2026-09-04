@@ -15,7 +15,7 @@ class GolfHomeActivity final : public Activity, protected UiAppHost {
   void render(RenderLock&&) override;
 
  private:
-  enum class Destination : uint8_t { NewRound, History, Trends };
+  enum class Destination : uint8_t { NewRound, History, Trends, Tips };
   static constexpr freeink::ui::ActionId ACTION_TILE = 1;
   static constexpr freeink::ui::ActionId ACTION_RESUME = 2;
 
@@ -23,7 +23,7 @@ class GolfHomeActivity final : public Activity, protected UiAppHost {
   GolfIndexMigrator recovery{};
   char chunk[128]{};
   char detailLine[96]{};
-  Destination destinations[3]{};
+  Destination destinations[4]{};
   uint8_t destinationCount = 0;
   uint8_t selected = 0;
   bool resumeFocused = false;
@@ -32,6 +32,8 @@ class GolfHomeActivity final : public Activity, protected UiAppHost {
   bool stateError = false;
   bool cleanupError = false;
   bool indexLoadError = false;
+  uint8_t tipsNoteCount = 0;
+  bool tipsError = false;
 
   static void screenTrampoline(UiScreen& screen, void* user);
   static void actionTrampoline(const freeink::ui::ActionEvent& event, void* user);
@@ -42,6 +44,7 @@ class GolfHomeActivity final : public Activity, protected UiAppHost {
   void activateSelected();
   void activateDestination(Destination destination);
   const char* destinationLabel(Destination destination) const;
+  freeink::ui::BitmapRef destinationIcon(Destination destination) const;
   const char* headerTitle() const;
   void drawFooter() const;
 };

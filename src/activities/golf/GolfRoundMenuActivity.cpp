@@ -10,6 +10,7 @@
 #include "GolfCardActivity.h"
 #include "GolfNavigation.h"
 #include "GolfRoundSummaryActivity.h"
+#include "GolfTipListActivity.h"
 #include "GolfUiLayout.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
@@ -50,9 +51,10 @@ bool makeSummaryEntry(const GolfRound& round, GolfHistoryEntry& entry) {
 
 void GolfRoundMenuActivity::onEnter() {
   rows[0].label = tr(STR_GOLF_VIEW_CARD);
-  rows[1].label = tr(STR_GOLF_FINISH_ROUND);
-  rows[2].label = tr(STR_GOLF_ABANDON_ROUND);
-  for (uint8_t i = 0; i < 3; ++i) rows[i].actionValue = i;
+  rows[1].label = tr(STR_GOLF_ABANDON_ROUND);
+  rows[2].label = tr(STR_GOLF_FINISH_ROUND);
+  rows[3].label = tr(STR_GOLF_TIPS);
+  for (uint8_t i = 0; i < ROW_COUNT; ++i) rows[i].actionValue = i;
   UiListActivity::onEnter();
 }
 
@@ -71,7 +73,16 @@ void GolfRoundMenuActivity::activateIndex(const int index) {
     startActivityForResult(std::move(card), nullptr);
     return;
   }
-  confirmAction(index == 1 ? PendingAction::Finish : PendingAction::Abandon);
+  if (index == 3) {
+    auto tips = makeUniqueNoThrow<GolfTipListActivity>(renderer, mappedInput);
+    if (!tips) {
+      LOG_ERR("GOLF", "OOM: tip list activity");
+      return;
+    }
+    startActivityForResult(std::move(tips), nullptr);
+    return;
+  }
+  confirmAction(index == 2 ? PendingAction::Finish : PendingAction::Abandon);
 }
 
 void GolfRoundMenuActivity::confirmAction(const PendingAction action) {
@@ -143,7 +154,7 @@ void GolfRoundMenuActivity::buildScreen(UiScreen& screen) {
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
   listProps = {};
   listProps.items = rows;
-  listProps.count = 3;
+  listProps.count = ROW_COUNT;
   listProps.action = ACTION_ROW;
   listProps.inputMask = fui::InputTouch;
   syncListViewport(screen, listProps);
