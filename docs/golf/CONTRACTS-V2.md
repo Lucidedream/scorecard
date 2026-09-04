@@ -1655,3 +1655,22 @@ Generated through the existing pipeline — `src/components/icons/listIcons.mani
 The Lucide SVGs are not vendored in the repo or the SDK; the generator takes a `--svgdir`
 pointing at a Lucide checkout. The generated header is committed, so Lucide is a
 generation-time dependency only — nobody building this firmware later needs it.
+
+## 26. Course map on a MENU long-press (v6.1)
+
+The scoring footer's four-button budget is already full, and §24.2 forbids a duplicate
+label for a second action. Holding **MENU for 500 ms** therefore opens the current hole's
+course map without adding another footer cell. A short MENU press keeps opening the round
+menu, and the suppressed release after a long-press cannot open both screens.
+
+Maps are owner-supplied SD files at `/golf/maps/<slug>/hole-<N>.bmp`. `<slug>` is
+`golfSlug(courseName)` and `<N>` is the one-based hole number. The slugger intentionally
+strips non-ASCII text, so an entirely non-ASCII course name uses the shared `course`
+fallback and can collide with another such course in v1.
+
+A missing map is normal and renders a plain message with Back. A present image that cannot
+be read renders a distinct failure message. V1 accepts 8-bit grayscale BMP maps, which
+scale down to fit the map body and remain centered when smaller than it.
+
+The map activity is read-only: it receives copied course and hole identity, never mutates
+the round, and Back returns to scoring on the same hole and player.

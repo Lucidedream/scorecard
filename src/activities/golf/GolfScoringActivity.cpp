@@ -13,6 +13,7 @@
 #include <cstring>
 
 #include "CrossPointSettings.h"
+#include "GolfCourseMapActivity.h"
 #include "GolfLargeNumber.h"
 #include "GolfNavigation.h"
 #include "GolfReviewFormat.h"
@@ -48,6 +49,7 @@ constexpr int SHEET_TEXT_X = 92;     // title / subtitle left edge
 // A Confirm hold this long opens the picker when Confirm is the field-cycle
 // button (i.e. Power cannot cycle, §12.6).
 constexpr unsigned long PICKER_LONGPRESS_MS = 500;
+constexpr unsigned long MAP_LONGPRESS_MS = 500;
 
 void formatToPar(const int16_t value, char* output, const size_t size) {
   golfFormatReviewToPar(value, tr(STR_GOLF_EVEN), tr(STR_GOLF_TO_PAR_POSITIVE_FORMAT),
@@ -409,6 +411,18 @@ void GolfScoringActivity::openRoundMenu() {
   startActivityForResult(std::move(menu), nullptr);
 }
 
+void GolfScoringActivity::openCourseMap() {
+  if (!flushDirty()) return;
+  const GolfRound& round = GOLF_ROUND_STORE.getRound();
+  auto map = makeUniqueNoThrow<GolfCourseMapActivity>(renderer, mappedInput, round.currentHole, round.holeCount,
+                                                       round.courseName);
+  if (!map) {
+    LOG_ERR("GOLF", "OOM: course map");
+    return;
+  }
+  startActivityForResult(std::move(map), nullptr);
+}
+
 bool GolfScoringActivity::handleHomeGesture() { return !flushDirty(); }
 
 void GolfScoringActivity::loop() {
@@ -422,6 +436,10 @@ void GolfScoringActivity::loop() {
     return;
   }
 
+  if (mappedInput.wasLongPressed(MappedInputManager::Button::Back, MAP_LONGPRESS_MS)) {
+    openCourseMap();
+    return;
+  }
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     openRoundMenu();
     return;

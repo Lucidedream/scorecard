@@ -50,6 +50,7 @@ class GolfScoringActivity final : public Activity, protected UiAppHost {
   void changeTurn(bool forward);
   void resetTurnState();
   void markDirtyForIdle();
+  void openCourseMap();
   void openRoundMenu();
   bool flushDirty();
   bool rejectArchivedMutation();
