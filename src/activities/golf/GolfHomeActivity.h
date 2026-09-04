@@ -4,6 +4,7 @@
 #include "components/UiAppHost.h"
 #include "golf/GolfHistory.h"
 #include "golf/GolfIndexMigrate.h"
+#include "golf/GolfQuotes.h"
 
 class GolfHomeActivity final : public Activity, protected UiAppHost {
  public:
@@ -23,6 +24,8 @@ class GolfHomeActivity final : public Activity, protected UiAppHost {
   GolfIndexMigrator recovery{};
   char chunk[128]{};
   char detailLine[96]{};
+  char quoteText[GOLF_QUOTE_TEXT_CAPACITY]{};
+  char quoteAuthor[GOLF_QUOTE_AUTHOR_CAPACITY]{};
   Destination destinations[4]{};
   uint8_t destinationCount = 0;
   uint8_t selected = 0;
@@ -34,6 +37,8 @@ class GolfHomeActivity final : public Activity, protected UiAppHost {
   bool indexLoadError = false;
   uint8_t tipsNoteCount = 0;
   bool tipsError = false;
+  bool quotePresent = false;
+  bool quoteHasAuthor = false;
 
   static void screenTrampoline(UiScreen& screen, void* user);
   static void actionTrampoline(const freeink::ui::ActionEvent& event, void* user);

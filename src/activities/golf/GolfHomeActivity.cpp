@@ -16,6 +16,7 @@
 #include "GolfUiLayout.h"
 #include "components/UITheme.h"
 #include "components/icons/golfTileIcons.h"
+#include "golf/GolfQuotesStore.h"
 #include "golf/GolfRoundStore.h"
 #include "golf/GolfTips.h"
 #include "golf/RoundArchive.h"
@@ -60,6 +61,7 @@ void GolfHomeActivity::onEnter() {
   selected = 0;
   resumeFocused = hasOpenRound;
   scanIndexSummary();
+  quotePresent = golfPickRandomQuote(quoteText, sizeof(quoteText), quoteAuthor, sizeof(quoteAuthor), quoteHasAuthor);
   {
     const GolfTipsListResult tips = GolfTipsStore::enumerate(nullptr, GOLF_MAX_TIPS);
     tipsError = tips.directoryError;
@@ -360,6 +362,37 @@ void GolfHomeActivity::buildScreen(UiScreen& screen) {
   screen.target().text(fui::Rect{inset.x, static_cast<int16_t>(inset.y + titleHeight + metrics.verticalSpacing),
                                  inset.width, bodyHeight},
                        detailLine, body);
+
+  if (!quotePresent) return;
+  const fui::Rect band = screen.body();
+  fui::TextStyle quoteStyle = screen.theme().bodyText;
+  quoteStyle.align = fui::TextAlign::Center;
+  quoteStyle.maxLines = 4;
+  fui::TextStyle authorStyle = screen.theme().smallText;
+  authorStyle.align = fui::TextAlign::Center;
+  authorStyle.maxLines = 2;
+  const int16_t smallLineHeight = screen.target().lineHeight(authorStyle.font);
+  if (band.height < smallLineHeight * 2 + metrics.verticalSpacing) return;
+
+  char displayQuote[GOLF_QUOTE_TEXT_CAPACITY + 7];
+  snprintf(displayQuote, sizeof(displayQuote), "\xE2\x80\x9C%s\xE2\x80\x9D", quoteText);
+  char displayAuthor[GOLF_QUOTE_AUTHOR_CAPACITY + 5];
+  displayAuthor[0] = '\0';
+  if (quoteHasAuthor) snprintf(displayAuthor, sizeof(displayAuthor), "\xE2\x80\x94 %s", quoteAuthor);
+
+  const int16_t quoteHeight = fui::measureWrappedText(screen.target(), displayQuote, quoteStyle, band.width).height;
+  const int16_t authorHeight =
+      quoteHasAuthor ? fui::measureWrappedText(screen.target(), displayAuthor, authorStyle, band.width).height : 0;
+  const int16_t interline = quoteHasAuthor ? static_cast<int16_t>(metrics.verticalSpacing) : 0;
+  const int16_t contentHeight = static_cast<int16_t>(quoteHeight + interline + authorHeight);
+  if (contentHeight > band.height) return;
+  const int16_t top = static_cast<int16_t>(band.y + (band.height - contentHeight) / 2);
+  screen.target().text(fui::Rect{band.x, top, band.width, quoteHeight}, displayQuote, quoteStyle);
+  if (quoteHasAuthor) {
+    screen.target().text(
+        fui::Rect{band.x, static_cast<int16_t>(top + quoteHeight + interline), band.width, authorHeight}, displayAuthor,
+        authorStyle);
+  }
 }
 
 void GolfHomeActivity::drawFooter() const {

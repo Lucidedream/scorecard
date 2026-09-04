@@ -1715,3 +1715,25 @@ be permanent) before step 3.
 
 To reclaim space, `/golf-backup` can be deleted wholesale at any time; the next completed
 round recreates it.
+
+## 28. An ambient quote occupies the main menu's empty band (v6.3)
+
+The open band below the selected tile's detail box is reserved for a golf quote. It has no
+border or fill because it is ambient text, not another card or control. If the remaining
+band cannot hold the quote block without crowding the footer, it stays empty.
+
+Quotes live at `/golf/quotes.txt` as plain UTF-8 records separated by blank lines. A
+record's last line is the author and every preceding line is quote text joined with single
+spaces; a one-line record is an unattributed quote. Leading and trailing line whitespace
+is ignored, and both LF and CRLF are accepted. This blank-separated, owner-editable format
+is deliberately kin to the Tips format in §25.1.
+
+`GolfHomeActivity::onEnter()` streams the file once and chooses one record with a one-item
+reservoir sample, so every menu entry makes a fresh pick without loading the file or an
+index into RAM. A missing, unreadable, or empty file is a normal state: it leaves the band
+empty and never presents an error to the owner.
+
+The parser uses fixed buffers only. Quote text is capped at 239 bytes plus its NUL and the
+author at 63 bytes plus its NUL; longer input is truncated safely. The quote is decorative,
+does not change while the menu remains open, and is never shown anywhere except the main
+menu.
