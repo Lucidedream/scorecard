@@ -1455,3 +1455,61 @@ the owner would want to know before opening it.
 to show, and a blank screen is not an answer. It must also stay distinguishable from the
 existing load-failure message: *"no rounds yet"* and *"couldn't read your rounds"* call
 for different reactions.
+
+
+## 23. Header overlap, Power as Confirm, and a smaller detail box (v5.1)
+
+### 23.1 Bug: the right-hand header label overlaps the battery
+
+`golfui::drawHeader` draws the battery at `rect.y` — the top of the band — while the
+manual right-label path draws at `rect.bottom() - borderWidth - spaceSm - labelHeight`,
+the bottom. The two are **stacked vertically**, which the upstream book header had room
+for. §16.1 fixed the golf header at 46 px, and the stack no longer fits.
+
+Every screen passing a right label is affected, not only the two the owner noticed:
+
+| Screen | Right label |
+| --- | --- |
+| Scorecard | course name |
+| History | player label |
+| History round menu | round status |
+| Hole review | round status |
+| Trends | player label |
+| Scoring | clock, once the clock is set |
+
+Home and Message pass `nullptr` and are unaffected.
+
+**The label sits beside the battery, not below it.** Reserve width for both in a single
+row, and shorten the label rather than let it collide. The 46 px header is correct and
+does not change; the two-row assumption inside `drawHeader` is what was wrong.
+
+### 23.2 Short-press Power confirms — except while scoring
+
+`PWR_CONFIRM` already exists as a `SHORT_PWRBTN` setting, and `wasPressed`/`wasReleased`
+already fold `wasPowerConfirmClick()` into `Button::Confirm`. It is unreachable on the X4
+only because `wasPowerConfirmClick()` sits behind `#if FREEINK_CAP_TOUCH` and additionally
+tests `gpio.hasTouch()`. The X4 has no touch, so the feature compiles out.
+
+Make it available on non-touch boards.
+
+**The scoring screen keeps Power for field cycling.** §12.6 gives Power the field-cycling
+job so scoring is one-handed, and the owner has confirmed he wants that kept. Without care
+a single Power press would both cycle the field and open the penalty picker, because
+`powerCyclesField()` returns true on X4 while `Button::Confirm` would also fire.
+
+Scoring must therefore be able to tell a Confirm that came from Power from one that came
+from the front button, and act only on the front button. Every other screen treats them
+identically. Solve it once, in the input layer, rather than by having each activity guess.
+
+### 23.3 The side rocker also moves the main menu
+
+The main menu tiles move with Left/Right. Up/Down on the side rocker moves them too — on
+this hardware people reach for whichever is under the thumb, the same reasoning §16.3
+applied to the player count. Left/Right keeps working.
+
+### 23.4 The detail box shrinks to its content
+
+The panel under the tiles was sized to fill the space going horizontal freed, before it
+was known how little text lands in it. It should be as tall as its content needs and no
+taller. The tiles keep their size; the space returns to the panel background rather than
+to an empty box.

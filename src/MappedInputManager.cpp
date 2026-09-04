@@ -111,13 +111,11 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
     case Button::NavNext:
       // Row semantics on the fixed side buttons never rotate: Down is next.
       // Only the front previous/next roles flip with the rendered orientation.
-      return mapButton(Button::Down, fn) ||
-             mapButton(isNavDirectionSwapped() ? Button::Left : Button::Right, fn);
+      return mapButton(Button::Down, fn) || mapButton(isNavDirectionSwapped() ? Button::Left : Button::Right, fn);
     case Button::NavPrevious:
       // Up remains previous while the corresponding front role follows the
       // same axis swap used by mapLabels().
-      return mapButton(Button::Up, fn) ||
-             mapButton(isNavDirectionSwapped() ? Button::Right : Button::Left, fn);
+      return mapButton(Button::Up, fn) || mapButton(isNavDirectionSwapped() ? Button::Right : Button::Left, fn);
     case Button::ScreenLeft:
     case Button::ScreenRight:
     case Button::ScreenUp:
@@ -131,6 +129,18 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
 namespace {
 constexpr unsigned long TOUCH_DOWN_SELECT_DELAY_MS = 90;
 constexpr unsigned long TOUCH_HELD_OVERRIDE_WINDOW_MS = 250;
+
+bool powerConfirmClick(const HalGPIO& gpio, const bool delayedClick) {
+  if (SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::PWR_CONFIRM) return false;
+#if FREEINK_CAP_TOUCH
+  // X4 Pro delays the single-click event until its frontlight double-click
+  // window expires. Boards without that classifier use the raw release.
+  if (gpio.hasTouch() && BoardConfig::isX4Pro()) return delayedClick;
+#else
+  (void)delayedClick;
+#endif
+  return gpio.wasReleased(HalGPIO::BTN_POWER) && gpio.getPowerButtonHeldTime() <= SETTINGS.getPowerButtonDuration();
+}
 }  // namespace
 
 bool MappedInputManager::hasTouch() const { return gpio.hasTouch(); }
@@ -298,19 +308,15 @@ bool MappedInputManager::wasLightPanelGesture() const {
 }
 
 #if FREEINK_CAP_TOUCH
-bool MappedInputManager::wasPowerConfirmClick() const {
-  if (!gpio.hasTouch() || SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::PWR_CONFIRM) return false;
-  // Wait out the X4 Pro's frontlight double-click window before treating its
-  // first release as Confirm. Other touch boards can use the release directly.
-  if (BoardConfig::isX4Pro()) return powerConfirmClickFrame;
-  return gpio.wasReleased(HalGPIO::BTN_POWER) && gpio.getPowerButtonHeldTime() <= SETTINGS.getPowerButtonDuration();
-}
+bool MappedInputManager::wasPowerConfirmClick() const { return powerConfirmClick(gpio, powerConfirmClickFrame); }
 #endif
 
 bool MappedInputManager::wasPressed(const Button button) const {
   if (button == Button::Back && wasBackGesture()) return true;
 #if FREEINK_CAP_TOUCH
   if (button == Button::Confirm && wasPowerConfirmClick()) return true;
+#else
+  if (button == Button::Confirm && powerConfirmClick(gpio, false)) return true;
 #endif
   return mapButton(button, &HalGPIO::wasPressed);
 }
@@ -319,6 +325,8 @@ bool MappedInputManager::wasReleased(const Button button) const {
   if (button == Button::Back && wasBackGesture()) return true;
 #if FREEINK_CAP_TOUCH
   if (button == Button::Confirm && wasPowerConfirmClick()) return true;
+#else
+  if (button == Button::Confirm && powerConfirmClick(gpio, false)) return true;
 #endif
   return mapButton(button, &HalGPIO::wasReleased);
 }

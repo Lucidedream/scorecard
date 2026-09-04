@@ -245,6 +245,14 @@ bool GolfScoringActivity::powerCyclesField() const {
   return cycles;
 }
 
+bool GolfScoringActivity::confirmFromFrontButton() const {
+  // Power is deliberately overloaded as the field-cycle button on this
+  // screen (§12.6); exclude its combined Confirm event so one click cannot
+  // also activate the penalty picker.
+  return golfConfirmFromFrontButton(mappedInput.wasReleased(MappedInputManager::Button::Confirm),
+                                    mappedInput.wasReleased(MappedInputManager::Button::Power));
+}
+
 void GolfScoringActivity::openPenaltyPicker() {
   {
     RenderLock lock(*this);
@@ -290,7 +298,7 @@ void GolfScoringActivity::handlePickerInput() {
     requestUpdate();
     return;
   }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (confirmFromFrontButton()) {
     applyPenaltyPick();
     return;
   }
@@ -440,7 +448,7 @@ void GolfScoringActivity::loop() {
       handleConfirm();
       return;
     }
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (confirmFromFrontButton()) {
       openPenaltyPicker();
       return;
     }
@@ -449,7 +457,7 @@ void GolfScoringActivity::loop() {
       openPenaltyPicker();
       return;
     }
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (confirmFromFrontButton()) {
       handleConfirm();
       return;
     }

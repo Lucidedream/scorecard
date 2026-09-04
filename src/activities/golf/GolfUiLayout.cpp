@@ -49,6 +49,8 @@ ChromeLayout chromeLayout(const GfxRenderer& renderer, const int topPadding, con
 void drawHeader(const GfxRenderer& renderer, const fui::Rect rect, const char* title, const char* rightLabel) {
   constexpr int16_t batteryNubWidth = 2;
   constexpr int16_t batteryPercentSpacing = 4;
+  constexpr char ellipsis[] = "...";
+  constexpr size_t rightLabelCapacity = 40;
 
   const auto spec = uiScaleSpec();
   fui::GfxRendererFrame<1> ui(renderer, spec.smallFontId, spec.bodyFontId, spec.titleFontId);
@@ -70,15 +72,42 @@ void drawHeader(const GfxRenderer& renderer, const fui::Rect rect, const char* t
 
   const bool batteryLeft = metrics.headerBatterySide == 1;
   const bool batteryDetached = metrics.headerBatteryDetached;
-  const bool manualRightLabel = rightLabel != nullptr && !batteryDetached && !batteryLeft;
+  const bool manualRightLabel = rightLabel != nullptr && !batteryLeft;
   fui::Rect content = rect.inset(fui::Insets{0, tokens.headerSidePadding, 0, tokens.headerSidePadding});
+  char visibleRightLabel[rightLabelCapacity]{};
+  int16_t manualLabelWidth = 0;
+  if (manualRightLabel) {
+    snprintf(visibleRightLabel, sizeof(visibleRightLabel), "%s", rightLabel);
+    const int16_t rowWidth = static_cast<int16_t>(content.width - batteryReserve - tokens.spaceMd);
+    const int16_t maxLabelWidth = rowWidth > 0 ? static_cast<int16_t>(rowWidth / 2) : 0;
+    auto measured = ui.target.measureText(fui::GfxRendererTarget::FONT_SMALL, visibleRightLabel, tokens.smallText);
+    if (measured.width > maxLabelWidth) {
+      size_t length = strlen(visibleRightLabel);
+      while (length > 0) {
+        do {
+          --length;
+        } while (length > 0 && (static_cast<uint8_t>(visibleRightLabel[length]) & 0xc0) == 0x80);
+        visibleRightLabel[length] = '\0';
+        if (length + sizeof(ellipsis) <= sizeof(visibleRightLabel)) {
+          memcpy(visibleRightLabel + length, ellipsis, sizeof(ellipsis));
+          measured = ui.target.measureText(fui::GfxRendererTarget::FONT_SMALL, visibleRightLabel, tokens.smallText);
+          if (measured.width <= maxLabelWidth) break;
+          visibleRightLabel[length] = '\0';
+        }
+      }
+    }
+    manualLabelWidth =
+        ui.target.measureText(fui::GfxRendererTarget::FONT_SMALL, visibleRightLabel, tokens.smallText).width;
+  }
   int16_t titleOffsetY = 0;
   if (batteryDetached) {
     const int titleLineHeight = ui.target.lineHeight(fui::GfxRendererTarget::FONT_TITLE);
     const int titleTop = static_cast<int>(rect.height) - tokens.headerUnderline - tokens.spaceMd - titleLineHeight;
     titleOffsetY = static_cast<int16_t>(titleTop - (static_cast<int>(rect.height) - titleLineHeight) / 2);
-  } else {
-    const int16_t reserve = static_cast<int16_t>(batteryReserve + tokens.spaceMd);
+  }
+  if (!batteryDetached || manualRightLabel) {
+    const int16_t labelReserve = manualRightLabel ? static_cast<int16_t>(manualLabelWidth + tokens.spaceMd) : 0;
+    const int16_t reserve = static_cast<int16_t>(batteryReserve + tokens.spaceMd + labelReserve);
     if (batteryLeft) {
       content.x = static_cast<int16_t>(content.x + reserve);
       content.width = static_cast<int16_t>(content.width - reserve);
@@ -120,16 +149,16 @@ void drawHeader(const GfxRenderer& renderer, const fui::Rect rect, const char* t
   const int16_t batteryEdgeInset = batteryDetached ? 12 : tokens.headerSidePadding;
   const int16_t batteryX = batteryLeft ? static_cast<int16_t>(rect.x + batteryEdgeInset)
                                        : static_cast<int16_t>(rect.right() - batteryEdgeInset - batteryReserve);
+  const int16_t batteryY = static_cast<int16_t>(rect.y + (rect.height - metrics.batteryBarHeight) / 2);
   fui::batteryIndicator(
-      ui.frame, fui::Rect{batteryX, rect.y, batteryReserve, static_cast<int16_t>(metrics.batteryBarHeight)}, battery);
+      ui.frame, fui::Rect{batteryX, batteryY, batteryReserve, static_cast<int16_t>(metrics.batteryBarHeight)}, battery);
 
   if (manualRightLabel) {
-    const fui::Size labelSize = ui.target.measureText(fui::GfxRendererTarget::FONT_SMALL, rightLabel, tokens.smallText);
     const int16_t labelHeight = ui.target.lineHeight(fui::GfxRendererTarget::FONT_SMALL);
-    const fui::Rect labelRect{static_cast<int16_t>(rect.right() - tokens.headerSidePadding - labelSize.width),
-                              static_cast<int16_t>(rect.bottom() - borderWidth - tokens.spaceSm - labelHeight),
-                              labelSize.width, labelHeight};
-    ui.target.text(labelRect, rightLabel, tokens.smallText);
+    const fui::Rect labelRect{static_cast<int16_t>(batteryX - tokens.spaceMd - manualLabelWidth),
+                              static_cast<int16_t>(rect.y + (rect.height - labelHeight) / 2), manualLabelWidth,
+                              labelHeight};
+    ui.target.text(labelRect, visibleRightLabel, tokens.smallText);
   }
 }
 

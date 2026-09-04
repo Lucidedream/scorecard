@@ -27,13 +27,16 @@ class GolfConfirmTest : public ::testing::Test {
   }
 };
 
-TEST_F(GolfConfirmTest, PuttsCyclesFocus) {
-  EXPECT_EQ(press(GolfField::Putts), GolfConfirmAction::CycleFocus);
+TEST_F(GolfConfirmTest, PuttsCyclesFocus) { EXPECT_EQ(press(GolfField::Putts), GolfConfirmAction::CycleFocus); }
+
+TEST(GolfConfirmSourceTest, FrontConfirmExcludesPowerRelease) {
+  EXPECT_TRUE(golfConfirmFromFrontButton(true, false));
+  EXPECT_FALSE(golfConfirmFromFrontButton(true, true));
+  EXPECT_FALSE(golfConfirmFromFrontButton(false, true));
+  EXPECT_FALSE(golfConfirmFromFrontButton(false, false));
 }
 
-TEST_F(GolfConfirmTest, In100CyclesFocus) {
-  EXPECT_EQ(press(GolfField::In100), GolfConfirmAction::CycleFocus);
-}
+TEST_F(GolfConfirmTest, In100CyclesFocus) { EXPECT_EQ(press(GolfField::In100), GolfConfirmAction::CycleFocus); }
 
 TEST_F(GolfConfirmTest, Out100UnloggedWithValuesCommitsAndAdvances) {
   EXPECT_EQ(press(GolfField::Out100), GolfConfirmAction::CommitAndAdvance);

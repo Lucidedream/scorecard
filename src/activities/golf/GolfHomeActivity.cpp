@@ -208,6 +208,14 @@ void GolfHomeActivity::loop() {
     moveSelection(golfFrontNavDelta(swapped, false));
     return;
   }
+  if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {
+    moveSelection(-1);
+    return;
+  }
+  if (mappedInput.wasReleased(MappedInputManager::Button::Down)) {
+    moveSelection(1);
+    return;
+  }
   const auto route = routeTouch(mappedInput);
   if (route.routed && app.invalidated()) requestUpdate();
 }
@@ -265,20 +273,25 @@ void GolfHomeActivity::buildScreen(UiScreen& screen) {
     screen.button(resume, screen.takeBottom(64, static_cast<int16_t>(metrics.verticalSpacing)));
   }
 
-  const fui::Rect detail = screen.body();
-  screen.target().stroke(detail, fui::Paint::solid(fui::Color::Black), 2, screen.theme().controlRadius);
-  const fui::Rect inset = detail.inset(fui::Insets{18, 20, 18, 20});
   fui::TextStyle title = screen.theme().titleText;
   title.bold = true;
-  const int titleHeight = screen.target().lineHeight(title.font);
-  screen.target().text(fui::Rect{inset.x, inset.y, inset.width, static_cast<int16_t>(titleHeight)},
-                       destinationLabel(destinations[selected]), title);
   fui::TextStyle body = screen.theme().bodyText;
   body.maxLines = 3;
-  screen.target().text(
-      fui::Rect{inset.x, static_cast<int16_t>(inset.y + titleHeight + metrics.verticalSpacing), inset.width,
-                static_cast<int16_t>(inset.height - titleHeight - metrics.verticalSpacing)},
-      detailLine, body);
+  constexpr int16_t detailPaddingY = 18;
+  constexpr int16_t detailPaddingX = 20;
+  const int16_t titleHeight = screen.target().lineHeight(title.font);
+  const int16_t bodyWidth = static_cast<int16_t>(screen.body().width - detailPaddingX * 2);
+  const int16_t bodyHeight = fui::measureWrappedText(screen.target(), detailLine, body, bodyWidth).height;
+  const int16_t detailHeight =
+      static_cast<int16_t>(detailPaddingY * 2 + titleHeight + metrics.verticalSpacing + bodyHeight);
+  const fui::Rect detail = screen.takeTop(detailHeight);
+  screen.target().stroke(detail, fui::Paint::solid(fui::Color::Black), 2, screen.theme().controlRadius);
+  const fui::Rect inset = detail.inset(fui::Insets{detailPaddingY, detailPaddingX, detailPaddingY, detailPaddingX});
+  screen.target().text(fui::Rect{inset.x, inset.y, inset.width, static_cast<int16_t>(titleHeight)},
+                       destinationLabel(destinations[selected]), title);
+  screen.target().text(fui::Rect{inset.x, static_cast<int16_t>(inset.y + titleHeight + metrics.verticalSpacing),
+                                 inset.width, bodyHeight},
+                       detailLine, body);
 }
 
 void GolfHomeActivity::drawFooter() const {

@@ -57,6 +57,7 @@ class GolfScoringActivity final : public Activity, protected UiAppHost {
   // True while Power is the field-cycle button; false leaves that role on
   // Confirm and moves the picker to a Confirm long-press (§12.6).
   bool powerCyclesField() const;
+  bool confirmFromFrontButton() const;
 
   void openPenaltyPicker();
   void closePenaltyPicker();

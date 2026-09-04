@@ -1,0 +1,366 @@
+<title>Scorecard UX Review</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Libre+Franklin:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+:root {
+  --paper:#F1F4F1; --card:#FBFCFA; --ink:#13181A; --ink-2:#4C5654; --ink-3:#737E7A;
+  --rule:#D2D9D2; --rule-soft:#E3E8E2;
+  --accent:#1E5C3E; --accent-wash:#E2ECE4;
+  --flag:#A93826; --flag-wash:#F4E4E0;
+  --warn:#8A6A18; --warn-wash:#F3EDDC;
+  --panel-bg:#FFFFFF; --panel-ink:#000000; --panel-edge:#98A29C;
+  --measure:68ch; --gutter:13rem;
+  --step--1:clamp(0.78rem,0.76rem + 0.10vw,0.84rem);
+  --step-0:clamp(1.00rem,0.97rem + 0.14vw,1.08rem);
+  --step-1:clamp(1.22rem,1.15rem + 0.32vw,1.42rem);
+  --step-2:clamp(1.55rem,1.40rem + 0.68vw,2.05rem);
+  --step-3:clamp(2.05rem,1.72rem + 1.55vw,3.30rem);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:#0F1412; --card:#161C19; --ink:#E6EBE6; --ink-2:#A3AEA8; --ink-3:#7B8681;
+    --rule:#29322D; --rule-soft:#1E2622;
+    --accent:#6FC08D; --accent-wash:#17251D;
+    --flag:#E1745F; --flag-wash:#2A1A16;
+    --warn:#D8B75A; --warn-wash:#251F10;
+    --panel-bg:#E9EBE7; --panel-ink:#0B0E0C; --panel-edge:#3A433D;
+  }
+}
+:root[data-theme="dark"] {
+  --paper:#0F1412; --card:#161C19; --ink:#E6EBE6; --ink-2:#A3AEA8; --ink-3:#7B8681;
+  --rule:#29322D; --rule-soft:#1E2622;
+  --accent:#6FC08D; --accent-wash:#17251D;
+  --flag:#E1745F; --flag-wash:#2A1A16;
+  --warn:#D8B75A; --warn-wash:#251F10;
+  --panel-bg:#E9EBE7; --panel-ink:#0B0E0C; --panel-edge:#3A433D;
+}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:"Libre Franklin",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:var(--step-0);line-height:1.62;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{font-family:Archivo,"Libre Franklin",system-ui,sans-serif;text-wrap:balance;margin:0;line-height:1.14;letter-spacing:-.014em}
+p{margin:0}
+code{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;font-size:.88em}
+:not(pre)>code{background:var(--rule-soft);padding:.1em .36em;border-radius:2px}
+.wrap{max-width:78rem;margin:0 auto;padding:0 clamp(1.15rem,4vw,3rem)}
+
+.masthead{padding:clamp(3rem,8vw,5.5rem) 0 clamp(2rem,4vw,3rem);border-bottom:2px solid var(--ink)}
+.eyebrow{font-family:Archivo,system-ui,sans-serif;font-size:var(--step--1);font-weight:600;
+  letter-spacing:.15em;text-transform:uppercase;color:var(--accent);margin-bottom:1.15rem}
+.masthead h1{font-size:var(--step-3);font-weight:700;letter-spacing:-.03em;max-width:18ch}
+.standfirst{margin-top:1.4rem;max-width:62ch;font-size:var(--step-1);line-height:1.5;color:var(--ink-2)}
+
+.summary{margin-top:2.6rem;display:grid;gap:.75rem;max-width:var(--measure)}
+.frow{display:grid;grid-template-columns:auto 1fr auto;gap:1rem;align-items:baseline;
+  padding:.75rem 1rem;background:var(--card);border:1px solid var(--rule);border-left-width:3px}
+.frow.high{border-left-color:var(--accent)}
+.frow.med{border-left-color:var(--warn)}
+.frow.low{border-left-color:var(--rule)}
+.frow .n{font-family:Archivo,system-ui,sans-serif;font-weight:700;font-size:.8rem;color:var(--ink-3)}
+.frow .t{font-weight:500;font-size:.95rem}
+.frow .tag{font-family:Archivo,system-ui,sans-serif;font-size:.68rem;font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);white-space:nowrap}
+
+section.doc{display:grid;grid-template-columns:var(--gutter) minmax(0,1fr);gap:0 3rem;
+  padding:clamp(2.6rem,6vw,4.4rem) 0;border-bottom:1px solid var(--rule)}
+section.doc:last-of-type{border-bottom:0}
+.rail{position:sticky;top:1.5rem;align-self:start}
+.rail .idx{font-family:Archivo,system-ui,sans-serif;font-size:var(--step--1);font-weight:700;
+  letter-spacing:.12em;color:var(--accent);display:block;margin-bottom:.5rem}
+.rail .label{font-size:var(--step--1);color:var(--ink-3);line-height:1.4;max-width:15ch}
+.body>*+*{margin-top:1.35rem}
+.body h2{font-size:var(--step-2);font-weight:700;max-width:26ch}
+.body h4{font-family:Archivo,system-ui,sans-serif;font-size:var(--step--1);font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-top:2rem}
+.body p,.body li{max-width:var(--measure)}
+.body ul,.body ol{margin:0;padding-left:1.25rem}
+.body li+li{margin-top:.5rem}
+strong{font-weight:600}
+@media (max-width:860px){
+  section.doc{grid-template-columns:minmax(0,1fr);gap:1.2rem}
+  .rail{position:static;display:flex;align-items:baseline;gap:.85rem}
+  .rail .idx{margin-bottom:0}
+}
+
+.callout{border-left:3px solid var(--accent);background:var(--accent-wash);padding:1.05rem 1.3rem;
+  max-width:var(--measure);font-size:.96rem}
+.callout.warn{border-left-color:var(--flag);background:var(--flag-wash)}
+.callout h4{margin-top:0;color:var(--ink-2)}
+.callout>*+*{margin-top:.6rem}
+
+.scroller{overflow-x:auto;max-width:100%;padding-bottom:.4rem}
+table{border-collapse:collapse;width:100%;min-width:32rem;font-size:.9rem}
+th,td{text-align:left;padding:.55rem 1rem .55rem 0;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+thead th{font-family:Archivo,system-ui,sans-serif;font-size:.72rem;font-weight:600;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--ink-3);border-bottom:1px solid var(--rule);white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+td.mono{font-family:"JetBrains Mono",monospace;font-size:.82rem;white-space:nowrap}
+.bad{color:var(--flag);font-weight:600}
+
+.foots{display:grid;gap:.5rem;max-width:var(--measure);font-family:"JetBrains Mono",monospace;font-size:.8rem}
+.fbar{display:flex;border:1px solid var(--rule);background:var(--card)}
+.fbar span{flex:1;text-align:center;padding:.55rem .3rem;border-right:1px solid var(--rule)}
+.fbar span:last-child{border-right:0}
+.fbar span.dup{background:var(--flag-wash);color:var(--flag);font-weight:700}
+.fbar .lbl{flex:0 0 12rem;text-align:left;padding-left:.7rem;background:transparent;
+  font-family:Archivo,system-ui,sans-serif;font-size:.76rem;font-weight:600;color:var(--ink-3);
+  display:flex;align-items:center;border-right:1px solid var(--rule)}
+
+footer.end{padding:3.5rem 0 5rem;border-top:2px solid var(--ink);font-size:var(--step--1);color:var(--ink-3)}
+footer.end p{max-width:var(--measure)}
+footer.end p+p{margin-top:.8rem}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <div class="eyebrow">Review · Scorecard · End to end</div>
+  <h1>Four findings, one of them worth building</h1>
+  <p class="standfirst">
+    A screen-by-screen pass over everything except hole-by-hole scoring. Most of the app
+    holds up. What it lacks is an ending — and underneath that, three consistency defects
+    that are cheap to fix and currently visible on every screen.
+  </p>
+
+  <div class="summary">
+    <div class="frow high">
+      <span class="n">1</span>
+      <span class="t">Finishing a round tells you nothing. The screen that would fix it already exists.</span>
+      <span class="tag">Build this</span>
+    </div>
+    <div class="frow med">
+      <span class="n">2</span>
+      <span class="t">Four screens print the same label on two footer cells.</span>
+      <span class="tag">Defect</span>
+    </div>
+    <div class="frow med">
+      <span class="n">3</span>
+      <span class="t">Three vocabularies for one gesture; two words for one action.</span>
+      <span class="tag">Consistency</span>
+    </div>
+    <div class="frow low">
+      <span class="n">4</span>
+      <span class="t">Duplicate i18n keys for strings upstream already defines.</span>
+      <span class="tag">Tidy</span>
+    </div>
+  </div>
+</header>
+
+<!-- ==================================== 1 -->
+<section class="doc">
+  <div class="rail"><span class="idx">§ 1</span><span class="label">The missing ending</span></div>
+  <div class="body">
+    <h2>You finish a round and the app says nothing</h2>
+    <p>
+      Press <em>Finish round</em>, confirm, and <code>GolfRoundMenuActivity</code> calls
+      <code>openGolfHome()</code>. You land on the main menu. No score, no to-par, no
+      acknowledgement that four hours of golf just happened.
+    </p>
+    <p>
+      This is the one place where the app is meaningfully worse than the paper card it
+      replaces. On paper you total the columns and see the number. Here the number exists,
+      is already computed, and is never shown at the moment you most want it.
+    </p>
+
+    <div class="callout">
+      <h4>The screen is already built</h4>
+      <p>
+        <code>GolfRoundSummaryActivity</code> renders score, to-par, putts, the bucket
+        split and penalties. It is currently reachable only through
+        <strong>History → player → round → summary</strong> — four presses after the fact,
+        for a screen whose natural moment is the second the round ends.
+      </p>
+      <p>
+        Showing it on finish is a routing change, not a new screen. Back from it goes to
+        the main menu exactly as today, so nothing else moves.
+      </p>
+    </div>
+
+    <h4>Why this is the top finding</h4>
+    <ul>
+      <li>It is the highest-value change per line of code in the whole review — one
+        navigation call against a screen that already exists and is already tested.</li>
+      <li>It closes the loop. Every other flow in the app ends by telling you something;
+        this one ends by dropping you at a menu.</li>
+      <li>It makes the round feel finished, which is the actual product being built.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ==================================== 2 -->
+<section class="doc">
+  <div class="rail"><span class="idx">§ 2</span><span class="label">Duplicate labels</span></div>
+  <div class="body">
+    <h2>Two buttons, one word, four screens</h2>
+    <p>
+      Sweeping every <code>mapLabels()</code> call turned up four screens that print the
+      same label on two cells. A footer's whole job is to say what each button does;
+      repeating a word means one of the two is unexplained.
+    </p>
+
+    <div class="foots">
+      <div class="fbar"><span class="lbl">Scorecard (card)</span><span>Back</span>
+        <span class="dup">Next tab</span><span>Prev tab</span><span class="dup">Next tab</span></div>
+      <div class="fbar"><span class="lbl">Statistics</span><span>Back</span>
+        <span class="dup">Back</span><span>—</span><span>—</span></div>
+      <div class="fbar"><span class="lbl">Trends</span><span>Back</span>
+        <span class="dup">Back</span><span>—</span><span>—</span></div>
+      <div class="fbar"><span class="lbl">Round summary</span><span>Back</span>
+        <span class="dup">Back</span><span>—</span><span>—</span></div>
+    </div>
+
+    <p>
+      On the card, <strong>Confirm and Right both say "Next tab"</strong> and both do the
+      same thing, so Confirm is a redundant control wearing a label that implies otherwise.
+      On the other three, Confirm duplicates Back.
+    </p>
+    <p>
+      The underlying intent is fine — letting either button exit is forgiving. The fix is
+      to stop <em>advertising</em> the duplicate: leave Confirm blank where it merely
+      mirrors Back, and on the card either blank it or give it a distinct job.
+    </p>
+
+    <div class="callout warn">
+      <h4>Worth checking before changing the card</h4>
+      <p>
+        Blanking Confirm on the card removes a way to change tabs. If you have been using
+        Confirm rather than Right for that, say so and it should keep a cell — labelled as
+        something other than a copy of its neighbour.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ==================================== 3 -->
+<section class="doc">
+  <div class="rail"><span class="idx">§ 3</span><span class="label">Vocabulary</span></div>
+  <div class="body">
+    <h2>Three ways to say "move down a list"</h2>
+    <p>
+      Four vertical lists, navigated identically, labelled three different ways — and two
+      different words for the action that opens a row.
+    </p>
+
+    <div class="scroller">
+      <table>
+        <thead><tr>
+          <th style="width:30%">Screen</th><th style="width:20%">Open action</th>
+          <th style="width:26%">Move</th><th>Back</th>
+        </tr></thead>
+        <tbody>
+          <tr><td>Choose a course</td><td>Select</td><td>Up / Down</td><td class="bad">« Back</td></tr>
+          <tr><td>Round menu (in play)</td><td>Select</td><td>Up / Down</td><td class="bad">« Back</td></tr>
+          <tr><td>History (round list)</td><td>Select</td><td class="bad">Prev / Next</td><td>Back</td></tr>
+          <tr><td>History round menu</td><td>Select</td><td>Up / Down</td><td>Back</td></tr>
+          <tr><td>Player picker</td><td class="bad">Open</td><td class="bad">Prev / Next</td><td>Back</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      Three of these are worth settling:
+    </p>
+    <ul>
+      <li><strong>Prev / Next vs Up / Down.</strong> Both describe the same two buttons
+        moving through the same vertical list. <em>Up / Down</em> matches the physical
+        rocker and is what upstream uses; <em>Prev / Next</em> reads as horizontal.</li>
+      <li><strong>Select vs Open.</strong> The player picker says <em>Open</em> where every
+        other list says <em>Select</em>. Nothing distinguishes the two actions.</li>
+      <li><strong>"« Back" vs "Back".</strong> Screens inheriting the upstream list footer
+        show a guillemet; golf's own screens do not. These sit next to each other in the
+        same flow — course selection into player count — so the change is visible.</li>
+    </ul>
+
+    <div class="callout">
+      <h4>Recommendation</h4>
+      <p>
+        Standardise on <strong>Up / Down</strong> for vertical lists, <strong>Select</strong>
+        for opening a row, and one spelling of Back. Reserve <em>Prev / Next</em> for
+        genuinely horizontal movement — the main menu tiles and the hole review, where it
+        is already correct.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ==================================== 4 -->
+<section class="doc">
+  <div class="rail"><span class="idx">§ 4</span><span class="label">Duplicate keys</span></div>
+  <div class="body">
+    <h2>Golf redefines strings upstream already has</h2>
+    <p>
+      Three golf keys carry values identical to upstream keys already in the same file:
+    </p>
+    <div class="scroller">
+      <table>
+        <thead><tr><th style="width:38%">Golf key</th><th style="width:30%">Upstream key</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">STR_GOLF_BUTTON_UP</td><td class="mono">STR_DIR_UP</td><td>"Up"</td></tr>
+          <tr><td class="mono">STR_GOLF_BUTTON_DOWN</td><td class="mono">STR_DIR_DOWN</td><td>"Down"</td></tr>
+          <tr><td class="mono">STR_GOLF_BUTTON_SELECT</td><td class="mono">STR_SELECT</td><td>"Select"</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      Each duplicate is a second place a translator must find, and a second place these can
+      drift apart. Since §3 settles on the upstream wording anyway, the golf copies can go.
+    </p>
+    <p>
+      <code>STR_GOLF_BUTTON_BACK</code> ("Back") is <em>not</em> a duplicate — upstream's
+      <code>STR_BACK</code> is "« Back". Whichever spelling wins in §3, one of the two keys
+      should then be retired rather than leaving both.
+    </p>
+  </div>
+</section>
+
+<!-- ==================================== 5 -->
+<section class="doc">
+  <div class="rail"><span class="idx">§ 5</span><span class="label">What holds up</span></div>
+  <div class="body">
+    <h2>Most of it is in good shape</h2>
+    <p>Things I checked and found correct, so they are not on the list above:</p>
+    <ul>
+      <li><strong>Empty states are handled properly.</strong> History, the player picker
+        and Trends each distinguish "no rounds yet" from "couldn't read your rounds" —
+        the distinction that matters, since one means go play and the other means
+        something is wrong.</li>
+      <li><strong>The main menu is correct.</strong> Confirm reads <em>Start</em> on New
+        round and <em>Open</em> on the review screens, and Prev/Next disappear when only
+        one destination exists.</li>
+      <li><strong>Statistics does not scroll</strong>, so its blank Up/Down cells are right
+        rather than a missing hint.</li>
+      <li><strong>The scorecard handles multiple players</strong> — it iterates enabled
+        slots rather than assuming one.</li>
+      <li><strong>Par-free courses are respected throughout</strong> — em dashes rather
+        than zeroes, on the card, the totals band and the course list.</li>
+    </ul>
+
+    <h4>Suggested order</h4>
+    <ol>
+      <li><strong>§1, the round summary on finish.</strong> Highest value, smallest change,
+        and independent of everything else.</li>
+      <li><strong>§2 and §3 together.</strong> Both are footer work; doing them in one pass
+        means touching each screen's footer once.</li>
+      <li><strong>§4 with §3</strong>, since retiring the duplicate keys falls out of
+        choosing the wording.</li>
+    </ol>
+  </div>
+</section>
+
+<footer class="end">
+  <p>
+    Findings are from reading the current <code>main</code> at <code>1987c52</code> — every
+    <code>mapLabels()</code> call, every empty-state branch, and the post-finish routing.
+    Hole-by-hole scoring was excluded at the owner's request.
+  </p>
+  <p>
+    Severity reflects what a user notices: §1 is a missing moment, §2 and §3 are visible on
+    every screen, §4 is invisible until someone translates the app.
+  </p>
+</footer>
+
+</div>

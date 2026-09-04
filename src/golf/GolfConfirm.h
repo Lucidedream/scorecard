@@ -14,6 +14,13 @@ enum class GolfConfirmAction : uint8_t {
   AdvanceWithoutCommit  // move to the next turn without changing this player's score
 };
 
+// Confirm normally includes a configured short Power click. Scoring reserves
+// Power for field cycling, so only a Confirm edge without the same-frame raw
+// Power edge came from the remapped front button.
+constexpr bool golfConfirmFromFrontButton(const bool confirmReleased, const bool powerReleased) {
+  return confirmReleased && !powerReleased;
+}
+
 // Returns what the activity should do for one field-cycle press.
 //   focusedField      - the currently focused scoring field
 //   holeLogged        - the hole already has a score (a counter was mutated)
