@@ -299,7 +299,7 @@ void GolfHomeActivity::drawFooter() const {
                         : destinations[selected] == Destination::NewRound ? tr(STR_GOLF_START)
                                                                           : tr(STR_GOLF_OPEN);
   const auto labels =
-      mappedInput.mapLabels(tr(STR_GOLF_BUTTON_BACK), confirm, destinationCount > 1 ? tr(STR_GOLF_BUTTON_PREVIOUS) : "",
+      mappedInput.mapLabels(tr(STR_BACK), confirm, destinationCount > 1 ? tr(STR_GOLF_BUTTON_PREVIOUS) : "",
                             destinationCount > 1 ? tr(STR_GOLF_BUTTON_NEXT) : "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }

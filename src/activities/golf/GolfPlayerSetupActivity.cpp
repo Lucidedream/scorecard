@@ -366,9 +366,9 @@ void GolfPlayerSetupActivity::drawChrome() {
 }
 
 void GolfPlayerSetupActivity::drawFooter() {
-  const char* confirm = tr(STR_GOLF_BUTTON_SELECT);
-  const char* previous = tr(STR_GOLF_BUTTON_UP);
-  const char* next = tr(STR_GOLF_BUTTON_DOWN);
+  const char* confirm = tr(STR_SELECT);
+  const char* previous = tr(STR_DIR_UP);
+  const char* next = tr(STR_DIR_DOWN);
   if (phase == Phase::Count) {
     confirm =
         golfCountConfirmLabel(playerCount) == GolfCountConfirmLabel::Start ? tr(STR_GOLF_START) : tr(STR_GOLF_NEXT);
@@ -377,7 +377,7 @@ void GolfPlayerSetupActivity::drawFooter() {
   } else if (phase == Phase::Players) {
     confirm = tr(STR_GOLF_START);
   }
-  const auto labels = mappedInput.mapLabels(tr(STR_GOLF_BUTTON_BACK), confirm, previous, next);
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirm, previous, next);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 

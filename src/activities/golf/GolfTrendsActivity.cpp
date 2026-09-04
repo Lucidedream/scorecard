@@ -242,7 +242,7 @@ void GolfTrendsActivity::render(RenderLock&&) {
   const auto layout = golfui::chromeLayout(renderer, metrics.topPadding);
   golfui::drawHeader(renderer, layout.header, tr(STR_GOLF_TRENDS), playerLabel);
   renderUi();
-  const auto labels = mappedInput.mapLabels(tr(STR_GOLF_BUTTON_BACK), tr(STR_GOLF_BUTTON_BACK), "", "");
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }

@@ -29,7 +29,7 @@ void GolfMessageActivity::render(RenderLock&&) {
   const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
   UITheme::drawCenteredText(renderer, Rect{layout.body.x, layout.body.y, layout.body.width, layout.body.height},
                             UI_10_FONT_ID, layout.body.y + (layout.body.height - lineHeight) / 2, message);
-  const auto labels = mappedInput.mapLabels(tr(STR_GOLF_BUTTON_BACK), "", "", "");
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }

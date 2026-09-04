@@ -1513,3 +1513,67 @@ The panel under the tiles was sized to fill the space going horizontal freed, be
 was known how little text lands in it. It should be as tall as its content needs and no
 taller. The tiles keep their size; the space returns to the panel background rather than
 to an empty box.
+
+
+## 24. UX review findings (v5.2)
+
+Full review with evidence: `docs/golf/design/ux-review.html`.
+
+### 24.1 Finishing a round shows the round
+
+`GolfRoundMenuActivity::completeAction()` archives the round and calls `openGolfHome()`.
+The owner lands on the menu with no score, no to-par, and no acknowledgement — the one
+place the app is worse than the paper card it replaces, since on paper you total the
+columns and see the number.
+
+`GolfRoundSummaryActivity` already renders score, to-par, putts, the bucket split and
+penalties, and is reachable only through History → player → round → summary: four presses
+after the fact, for a screen whose moment is the second the round ends.
+
+**Show it on finish.** Back from it goes to the main menu exactly as `openGolfHome()` does
+today, so nothing downstream moves. This is a routing change against an existing, tested
+screen.
+
+An archive failure still shows its error and keeps the round open (§20). Only the success
+path changes.
+
+### 24.2 No footer prints the same label twice
+
+Four screens label two cells identically:
+
+| Screen | Footer today |
+| --- | --- |
+| Scorecard | `Back · Next tab · Prev tab · Next tab` |
+| Statistics | `Back · Back · — · —` |
+| Trends | `Back · Back · — · —` |
+| Round summary | `Back · Back · — · —` |
+
+A footer exists to say what each button does; a repeated word leaves one of the two
+unexplained. On the card, Confirm and Right are both "Next tab" **and do the same thing**.
+
+Letting either button exit stays — that is forgiving and worth keeping. Stop *advertising*
+the duplicate: leave the Confirm cell blank where it merely mirrors Back.
+
+### 24.3 One vocabulary for one gesture
+
+| Screen | Open | Move | Back |
+| --- | --- | --- | --- |
+| Choose a course | Select | Up / Down | « Back |
+| Round menu (in play) | Select | Up / Down | « Back |
+| History | Select | **Prev / Next** | Back |
+| History round menu | Select | Up / Down | Back |
+| Player picker | **Open** | **Prev / Next** | Back |
+
+Standardise on **Up / Down** for vertical lists, **Select** for opening a row, and one
+spelling of Back. Reserve *Prev / Next* for genuinely horizontal movement — the main menu
+tiles and hole review, where it is already correct.
+
+### 24.4 Retire the duplicate string keys
+
+`STR_GOLF_BUTTON_UP`, `STR_GOLF_BUTTON_DOWN` and `STR_GOLF_BUTTON_SELECT` carry values
+identical to upstream's `STR_DIR_UP`, `STR_DIR_DOWN` and `STR_SELECT`. Each duplicate is a
+second place a translator must find and a second place the two can drift apart. §24.3
+settles on the upstream wording, so the golf copies go.
+
+`STR_GOLF_BUTTON_BACK` ("Back") is **not** a duplicate — upstream's `STR_BACK` is
+"« Back". Whichever spelling §24.3 chooses, retire the other key rather than leaving both.

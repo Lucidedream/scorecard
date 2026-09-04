@@ -269,9 +269,8 @@ void GolfCardActivity::drawPenaltyMarkers() const {
 
 void GolfCardActivity::drawFooter() const {
   const bool hasTabs = round.holeCount == 18;
-  const auto labels =
-      mappedInput.mapLabels(tr(STR_GOLF_BUTTON_BACK), hasTabs ? tr(STR_GOLF_NEXT_TAB) : "",
-                            hasTabs ? tr(STR_GOLF_PREVIOUS_TAB) : "", hasTabs ? tr(STR_GOLF_NEXT_TAB) : "");
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", hasTabs ? tr(STR_GOLF_PREVIOUS_TAB) : "",
+                                            hasTabs ? tr(STR_GOLF_NEXT_TAB) : "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 

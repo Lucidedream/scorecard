@@ -170,9 +170,8 @@ void GolfPlayerSelectActivity::drawChrome() {
 }
 
 void GolfPlayerSelectActivity::drawFooter() {
-  const auto labels = mappedInput.mapLabels(tr(STR_GOLF_BUTTON_BACK), rowCount > 0 ? tr(STR_GOLF_OPEN) : "",
-                                            rowCount > 1 ? tr(STR_GOLF_BUTTON_PREVIOUS) : "",
-                                            rowCount > 1 ? tr(STR_GOLF_BUTTON_NEXT) : "");
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), rowCount > 0 ? tr(STR_SELECT) : "",
+                                            rowCount > 1 ? tr(STR_DIR_UP) : "", rowCount > 1 ? tr(STR_DIR_DOWN) : "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 

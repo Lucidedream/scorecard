@@ -84,7 +84,7 @@ void GolfStatisticsActivity::drawStat(const freeink::ui::Rect rect, const char* 
 }
 
 void GolfStatisticsActivity::drawFooter() const {
-  const auto labels = mappedInput.mapLabels(tr(STR_GOLF_BUTTON_BACK), tr(STR_GOLF_BUTTON_BACK), "", "");
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 

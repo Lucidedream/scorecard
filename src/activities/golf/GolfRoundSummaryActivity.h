@@ -7,8 +7,12 @@
 
 class GolfRoundSummaryActivity final : public Activity, protected UiAppHost {
  public:
-  GolfRoundSummaryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const GolfHistoryEntry& entry)
-      : Activity("GolfRoundSum", renderer, mappedInput), UiAppHost(renderer), entry(entry) {}
+  GolfRoundSummaryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const GolfHistoryEntry& entry,
+                           bool returnToGolfHome = false)
+      : Activity("GolfRoundSum", renderer, mappedInput),
+        UiAppHost(renderer),
+        entry(entry),
+        returnToGolfHome(returnToGolfHome) {}
 
   void onEnter() override;
   void loop() override;
@@ -16,6 +20,7 @@ class GolfRoundSummaryActivity final : public Activity, protected UiAppHost {
 
  private:
   GolfHistoryEntry entry{};
+  bool returnToGolfHome = false;
   char playerLabel[GOLF_PLAYER_LABEL_CAPACITY]{};
   freeink::ui::TableProps tableProps{};
   char cells[8][2][20]{};

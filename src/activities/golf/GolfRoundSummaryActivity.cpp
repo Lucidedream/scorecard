@@ -6,6 +6,7 @@
 
 #include <cstdio>
 
+#include "GolfNavigation.h"
 #include "GolfUiLayout.h"
 #include "components/UITheme.h"
 
@@ -36,7 +37,11 @@ void GolfRoundSummaryActivity::screenTrampoline(UiScreen& screen, void* user) {
 void GolfRoundSummaryActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
       mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    finish();
+    if (returnToGolfHome) {
+      openGolfHome(activityManager, renderer, mappedInput);
+    } else {
+      finish();
+    }
   }
 }
 
@@ -96,7 +101,7 @@ void GolfRoundSummaryActivity::render(RenderLock&&) {
   const auto layout = golfui::chromeLayout(renderer, metrics.topPadding);
   golfui::drawHeader(renderer, layout.header, playerLabel, entry.course);
   renderUi();
-  const auto labels = mappedInput.mapLabels(tr(STR_GOLF_BUTTON_BACK), tr(STR_GOLF_BUTTON_BACK), "", "");
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }

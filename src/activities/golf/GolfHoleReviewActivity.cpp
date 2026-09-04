@@ -208,8 +208,7 @@ void GolfHoleReviewActivity::drawPenaltyBand(const freeink::ui::Rect rect) const
 }
 
 void GolfHoleReviewActivity::drawFooter() const {
-  const auto labels =
-      mappedInput.mapLabels(tr(STR_GOLF_BUTTON_BACK), "", tr(STR_GOLF_BUTTON_PREVIOUS), tr(STR_GOLF_BUTTON_NEXT));
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", tr(STR_GOLF_BUTTON_PREVIOUS), tr(STR_GOLF_BUTTON_NEXT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
