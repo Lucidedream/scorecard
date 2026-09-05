@@ -3,10 +3,12 @@
 #if defined(CROSSPOINT_GOLF)
 
 #include <I18n.h>
+#include <Memory.h>
 
 #include <cstdio>
 
 #include "GolfNavigation.h"
+#include "GolfRoundExportActivity.h"
 #include "GolfUiLayout.h"
 #include "components/UITheme.h"
 
@@ -35,8 +37,25 @@ void GolfRoundSummaryActivity::screenTrampoline(UiScreen& screen, void* user) {
 }
 
 void GolfRoundSummaryActivity::loop() {
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
-      mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    auto transfer = makeUniqueNoThrow<GolfRoundExportActivity>(renderer, mappedInput, entry, archiveFilename);
+    if (!transfer) {
+      LOG_ERR("GOLF", "OOM: summary export activity");
+      {
+        RenderLock lock(*this);
+        exportFailed = true;
+      }
+      requestUpdate();
+      return;
+    }
+    {
+      RenderLock lock(*this);
+      exportFailed = false;
+    }
+    startActivityForResult(std::move(transfer), nullptr);
+    return;
+  }
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     if (returnToGolfHome) {
       openGolfHome(activityManager, renderer, mappedInput);
     } else {
@@ -77,7 +96,11 @@ void GolfRoundSummaryActivity::buildScreen(UiScreen& screen) {
                               ? golfui::minValue(static_cast<int16_t>(metrics.verticalSpacing),
                                                  static_cast<int16_t>(screen.body().height - noteHeight - requiredRows))
                               : 0;
-  screen.target().text(screen.takeBottom(noteHeight, noteGap), tr(STR_GOLF_CSV_DETAIL_UNAVAILABLE), noteStyle);
+  screen.target().text(screen.takeBottom(noteHeight, noteGap),
+                       exportFailed         ? tr(STR_GOLF_EXPORT_ERROR)
+                       : archiveFilename[0] ? tr(STR_GOLF_EXPORT_SEND)
+                                            : tr(STR_GOLF_CSV_DETAIL_UNAVAILABLE),
+                       noteStyle);
 
   const fui::Rect body = screen.body();
   for (uint8_t row = 0; row < rows; ++row) {
@@ -101,7 +124,8 @@ void GolfRoundSummaryActivity::render(RenderLock&&) {
   const auto layout = golfui::chromeLayout(renderer, metrics.topPadding);
   golfui::drawHeader(renderer, layout.header, playerLabel, entry.course);
   renderUi();
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+  const auto labels = mappedInput.mapLabels(
+      tr(STR_BACK), archiveFilename[0] ? tr(STR_GOLF_EXPORT_SEND) : tr(STR_GOLF_EXPORT_SHARE_SUMMARY), "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }

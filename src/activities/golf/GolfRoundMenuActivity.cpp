@@ -7,6 +7,7 @@
 
 #include "GolfCardActivity.h"
 #include "GolfNavigation.h"
+#include "GolfRoundExportActivity.h"
 #include "GolfTipListActivity.h"
 #include "GolfUiLayout.h"
 #include "activities/util/ConfirmationActivity.h"
@@ -19,7 +20,8 @@ void GolfRoundMenuActivity::onEnter() {
   rows[0].label = tr(STR_GOLF_VIEW_CARD);
   rows[1].label = tr(STR_GOLF_ABANDON_ROUND);
   rows[2].label = tr(STR_GOLF_FINISH_ROUND);
-  rows[3].label = tr(STR_GOLF_TIPS);
+  rows[3].label = tr(STR_GOLF_EXPORT_SEND);
+  rows[4].label = tr(STR_GOLF_TIPS);
   for (uint8_t i = 0; i < ROW_COUNT; ++i) rows[i].actionValue = i;
   UiListActivity::onEnter();
 }
@@ -40,6 +42,22 @@ void GolfRoundMenuActivity::activateIndex(const int index) {
     return;
   }
   if (index == 3) {
+    const auto& round = GOLF_ROUND_STORE.getRound();
+    auto transfer =
+        makeUniqueNoThrow<GolfRoundExportActivity>(renderer, mappedInput, round, round.currentPlayer, false);
+    if (!transfer) {
+      LOG_ERR("GOLF", "OOM: export activity");
+      {
+        RenderLock lock(*this);
+        errorMessage = tr(STR_GOLF_EXPORT_ERROR);
+      }
+      requestUpdate();
+      return;
+    }
+    startActivityForResult(std::move(transfer), nullptr);
+    return;
+  }
+  if (index == 4) {
     auto tips = makeUniqueNoThrow<GolfTipListActivity>(renderer, mappedInput);
     if (!tips) {
       LOG_ERR("GOLF", "OOM: tip list activity");

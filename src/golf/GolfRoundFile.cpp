@@ -12,7 +12,7 @@
 #include "GolfRoundDecode.h"
 #include "GolfRoundRepairLog.h"
 
-bool loadGolfRoundFile(const char* path, GolfRound& out) {
+bool loadGolfRoundFile(const char* path, GolfRound& out, GolfRoundFileInfo* info) {
   if (!Storage.exists(path)) {
     LOG_INF("GOLF", "Round file absent, using CSV summary: %s", path);
     return false;
@@ -44,6 +44,11 @@ bool loadGolfRoundFile(const char* path, GolfRound& out) {
 
   golfLogRoundRepairs(*loaded, validation);
   out = *loaded;
+  if (info != nullptr) {
+    info->penaltiesRecorded = (doc["v"] | 0) >= 3;
+    info->repaired = false;
+    for (const auto& player : validation.players) info->repaired |= player.repaired();
+  }
   return true;
 }
 

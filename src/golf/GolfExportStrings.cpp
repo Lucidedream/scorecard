@@ -1,0 +1,104 @@
+#include "GolfRoundExport.h"
+
+#if defined(CROSSPOINT_GOLF)
+#include <I18n.h>
+
+const char* golfExportTranslate(const GolfExportLabel label) {
+  switch (label) {
+    case GolfExportLabel::Title:
+      return tr(STR_GOLF_EXPORT_TITLE);
+    case GolfExportLabel::Course:
+      return tr(STR_GOLF_EXPORT_COURSE);
+    case GolfExportLabel::Player:
+      return tr(STR_GOLF_EXPORT_PLAYER);
+    case GolfExportLabel::Slot:
+      return tr(STR_GOLF_EXPORT_SLOT);
+    case GolfExportLabel::Date:
+      return tr(STR_GOLF_EXPORT_DATE);
+    case GolfExportLabel::Tee:
+      return tr(STR_GOLF_EXPORT_TEE);
+    case GolfExportLabel::Status:
+      return tr(STR_GOLF_EXPORT_STATUS);
+    case GolfExportLabel::Archived:
+      return tr(STR_GOLF_EXPORT_ARCHIVED);
+    case GolfExportLabel::InProgress:
+      return tr(STR_GOLF_EXPORT_IN_PROGRESS);
+    case GolfExportLabel::Detail:
+      return tr(STR_GOLF_EXPORT_DETAIL);
+    case GolfExportLabel::SummaryOnly:
+      return tr(STR_GOLF_EXPORT_SUMMARY_ONLY);
+    case GolfExportLabel::Unavailable:
+      return tr(STR_GOLF_EXPORT_UNAVAILABLE);
+    case GolfExportLabel::Yes:
+      return tr(STR_GOLF_EXPORT_YES);
+    case GolfExportLabel::No:
+      return tr(STR_GOLF_EXPORT_NO);
+    case GolfExportLabel::Recovered:
+      return tr(STR_GOLF_EXPORT_RECOVERED);
+    case GolfExportLabel::Score:
+      return tr(STR_GOLF_EXPORT_SCORE);
+    case GolfExportLabel::Par:
+      return tr(STR_GOLF_EXPORT_PAR);
+    case GolfExportLabel::ToPar:
+      return tr(STR_GOLF_EXPORT_TO_PAR);
+    case GolfExportLabel::Putts:
+      return tr(STR_GOLF_EXPORT_PUTTS);
+    case GolfExportLabel::In100:
+      return tr(STR_GOLF_EXPORT_IN100);
+    case GolfExportLabel::Out100:
+      return tr(STR_GOLF_EXPORT_OUT100);
+    case GolfExportLabel::Short:
+      return tr(STR_GOLF_EXPORT_SHORT);
+    case GolfExportLabel::Penalty:
+      return tr(STR_GOLF_EXPORT_PENALTY);
+    case GolfExportLabel::Hazards:
+      return tr(STR_GOLF_EXPORT_HAZARDS);
+    case GolfExportLabel::Obs:
+      return tr(STR_GOLF_EXPORT_OBS);
+    case GolfExportLabel::Thru:
+      return tr(STR_GOLF_EXPORT_THRU);
+    case GolfExportLabel::Holes:
+      return tr(STR_GOLF_EXPORT_HOLES);
+    case GolfExportLabel::OnePutts:
+      return tr(STR_GOLF_EXPORT_ONE_PUTTS);
+    case GolfExportLabel::ThreePutts:
+      return tr(STR_GOLF_EXPORT_THREE_PUTTS);
+    case GolfExportLabel::Front:
+      return tr(STR_GOLF_EXPORT_FRONT);
+    case GolfExportLabel::Back:
+      return tr(STR_GOLF_EXPORT_BACK);
+    case GolfExportLabel::Hole:
+      return tr(STR_GOLF_EXPORT_HOLE);
+    case GolfExportLabel::Entered:
+      return tr(STR_GOLF_EXPORT_ENTERED);
+    case GolfExportLabel::Yards:
+      return tr(STR_GOLF_EXPORT_YARDS);
+    case GolfExportLabel::Si:
+      return tr(STR_GOLF_EXPORT_SI);
+    case GolfExportLabel::Events:
+      return tr(STR_GOLF_EXPORT_EVENTS);
+    case GolfExportLabel::Dictionary:
+      return tr(STR_GOLF_EXPORT_DICTIONARY);
+    case GolfExportLabel::DownloadAgent:
+      return tr(STR_GOLF_EXPORT_DOWNLOAD_AGENT);
+    case GolfExportLabel::DownloadCsv:
+      return tr(STR_GOLF_EXPORT_DOWNLOAD_CSV);
+    case GolfExportLabel::DownloadJson:
+      return tr(STR_GOLF_EXPORT_DOWNLOAD_JSON);
+    case GolfExportLabel::DownloadHtml:
+      return tr(STR_GOLF_EXPORT_DOWNLOAD_HTML);
+    case GolfExportLabel::DownloadHelp:
+      return tr(STR_GOLF_EXPORT_DOWNLOAD_HELP);
+    case GolfExportLabel::SendHelp:
+      return tr(STR_GOLF_EXPORT_SEND_HELP);
+    case GolfExportLabel::Worst:
+      return tr(STR_GOLF_EXPORT_WORST);
+    case GolfExportLabel::Blue:
+      return tr(STR_GOLF_EXPORT_BLUE);
+    case GolfExportLabel::White:
+      return tr(STR_GOLF_EXPORT_WHITE);
+    default:
+      return "";
+  }
+}
+#endif

@@ -12,7 +12,7 @@ class GolfHistoryRoundMenuActivity final : public UiListActivity {
   void onEnter() override;
 
  private:
-  static constexpr uint8_t ROW_COUNT = 4;
+  static constexpr uint8_t ROW_COUNT = 5;
 
   // The archived group snapshot is activity-owned (heap), never an automatic
   // 906-byte task-stack value. playerSlot identifies the History-selected row.
@@ -26,6 +26,7 @@ class GolfHistoryRoundMenuActivity final : public UiListActivity {
   char deletePrompt[128]{};
   uint8_t playerSlot = GolfRound::NO_PLAYER;
   bool deleteFailed = false;
+  bool exportFailed = false;
 
   int listCount() const override { return ROW_COUNT; }
   void buildScreen(UiScreen& screen) override;

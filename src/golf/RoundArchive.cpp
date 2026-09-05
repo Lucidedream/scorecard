@@ -786,8 +786,12 @@ bool RoundArchive::recoverIndex(GolfIndexMigrator& scratch) {
   return recoverIndexState(scratch, live, nullptr);
 }
 
-RoundArchiveResult RoundArchive::archive(const GolfRound& source) {
+RoundArchiveResult RoundArchive::archive(const GolfRound& source, char* committedFilename) {
+  if (committedFilename != nullptr) committedFilename[0] = '\0';
   if (GOLF_ROUND_STORE.isArchived()) {
+    if (committedFilename != nullptr) {
+      snprintf(committedFilename, GOLF_ROUND_FILENAME_BUFFER_SIZE, "%s", GOLF_ROUND_STORE.archivedFilename());
+    }
     return GOLF_ROUND_STORE.clear() ? RoundArchiveResult::Complete : RoundArchiveResult::CommittedCleanupPending;
   }
 
@@ -859,6 +863,9 @@ RoundArchiveResult RoundArchive::archive(const GolfRound& source) {
     return RoundArchiveResult::FailedBeforeCommit;
   }
 
+  if (committedFilename != nullptr) {
+    snprintf(committedFilename, GOLF_ROUND_FILENAME_BUFFER_SIZE, "%s", scratch->filename);
+  }
   // The group JSON and all index rows are now authoritative. markArchivedAs()
   // sets the RAM marker before trying persistence, making scorer mutations
   // illegal even when state cleanup cannot finish in this attempt.

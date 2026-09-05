@@ -17,6 +17,7 @@
 #include "GolfScoringActivity.h"
 #include "GolfSetupActivity.h"
 #include "activities/ActivityManager.h"
+#include "golf/GolfPaths.h"
 #include "golf/GolfPenalty.h"
 #include "golf/GolfRoundStore.h"
 #include "golf/GolfStats.h"
@@ -47,6 +48,7 @@ bool makeSummaryEntry(const GolfRound& round, GolfHistoryEntry& entry) {
   entry.holes = round.holeCount;
   entry.playerSlot = playerSlot;
   entry.penaltiesRecorded = true;
+  entry.dateYmd = round.dateYmd;
   return true;
 }
 
@@ -129,8 +131,9 @@ bool resumeGolfRound(ActivityManager& manager, GfxRenderer& renderer, MappedInpu
 bool finishGolfRound(ActivityManager& manager, GfxRenderer& renderer, MappedInputManager& mappedInput) {
   const GolfRound& round = GOLF_ROUND_STORE.getRound();
   GolfHistoryEntry summaryEntry{};
+  char committedFilename[GOLF_ROUND_FILENAME_BUFFER_SIZE]{};
   const bool hasSummary = makeSummaryEntry(round, summaryEntry);
-  const RoundArchiveResult result = RoundArchive::archive(round);
+  const RoundArchiveResult result = RoundArchive::archive(round, committedFilename);
   if (result == RoundArchiveResult::FailedBeforeCommit) return false;
 
   // The round file and index group are durable. Never leave the user on a
@@ -141,7 +144,8 @@ bool finishGolfRound(ActivityManager& manager, GfxRenderer& renderer, MappedInpu
     clearGolfRoundDirty();
   }
   if (hasSummary) {
-    auto summary = makeUniqueNoThrow<GolfRoundSummaryActivity>(renderer, mappedInput, summaryEntry, true);
+    auto summary =
+        makeUniqueNoThrow<GolfRoundSummaryActivity>(renderer, mappedInput, summaryEntry, true, committedFilename);
     if (summary) {
       manager.replaceActivity(std::move(summary));
       return true;

@@ -11,6 +11,7 @@
 #include "GolfCardActivity.h"
 #include "GolfHoleReviewActivity.h"
 #include "GolfReviewFormat.h"
+#include "GolfRoundExportActivity.h"
 #include "GolfStatisticsActivity.h"
 #include "GolfUiLayout.h"
 #include "activities/util/ConfirmationActivity.h"
@@ -38,7 +39,8 @@ void GolfHistoryRoundMenuActivity::onEnter() {
   rows[0].label = tr(STR_GOLF_APP_TITLE);
   rows[1].label = tr(STR_GOLF_HOLE_BY_HOLE);
   rows[2].label = tr(STR_GOLF_STATISTICS);
-  rows[3].label = tr(STR_GOLF_DELETE_ROUND);
+  rows[3].label = tr(STR_GOLF_EXPORT_SEND);
+  rows[4].label = tr(STR_GOLF_DELETE_ROUND);
   for (uint8_t i = 0; i < ROW_COUNT; ++i) {
     rows[i].value = ">";
     rows[i].actionValue = i;
@@ -86,7 +88,26 @@ void GolfHistoryRoundMenuActivity::activateIndex(const int index) {
     startActivityForResult(std::move(statistics), nullptr);
     return;
   }
-  if (index == 3) confirmDelete();
+  if (index == 3) {
+    auto transfer =
+        makeUniqueNoThrow<GolfRoundExportActivity>(renderer, mappedInput, round, playerSlot, true, archiveFilename);
+    if (!transfer) {
+      LOG_ERR("GOLF", "OOM: archived export activity");
+      {
+        RenderLock lock(*this);
+        exportFailed = true;
+      }
+      requestUpdate();
+      return;
+    }
+    {
+      RenderLock lock(*this);
+      exportFailed = false;
+    }
+    startActivityForResult(std::move(transfer), nullptr);
+    return;
+  }
+  if (index == 4) confirmDelete();
 }
 
 void GolfHistoryRoundMenuActivity::confirmDelete() {
@@ -142,8 +163,8 @@ void GolfHistoryRoundMenuActivity::buildScreen(UiScreen& screen) {
   auto infoStyle = screen.theme().smallText;
   infoStyle.align = fui::TextAlign::Left;
   const fui::Rect band = golfui::inset(layout.info, fui::Insets{8, 18, 8, 18});
-  if (deleteFailed) {
-    screen.target().text(band, tr(STR_GOLF_DELETE_ERROR), infoStyle);
+  if (deleteFailed || exportFailed) {
+    screen.target().text(band, deleteFailed ? tr(STR_GOLF_DELETE_ERROR) : tr(STR_GOLF_EXPORT_ERROR), infoStyle);
     return;
   }
   const int16_t lineHeight = static_cast<int16_t>(band.height / 2);
