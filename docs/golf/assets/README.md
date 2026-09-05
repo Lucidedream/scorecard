@@ -1,6 +1,6 @@
 # Scorecard sleep wallpaper
 
-`sleep.bmp` is the device-ready Scorecard sleep wallpaper for the Xteink X4. It is an uncompressed 24-bit RGB BMP at the X4's native 480x800 portrait resolution.
+`sleep.bmp` is the device-ready Scorecard sleep wallpaper for the Xteink X4. It is a 1-bit (pure black and white) BMP at the X4's native 480x800 portrait resolution. Thresholded from the original grayscale artwork rather than dithered, since the mark is flat background plus fine linework, not a photo. Pure black and white avoids the fading the 4-level grayscale waveform shows on content left on screen for a long time (the sleep screen's whole reason to exist) -- 1-bit is the panel's native, fully stable state.
 
 ## Install
 
