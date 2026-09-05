@@ -20,5 +20,6 @@ bool seedGolfHoleAtPar(GolfPlayerScore& score, uint8_t hole, uint8_t par);
 uint8_t golfFirstEnabledPlayer(const GolfRound& round);
 uint8_t golfNextEnabledPlayer(const GolfRound& round, uint8_t player);
 uint8_t golfPreviousEnabledPlayer(const GolfRound& round, uint8_t player);
+bool golfIsFinalCommit(const GolfRound& round);
 bool advanceGolfTurn(GolfRound& round);
 bool retreatGolfTurn(GolfRound& round);

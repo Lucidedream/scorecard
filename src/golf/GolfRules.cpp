@@ -109,11 +109,17 @@ uint8_t golfNextEnabledPlayer(const GolfRound& round, const uint8_t player) {
 uint8_t golfPreviousEnabledPlayer(const GolfRound& round, const uint8_t player) {
   if (player >= GolfRound::MAX_PLAYERS) return golfFirstEnabledPlayer(round);
   for (uint8_t offset = 1; offset <= GolfRound::MAX_PLAYERS; ++offset) {
-    const uint8_t candidate = static_cast<uint8_t>((player + GolfRound::MAX_PLAYERS - offset) %
-                                                   GolfRound::MAX_PLAYERS);
+    const uint8_t candidate = static_cast<uint8_t>((player + GolfRound::MAX_PLAYERS - offset) % GolfRound::MAX_PLAYERS);
     if (golfPlayerIsEnabled(round.players[candidate])) return candidate;
   }
   return GolfRound::NO_PLAYER;
+}
+
+bool golfIsFinalCommit(const GolfRound& round) {
+  if (round.holeCount == 0 || round.currentHole != round.holeCount - 1) return false;
+  if (round.currentPlayer >= GolfRound::MAX_PLAYERS) return false;
+  const uint8_t next = golfNextEnabledPlayer(round, round.currentPlayer);
+  return next != GolfRound::NO_PLAYER && next <= round.currentPlayer;
 }
 
 bool advanceGolfTurn(GolfRound& round) {

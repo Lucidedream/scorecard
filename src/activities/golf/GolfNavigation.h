@@ -24,9 +24,9 @@ struct GolfHomeEntryDecision {
 
 // A live archive marker is authoritative over state.json. If cleanup fails,
 // Home offers only read-only history surfaces and retries cleanup on re-entry.
-constexpr GolfHomeEntryDecision golfDecideHomeEntry(const bool archiveMarkedAtEntry,
-                                                    const bool cleanupSucceeded, const bool stateExists,
-                                                    const bool stateLoaded, const uint8_t holeCount) {
+constexpr GolfHomeEntryDecision golfDecideHomeEntry(const bool archiveMarkedAtEntry, const bool cleanupSucceeded,
+                                                    const bool stateExists, const bool stateLoaded,
+                                                    const uint8_t holeCount) {
   if (archiveMarkedAtEntry) return {false, !cleanupSucceeded, false, cleanupSucceeded, false};
   const bool resumable = stateLoaded && (holeCount == 9 || holeCount == 18);
   return {stateExists, false, resumable, true, stateExists && !stateLoaded};
@@ -38,6 +38,7 @@ bool openGolfPlayerSetup(ActivityManager& manager, GfxRenderer& renderer, Mapped
                          const GolfCourseFile& courseFile, const GolfCourse& course);
 bool openGolfScoring(ActivityManager& manager, GfxRenderer& renderer, MappedInputManager& mappedInput);
 bool resumeGolfRound(ActivityManager& manager, GfxRenderer& renderer, MappedInputManager& mappedInput);
+bool finishGolfRound(ActivityManager& manager, GfxRenderer& renderer, MappedInputManager& mappedInput);
 bool flushGolfRoundForSleep();
 bool flushGolfRoundIfDirty();
 void markGolfRoundDirty();

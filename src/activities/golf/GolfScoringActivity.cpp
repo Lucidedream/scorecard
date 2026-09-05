@@ -18,6 +18,7 @@
 #include "GolfNavigation.h"
 #include "GolfReviewFormat.h"
 #include "GolfRoundMenuActivity.h"
+#include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "golf/GolfPenalty.h"
@@ -112,6 +113,8 @@ void ellipsize(const GfxRenderer& renderer, char* text, const size_t size, const
 void GolfScoringActivity::onEnter() {
   Activity::onEnter();
   resetUi();
+  finishPromptShown = false;
+  archiveFailed = false;
   if (GOLF_ROUND_STORE.isArchived()) {
     LOG_ERR("GOLF", "Committed archive cannot re-enter scoring");
     openGolfHome(activityManager, renderer, mappedInput);
@@ -365,12 +368,18 @@ void GolfScoringActivity::handleConfirm() {
 void GolfScoringActivity::commitAndAdvance() {
   if (rejectArchivedMutation()) return;
   bool committed = false;
+  bool offerFinish = false;
   {
     RenderLock lock(*this);
     committed = ensureHoleSeeded();
+    offerFinish = !finishPromptShown && golfIsFinalCommit(GOLF_ROUND_STORE.getRound());
   }
   if (committed) markDirtyForIdle();
   changeTurn(true);
+  if (offerFinish) {
+    finishPromptShown = true;
+    offerFinishRound();
+  }
 }
 
 void GolfScoringActivity::changeTurn(const bool forward) {
@@ -411,11 +420,27 @@ void GolfScoringActivity::openRoundMenu() {
   startActivityForResult(std::move(menu), nullptr);
 }
 
+void GolfScoringActivity::offerFinishRound() {
+  auto confirmation = makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_GOLF_FINISH_ROUND),
+                                                              tr(STR_GOLF_FINISH_PROMPT));
+  if (!confirmation) {
+    LOG_ERR("GOLF", "OOM: finish confirmation");
+    return;
+  }
+  startActivityForResult(std::move(confirmation), [this](const ActivityResult& result) {
+    if (result.isCancelled) return;
+    if (!finishGolfRound(activityManager, renderer, mappedInput)) {
+      archiveFailed = true;
+      requestUpdate();
+    }
+  });
+}
+
 void GolfScoringActivity::openCourseMap() {
   if (!flushDirty()) return;
   const GolfRound& round = GOLF_ROUND_STORE.getRound();
   auto map = makeUniqueNoThrow<GolfCourseMapActivity>(renderer, mappedInput, round.currentHole, round.holeCount,
-                                                       round.courseName);
+                                                      round.courseName);
   if (!map) {
     LOG_ERR("GOLF", "OOM: course map");
     return;
@@ -505,7 +530,9 @@ void GolfScoringActivity::drawStatusBar(const golfui::ScoringLayout& layout) con
   golfFormatPlayerLabel(round.currentPlayer, player.name, tr(STR_GOLF_PLAYER_LABEL_FORMAT), statusPlayerLabel,
                         sizeof(statusPlayerLabel));
   snprintf(statusTitle, sizeof(statusTitle), tr(STR_GOLF_PLAYER_CONTEXT_FORMAT), statusPlayerLabel,
-           (saveFailed || hasGolfRoundSaveFailed()) ? tr(STR_GOLF_SAVE_ERROR) : round.courseName);
+           archiveFailed                              ? tr(STR_GOLF_ARCHIVE_ERROR)
+           : (saveFailed || hasGolfRoundSaveFailed()) ? tr(STR_GOLF_SAVE_ERROR)
+                                                      : round.courseName);
   ellipsize(renderer, statusTitle, sizeof(statusTitle),
             layout.header.width > 135 ? layout.header.width - 135 : layout.header.width);
   const char* right = nullptr;

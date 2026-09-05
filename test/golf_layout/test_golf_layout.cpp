@@ -183,12 +183,11 @@ TEST(GolfUiLayout, TotalsBandUsesThreeContiguousCells) {
   EXPECT_EQ(third.x + third.width, totals.x + totals.width);
 }
 
-TEST(GolfPlayerSetupPolicy, CountOwnsRosterAndSoloSkipsReview) {
+TEST(GolfPlayerSetupPolicy, EveryPlayerCountReviewsRoster) {
   GolfRound round{};
   initializeGolfPlayerDefaults(round);
 
-  EXPECT_EQ(golfPlayerSetupNext(1), GolfPlayerSetupNext::StartRound);
-  for (uint8_t count = 2; count <= GOLF_MAX_PLAYERS; ++count) {
+  for (uint8_t count = 1; count <= GOLF_MAX_PLAYERS; ++count) {
     EXPECT_EQ(golfPlayerSetupNext(count), GolfPlayerSetupNext::ReviewRoster);
   }
 
@@ -202,13 +201,13 @@ TEST(GolfPlayerSetupPolicy, CountOwnsRosterAndSoloSkipsReview) {
   EXPECT_STREQ(round.players[3].name, "Player 4");
 }
 
-TEST(GolfPlayerSetupPolicy, DefaultSoloSetupEnablesPlayerOne) {
+TEST(GolfPlayerSetupPolicy, DefaultSoloSetupReviewsRosterWithPlayerOneEnabled) {
   GolfRound round{};
   initializeGolfPlayerDefaults(round);
   uint8_t playerCount = 1;
   golfSetPlayerCount(round, playerCount, 1, TeeSelection::Blue);
 
-  ASSERT_EQ(golfPlayerSetupNext(playerCount), GolfPlayerSetupNext::StartRound);
+  ASSERT_EQ(golfPlayerSetupNext(playerCount), GolfPlayerSetupNext::ReviewRoster);
   EXPECT_EQ(round.players[0].tee, TeeSelection::Blue);
   for (uint8_t slot = 1; slot < GOLF_MAX_PLAYERS; ++slot) {
     EXPECT_EQ(round.players[slot].tee, TeeSelection::NotPlay);
@@ -250,13 +249,6 @@ TEST(GolfPlayerSetupPolicy, CountStepsStayWithinOneAndFour) {
   EXPECT_EQ(golfStepPlayerCount(1, 1), 2);
   EXPECT_EQ(golfStepPlayerCount(GOLF_MAX_PLAYERS, 1), GOLF_MAX_PLAYERS);
   EXPECT_EQ(golfStepPlayerCount(GOLF_MAX_PLAYERS, -1), GOLF_MAX_PLAYERS - 1);
-}
-
-TEST(GolfPlayerSetupPolicy, ConfirmLabelIsStartAtOnePlayerAndNextAbove) {
-  EXPECT_EQ(golfCountConfirmLabel(1), GolfCountConfirmLabel::Start);
-  for (uint8_t count = 2; count <= GOLF_MAX_PLAYERS; ++count) {
-    EXPECT_EQ(golfCountConfirmLabel(count), GolfCountConfirmLabel::Next);
-  }
 }
 
 TEST(GolfUiLayout, ReviewStatisticsAndMenuRowsUseAvailableSafeHeight) {

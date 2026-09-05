@@ -5,49 +5,15 @@
 #include <I18n.h>
 #include <Memory.h>
 
-#include <cstdio>
-
 #include "GolfCardActivity.h"
 #include "GolfNavigation.h"
-#include "GolfRoundSummaryActivity.h"
 #include "GolfTipListActivity.h"
 #include "GolfUiLayout.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
-#include "golf/GolfPenalty.h"
 #include "golf/GolfRoundStore.h"
-#include "golf/GolfStats.h"
-#include "golf/RoundArchive.h"
 
 namespace fui = freeink::ui;
-
-namespace {
-
-bool makeSummaryEntry(const GolfRound& round, GolfHistoryEntry& entry) {
-  const uint8_t playerSlot =
-      round.currentPlayer < GolfRound::MAX_PLAYERS && golfPlayerIsEnabled(round.players[round.currentPlayer])
-          ? round.currentPlayer
-          : golfFirstEnabledPlayer(round);
-  if (playerSlot == GolfRound::NO_PLAYER) return false;
-
-  const GolfPlayer& player = round.players[playerSlot];
-  entry = {};
-  snprintf(entry.course, sizeof(entry.course), "%s", round.courseName);
-  snprintf(entry.playerName, sizeof(entry.playerName), "%s", player.name);
-  entry.strokes = golfScore(round, player.score);
-  entry.par = golfParTotal(round, player.score);
-  entry.putts = golfPuttsTotal(round, player.score);
-  entry.in100 = golfIn100Total(round, player.score);
-  entry.out100 = golfLongTotal(round, player.score);
-  entry.hazards = golfHazardsForRound(player.score, round.holeCount);
-  entry.obs = golfObsForRound(player.score, round.holeCount);
-  entry.holes = round.holeCount;
-  entry.playerSlot = playerSlot;
-  entry.penaltiesRecorded = true;
-  return true;
-}
-
-}  // namespace
 
 void GolfRoundMenuActivity::onEnter() {
   rows[0].label = tr(STR_GOLF_VIEW_CARD);
@@ -106,33 +72,11 @@ void GolfRoundMenuActivity::completeAction(const bool confirmed) {
   }
 
   if (pendingAction == PendingAction::Finish) {
-    const GolfRound& round = GOLF_ROUND_STORE.getRound();
-    GolfHistoryEntry summaryEntry{};
-    const bool hasSummary = makeSummaryEntry(round, summaryEntry);
-    const RoundArchiveResult result = RoundArchive::archive(round);
     pendingAction = PendingAction::None;
-    if (result == RoundArchiveResult::FailedBeforeCommit) {
+    if (!finishGolfRound(activityManager, renderer, mappedInput)) {
       errorMessage = tr(STR_GOLF_ARCHIVE_ERROR);
       requestUpdate();
-      return;
     }
-
-    // The round file and index group are durable. Never leave the user on a
-    // mutable scoring surface just because marker deletion needs another try.
-    if (result == RoundArchiveResult::CommittedCleanupPending) {
-      markGolfArchiveCleanupPending();
-    } else {
-      clearGolfRoundDirty();
-    }
-    if (hasSummary) {
-      auto summary = makeUniqueNoThrow<GolfRoundSummaryActivity>(renderer, mappedInput, summaryEntry, true);
-      if (summary) {
-        activityManager.replaceActivity(std::move(summary));
-        return;
-      }
-      LOG_ERR("GOLF", "OOM: finished round summary");
-    }
-    openGolfHome(activityManager, renderer, mappedInput);
     return;
   }
 

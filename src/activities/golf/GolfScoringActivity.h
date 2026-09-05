@@ -23,6 +23,8 @@ class GolfScoringActivity final : public Activity, protected UiAppHost {
   GolfField focusedField = GolfField::Putts;
   const char* carryNotice = nullptr;
   bool saveFailed = false;
+  bool archiveFailed = false;
+  bool finishPromptShown = false;
   uint8_t paintCount = 0;
   uint32_t lastChangeAt = 0;
   uint32_t lastRepeatAt = 0;
@@ -52,6 +54,7 @@ class GolfScoringActivity final : public Activity, protected UiAppHost {
   void markDirtyForIdle();
   void openCourseMap();
   void openRoundMenu();
+  void offerFinishRound();
   bool flushDirty();
   bool rejectArchivedMutation();
 

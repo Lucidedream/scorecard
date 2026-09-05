@@ -258,10 +258,10 @@ bool GolfPlayerSetupActivity::handleButtons() {
     return true;
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (golfPlayerSetupNext(playerCount) == GolfPlayerSetupNext::StartRound) {
-      completeRound();
-    } else {
-      showPlayers();
+    switch (golfPlayerSetupNext(playerCount)) {
+      case GolfPlayerSetupNext::ReviewRoster:
+        showPlayers();
+        break;
     }
     return true;
   }
@@ -370,8 +370,7 @@ void GolfPlayerSetupActivity::drawFooter() {
   const char* previous = tr(STR_DIR_UP);
   const char* next = tr(STR_DIR_DOWN);
   if (phase == Phase::Count) {
-    confirm =
-        golfCountConfirmLabel(playerCount) == GolfCountConfirmLabel::Start ? tr(STR_GOLF_START) : tr(STR_GOLF_NEXT);
+    confirm = tr(STR_GOLF_NEXT);
     previous = tr(STR_GOLF_BUTTON_PREVIOUS);
     next = tr(STR_GOLF_BUTTON_NEXT);
   } else if (phase == Phase::Players) {

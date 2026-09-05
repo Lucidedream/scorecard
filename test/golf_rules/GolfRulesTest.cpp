@@ -212,6 +212,35 @@ TEST_F(GolfRulesTest, MultiplayerFinalHoleWrapIsSymmetric) {
   EXPECT_EQ(round.currentHole, 17);
 }
 
+TEST_F(GolfRulesTest, FinalCommitRequiresLastEnabledPlayerOnLastHole) {
+  round.players[0].tee = TeeSelection::Blue;
+  round.players[2].tee = TeeSelection::White;
+  round.currentHole = 17;
+
+  round.currentPlayer = 0;
+  EXPECT_FALSE(golfIsFinalCommit(round));
+  round.currentPlayer = 2;
+  EXPECT_TRUE(golfIsFinalCommit(round));
+  round.currentHole = 16;
+  EXPECT_FALSE(golfIsFinalCommit(round));
+}
+
+TEST_F(GolfRulesTest, FinalCommitRejectsInvalidRoundState) {
+  round.players[1].tee = TeeSelection::Blue;
+  round.currentPlayer = 1;
+  round.currentHole = 17;
+  EXPECT_TRUE(golfIsFinalCommit(round));
+
+  round.holeCount = 0;
+  EXPECT_FALSE(golfIsFinalCommit(round));
+  round.holeCount = 18;
+  round.currentPlayer = GolfRound::NO_PLAYER;
+  EXPECT_FALSE(golfIsFinalCommit(round));
+  round.currentPlayer = 1;
+  round.players[1].tee = TeeSelection::NotPlay;
+  EXPECT_FALSE(golfIsFinalCommit(round));
+}
+
 TEST_F(GolfRulesTest, AdvanceRefusesDraftWithNoEnabledPlayers) {
   round.currentHole = 7;
   round.currentPlayer = 0;
