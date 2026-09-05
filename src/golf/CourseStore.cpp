@@ -14,6 +14,7 @@
 #include "CourseBuiltIns.h"
 #include "CourseOrder.h"
 #include "GolfCourseValidate.h"
+#include "GolfDirectoryScan.h"
 
 namespace {
 
@@ -97,7 +98,8 @@ GolfCourseListResult CourseStore::enumerate(GolfCourseFile* files, uint8_t capac
       continue;
     }
     char filename[GOLF_COURSE_FILENAME_BUFFER_SIZE]{};
-    if (entry.getName(filename, sizeof(filename)) == 0 || !hasJsonExtension(filename)) {
+    if (entry.getName(filename, sizeof(filename)) == 0 || golfIsHiddenSidecarFilename(filename) ||
+        !hasJsonExtension(filename)) {
       continue;
     }
     ++jsonFiles;
@@ -205,7 +207,9 @@ bool CourseStore::findByName(const char* courseName, GolfCourse& course) {
        entry = directory.openNextFile()) {
     if (entry.isDirectory()) continue;
     char filename[GOLF_COURSE_FILENAME_BUFFER_SIZE]{};
-    if (entry.getName(filename, sizeof(filename)) == 0 || !hasJsonExtension(filename)) continue;
+    if (entry.getName(filename, sizeof(filename)) == 0 || golfIsHiddenSidecarFilename(filename) ||
+        !hasJsonExtension(filename))
+      continue;
     GolfCourse candidate{};
     if (load(filename, candidate) && strcmp(candidate.courseName, courseName) == 0) {
       course = candidate;

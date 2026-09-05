@@ -8,6 +8,8 @@
 #include <cstdio>
 #include <cstring>
 
+#include "GolfDirectoryScan.h"
+
 namespace {
 
 constexpr char TIPS_DIRECTORY[] = "/golf/tips";
@@ -55,7 +57,9 @@ GolfTipsListResult GolfTipsStore::enumerate(GolfTipEntry* files, uint8_t capacit
   for (HalFile entry = directory.openNextFile(); entry; entry = directory.openNextFile()) {
     if (entry.isDirectory()) continue;
     char filename[GOLF_TIP_FILENAME_BUFFER_SIZE]{};
-    if (entry.getName(filename, sizeof(filename)) == 0 || !hasTxtExtension(filename)) continue;
+    if (entry.getName(filename, sizeof(filename)) == 0 || golfIsHiddenSidecarFilename(filename) ||
+        !hasTxtExtension(filename))
+      continue;
     ++txtFiles;
     if (result.count >= capacity) {
       result.overflow = true;

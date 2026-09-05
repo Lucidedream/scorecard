@@ -12,6 +12,7 @@
 
 #include "CrossPointSettings.h"
 #include "GolfCsv.h"
+#include "GolfDirectoryScan.h"
 #include "GolfIndexMigrate.h"
 #include "GolfJson.h"
 #include "GolfPaths.h"
@@ -460,7 +461,9 @@ bool hasJsonSuffix(const char* filename) {
   for (HalFile entry = directory.openNextFile(); entry; entry = directory.openNextFile()) {
     if (entry.isDirectory()) continue;
     scratch.filename[0] = '\0';
-    if (entry.getName(scratch.filename, sizeof(scratch.filename)) == 0 || !hasJsonSuffix(scratch.filename)) continue;
+    if (entry.getName(scratch.filename, sizeof(scratch.filename)) == 0 ||
+        golfIsHiddenSidecarFilename(scratch.filename) || !hasJsonSuffix(scratch.filename))
+      continue;
     const int pathLength = snprintf(scratch.path, sizeof(scratch.path), "%s/%s", ROUNDS_DIRECTORY, scratch.filename);
     if (pathLength < 0 || static_cast<size_t>(pathLength) >= sizeof(scratch.path)) {
       LOG_ERR("GOLF", "index rebuild path too long: %s", scratch.filename);
