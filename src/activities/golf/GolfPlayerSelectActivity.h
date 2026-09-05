@@ -10,10 +10,8 @@
 
 class GolfPlayerSelectActivity final : public UiListActivity {
  public:
-  enum class Mode : uint8_t { History, Trends };
-
-  GolfPlayerSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, Mode mode)
-      : UiListActivity("GolfPlayerSel", renderer, mappedInput), mode(mode) {}
+  GolfPlayerSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
+      : UiListActivity("GolfPlayerSel", renderer, mappedInput) {}
 
   void onEnter() override;
   void loop() override;
@@ -22,7 +20,6 @@ class GolfPlayerSelectActivity final : public UiListActivity {
   static constexpr uint8_t ROW_COUNT = GolfRound::MAX_PLAYERS;
   static_assert(sizeof(std::atomic<bool>) == 1, "Selector refresh flag must stay one byte");
 
-  const Mode mode;
   GolfPlayerNamesReader playerNames{};
   GolfIndexMigrator recovery{};
   freeink::ui::ListItem rows[ROW_COUNT]{};

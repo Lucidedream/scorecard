@@ -56,7 +56,6 @@ void GolfHomeActivity::onEnter() {
   destinationCount = 0;
   if (showNewRound) destinations[destinationCount++] = Destination::NewRound;
   destinations[destinationCount++] = Destination::History;
-  destinations[destinationCount++] = Destination::Trends;
   destinations[destinationCount++] = Destination::Tips;
   selected = 0;
   resumeFocused = hasOpenRound;
@@ -110,8 +109,6 @@ const char* GolfHomeActivity::destinationLabel(const Destination destination) co
       return tr(STR_GOLF_NEW_ROUND);
     case Destination::History:
       return tr(STR_GOLF_HISTORY);
-    case Destination::Trends:
-      return tr(STR_GOLF_TRENDS);
     case Destination::Tips:
     default:
       return tr(STR_GOLF_TIPS);
@@ -124,8 +121,6 @@ fui::BitmapRef GolfHomeActivity::destinationIcon(const Destination destination) 
       return fui::bitmapFromIcon(icon_land_plot_32);
     case Destination::History:
       return fui::bitmapFromIcon(icon_scroll_text_32);
-    case Destination::Trends:
-      return fui::bitmapFromIcon(icon_trending_up_32);
     case Destination::Tips:
     default:
       return fui::bitmapFromIcon(icon_lightbulb_32);
@@ -168,10 +163,6 @@ void GolfHomeActivity::refreshDetail() {
       snprintf(detailLine, sizeof(detailLine), tr(STR_GOLF_ROUNDS_RECORDED_FORMAT),
                static_cast<unsigned long>(indexSummary.totalRounds()));
       return;
-    case Destination::Trends:
-      snprintf(detailLine, sizeof(detailLine), tr(STR_GOLF_TRENDS_SUMMARY_FORMAT),
-               static_cast<unsigned long>(indexSummary.totalRounds()), indexSummary.playerCount());
-      return;
     case Destination::Tips:
       if (tipsError) {
         snprintf(detailLine, sizeof(detailLine), "%s", tr(STR_GOLF_TIPS_UNAVAILABLE));
@@ -203,12 +194,9 @@ void GolfHomeActivity::activateDestination(const Destination destination) {
       return;
     }
     case Destination::History:
-    case Destination::Trends:
       break;
   }
-  const auto mode = destination == Destination::History ? GolfPlayerSelectActivity::Mode::History
-                                                        : GolfPlayerSelectActivity::Mode::Trends;
-  auto selector = makeUniqueNoThrow<GolfPlayerSelectActivity>(renderer, mappedInput, mode);
+  auto selector = makeUniqueNoThrow<GolfPlayerSelectActivity>(renderer, mappedInput);
   if (!selector) {
     LOG_ERR("GOLF", "OOM: player selector activity");
     return;

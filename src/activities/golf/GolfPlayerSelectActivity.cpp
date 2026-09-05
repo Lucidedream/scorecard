@@ -9,11 +9,9 @@
 
 #include <cstdio>
 #include <cstring>
-#include <memory>
 
-#include "GolfHistoryActivity.h"
+#include "GolfHistoryChoiceActivity.h"
 #include "GolfPlayerSelectPolicy.h"
-#include "GolfTrendsActivity.h"
 #include "GolfUiLayout.h"
 #include "components/UITheme.h"
 #include "golf/RoundArchive.h"
@@ -108,21 +106,10 @@ void GolfPlayerSelectActivity::activateIndex(const int index) {
   if (!rowIsEnabled(index)) return;
   const uint8_t slot = rowSlots[index];
 
-  std::unique_ptr<Activity> child;
-  if (mode == Mode::History) {
-    auto history = makeUniqueNoThrow<GolfHistoryActivity>(renderer, mappedInput, slot, playerNamesSnapshot[slot]);
-    if (!history) {
-      LOG_ERR("GOLF", "OOM: history activity");
-      return;
-    }
-    child = std::move(history);
-  } else {
-    auto trends = makeUniqueNoThrow<GolfTrendsActivity>(renderer, mappedInput, slot, playerNamesSnapshot[slot]);
-    if (!trends) {
-      LOG_ERR("GOLF", "OOM: trends activity");
-      return;
-    }
-    child = std::move(trends);
+  auto choice = makeUniqueNoThrow<GolfHistoryChoiceActivity>(renderer, mappedInput, slot, playerNamesSnapshot[slot]);
+  if (!choice) {
+    LOG_ERR("GOLF", "OOM: history choice activity");
+    return;
   }
 
   {
@@ -130,12 +117,10 @@ void GolfPlayerSelectActivity::activateIndex(const int index) {
     refreshPending.store(true, std::memory_order_release);
     closeRouting();
   }
-  startActivityForResult(std::move(child), nullptr);
+  startActivityForResult(std::move(choice), nullptr);
 }
 
-const char* GolfPlayerSelectActivity::headerTitle() const {
-  return mode == Mode::History ? tr(STR_GOLF_HISTORY) : tr(STR_GOLF_TRENDS);
-}
+const char* GolfPlayerSelectActivity::headerTitle() const { return tr(STR_GOLF_HISTORY); }
 
 void GolfPlayerSelectActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();

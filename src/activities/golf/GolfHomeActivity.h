@@ -16,7 +16,7 @@ class GolfHomeActivity final : public Activity, protected UiAppHost {
   void render(RenderLock&&) override;
 
  private:
-  enum class Destination : uint8_t { NewRound, History, Trends, Tips };
+  enum class Destination : uint8_t { NewRound, History, Tips };
   static constexpr freeink::ui::ActionId ACTION_TILE = 1;
   static constexpr freeink::ui::ActionId ACTION_RESUME = 2;
 
@@ -26,7 +26,7 @@ class GolfHomeActivity final : public Activity, protected UiAppHost {
   char detailLine[96]{};
   char quoteText[GOLF_QUOTE_TEXT_CAPACITY]{};
   char quoteAuthor[GOLF_QUOTE_AUTHOR_CAPACITY]{};
-  Destination destinations[4]{};
+  Destination destinations[3]{};
   uint8_t destinationCount = 0;
   uint8_t selected = 0;
   bool resumeFocused = false;

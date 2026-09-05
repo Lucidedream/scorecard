@@ -1737,3 +1737,27 @@ The parser uses fixed buffers only. Quote text is capped at 239 bytes plus its N
 author at 63 bytes plus its NUL; longer input is truncated safely. The quote is decorative,
 does not change while the menu remains open, and is never shown anywhere except the main
 menu.
+
+## 29. History absorbs Trends behind a player-scoped chooser (v6.4)
+
+`Trends` is no longer its own main-menu tile. `GolfHomeActivity::Destination` drops the
+`Trends` value; the tile row is `New round / History / Tips` until §30 adds a fourth tile.
+`History` is the only door left to both destinations, reached through one extra screen
+after the existing player picker.
+
+`GolfPlayerSelectActivity` loses the `Mode` parameter it used to take at construction —
+there was never more than one reason to reach it once `Trends` stopped opening it directly.
+Its header is unconditionally `tr(STR_GOLF_HISTORY)` now. Picking a player no longer opens
+`GolfHistoryActivity` or `GolfTrendsActivity` directly; it opens a new
+`GolfHistoryChoiceActivity(renderer, mappedInput, slot, playerName)`, a two-row list headed
+by that player's label (the same `golfFormatPlayerLabel`/`STR_GOLF_PLAYER_LABEL_FORMAT`
+convention every other per-player screen already uses). Row one, `tr(STR_GOLF_TRENDS)`,
+opens `GolfTrendsActivity`; row two, the new `tr(STR_GOLF_ROUNDS)`, opens
+`GolfHistoryActivity`. Both are constructed with the exact `(slot, playerName)` pair the
+player picker already resolved, and Back from either returns to this chooser.
+
+Neither destination screen changed: `GolfHistoryActivity` and `GolfTrendsActivity` keep
+their existing constructors, content, and behavior untouched. This is purely an
+activity-graph simplification — one tile and one extra list screen replacing two
+tiles — done ahead of a fourth main-menu tile (§30) that needs the slot `Trends` used to
+occupy.
