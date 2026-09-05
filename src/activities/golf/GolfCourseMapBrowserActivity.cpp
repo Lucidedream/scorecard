@@ -100,9 +100,15 @@ bool GolfCourseMapBrowserActivity::formatTeeYardageLine(const uint8_t hole, char
 void GolfCourseMapBrowserActivity::drawHoleBand(const freeink::ui::Rect rect) const {
   const int padding = golfui::minValue(18, static_cast<int16_t>(rect.width / 8));
   const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
-  renderer.drawText(UI_10_FONT_ID, rect.x + padding, rect.y + 4, tr(STR_GOLF_HOLE), true, EpdFontFamily::BOLD);
-  const int digitHeight = golfui::clampValue(rect.height - lineHeight - 10, 24, golfui::SCORING_HOLE_DIGIT_MAX_HEIGHT);
-  golfDrawLargeNumber(renderer, rect.x + rect.width / 4, rect.y + rect.height - digitHeight - 5, digitHeight,
+  const int digitHeight = golfui::scoringHoleDigitHeight(rect.height, lineHeight);
+  // "HOLE" and the big digit are one visual block; center that block in the
+  // band rather than pinning the label to the top and the digit to the
+  // bottom independently, which left an uneven gap between them.
+  constexpr int labelDigitGap = 8;
+  const int blockHeight = lineHeight + labelDigitGap + digitHeight;
+  const int blockTop = rect.y + golfui::maxValue((rect.height - blockHeight) / 2, 0);
+  renderer.drawText(UI_10_FONT_ID, rect.x + padding, blockTop, tr(STR_GOLF_HOLE), true, EpdFontFamily::BOLD);
+  golfDrawLargeNumber(renderer, rect.x + rect.width / 4, blockTop + lineHeight + labelDigitGap, digitHeight,
                       static_cast<uint16_t>(currentHole + 1));
 
   const int right = rect.x + rect.width - padding;
