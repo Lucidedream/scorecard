@@ -100,16 +100,16 @@ bool GolfCourseMapBrowserActivity::formatTeeYardageLine(const uint8_t hole, char
 void GolfCourseMapBrowserActivity::drawHoleBand(const freeink::ui::Rect rect) const {
   const int padding = golfui::minValue(18, static_cast<int16_t>(rect.width / 8));
   const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
-  const int digitHeight = golfui::scoringHoleDigitHeight(rect.height, lineHeight);
-  // "HOLE" and the big digit are one visual block; center that block in the
-  // band rather than pinning the label to the top and the digit to the
-  // bottom independently, which left an uneven gap between them.
-  constexpr int labelDigitGap = 8;
-  const int blockHeight = lineHeight + labelDigitGap + digitHeight;
-  const int blockTop = rect.y + golfui::maxValue((rect.height - blockHeight) / 2, 0);
-  renderer.drawText(UI_10_FONT_ID, rect.x + padding, blockTop, tr(STR_GOLF_HOLE), true, EpdFontFamily::BOLD);
-  golfDrawLargeNumber(renderer, rect.x + rect.width / 4, blockTop + lineHeight + labelDigitGap, digitHeight,
-                      static_cast<uint16_t>(currentHole + 1));
+  const int ascender = renderer.getFontAscenderSize(UI_10_FONT_ID);
+  constexpr int digitHeight = golfui::SCORING_HOLE_DIGIT_MAX_HEIGHT;
+  constexpr int labelTopMargin = 8;
+  const int labelY = rect.y + labelTopMargin;
+  // "HOLE" carries no descenders in this font/style (every glyph's ink bottom
+  // sits exactly on the baseline), so its baseline is its ink bottom. Start the
+  // big digit there to keep the label and digit reading as one tight group.
+  const int digitY = labelY + ascender;
+  renderer.drawText(UI_10_FONT_ID, rect.x + padding, labelY, tr(STR_GOLF_HOLE), true, EpdFontFamily::BOLD);
+  golfDrawLargeNumber(renderer, rect.x + rect.width / 4, digitY, digitHeight, static_cast<uint16_t>(currentHole + 1));
 
   const int right = rect.x + rect.width - padding;
   int y = rect.y + 4;
