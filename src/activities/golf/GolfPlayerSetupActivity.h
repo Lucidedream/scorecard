@@ -24,7 +24,7 @@ class GolfPlayerSetupActivity final : public UiListActivity {
   GolfCourseFile courseFile{};
   GolfCourse course{};
   GolfRound draft{};
-  freeink::ui::ListItem playerRows[PLAYER_ROW_COUNT]{};
+  freeink::ui::ListItem playerRows[PLAYER_ROW_COUNT + 1]{};
   freeink::ui::ListItem teeRows[TEE_OPTION_COUNT]{};
   freeink::ui::ListProps listProps{};
   Phase phase = Phase::Count;

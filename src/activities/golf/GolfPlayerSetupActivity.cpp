@@ -44,7 +44,7 @@ void GolfPlayerSetupActivity::onEnter() {
 
 int GolfPlayerSetupActivity::listCount() const {
   if (phase == Phase::Count) return 0;
-  return phase == Phase::Players ? playerCount : TEE_OPTION_COUNT;
+  return phase == Phase::Players ? playerCount + 1 : TEE_OPTION_COUNT;
 }
 
 const char* GolfPlayerSetupActivity::headerTitle() const {
@@ -74,6 +74,10 @@ void GolfPlayerSetupActivity::refreshPlayerRows() {
     playerRows[player].actionValue = player;
     playerRows[player].enabled = player < playerCount;
   }
+  playerRows[playerCount] = {};
+  playerRows[playerCount].label = tr(STR_GOLF_START);
+  playerRows[playerCount].actionValue = playerCount;
+  playerRows[playerCount].enabled = true;
 }
 
 void GolfPlayerSetupActivity::initializeTeeRows() {
@@ -151,6 +155,11 @@ void GolfPlayerSetupActivity::activateIndex(const int index) {
       default:
         break;
     }
+    return;
+  }
+
+  if (phase == Phase::Players && index == playerCount) {
+    completeRound();
     return;
   }
 
@@ -248,10 +257,6 @@ void GolfPlayerSetupActivity::onBackButton() {
 }
 
 bool GolfPlayerSetupActivity::handleButtons() {
-  if (phase == Phase::Players && mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    completeRound();
-    return true;
-  }
   if (phase != Phase::Count) return UiListActivity::handleButtons();
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     onBackButton();
@@ -373,7 +378,7 @@ void GolfPlayerSetupActivity::drawFooter() {
     confirm = tr(STR_GOLF_NEXT);
     previous = tr(STR_GOLF_BUTTON_PREVIOUS);
     next = tr(STR_GOLF_BUTTON_NEXT);
-  } else if (phase == Phase::Players) {
+  } else if (phase == Phase::Players && nav.selected == playerCount) {
     confirm = tr(STR_GOLF_START);
   }
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirm, previous, next);
