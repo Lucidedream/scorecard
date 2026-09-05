@@ -5,12 +5,14 @@
 #include <ArduinoJson.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <PersistableStore.h>
 
 #include <cstdio>
 #include <cstring>
 
 #include "CourseBuiltIns.h"
+#include "CourseOrder.h"
 #include "GolfCourseValidate.h"
 
 namespace {
@@ -217,6 +219,29 @@ bool CourseStore::findByName(const char* courseName, GolfCourse& course) {
     }
   }
   return false;
+}
+
+bool CourseStore::resolveAllTees(const char* courseName, GolfCourseTeeSet& result) {
+  result = {};
+  if (courseName == nullptr || courseName[0] == '\0') return false;
+
+  auto files = makeUniqueNoThrow<GolfCourseFile[]>(GOLF_MAX_COURSES);
+  auto courses = makeUniqueNoThrow<GolfCourse[]>(GOLF_MAX_COURSES);
+  if (!files || !courses) {
+    LOG_ERR("GOLF", "OOM: resolveAllTees scratch (%u courses)", GOLF_MAX_COURSES);
+    return false;
+  }
+
+  const GolfCourseListResult listResult = enumerate(files.get(), GOLF_MAX_COURSES);
+  uint8_t count = 0;
+  for (uint8_t i = 0; i < listResult.count; ++i) {
+    GolfCourse course{};
+    if (!load(files[i], course)) continue;
+    files[count] = files[i];
+    courses[count] = course;
+    ++count;
+  }
+  return golfResolveAllTeesFrom(files.get(), courses.get(), count, courseName, result);
 }
 
 #endif

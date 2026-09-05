@@ -16,7 +16,7 @@ class GolfHomeActivity final : public Activity, protected UiAppHost {
   void render(RenderLock&&) override;
 
  private:
-  enum class Destination : uint8_t { NewRound, History, Tips };
+  enum class Destination : uint8_t { NewRound, History, CourseMap, Tips };
   static constexpr freeink::ui::ActionId ACTION_TILE = 1;
   static constexpr freeink::ui::ActionId ACTION_RESUME = 2;
 
@@ -26,7 +26,7 @@ class GolfHomeActivity final : public Activity, protected UiAppHost {
   char detailLine[96]{};
   char quoteText[GOLF_QUOTE_TEXT_CAPACITY]{};
   char quoteAuthor[GOLF_QUOTE_AUTHOR_CAPACITY]{};
-  Destination destinations[3]{};
+  Destination destinations[4]{};
   uint8_t destinationCount = 0;
   uint8_t selected = 0;
   bool resumeFocused = false;
@@ -37,6 +37,8 @@ class GolfHomeActivity final : public Activity, protected UiAppHost {
   bool indexLoadError = false;
   uint8_t tipsNoteCount = 0;
   bool tipsError = false;
+  uint8_t courseCount = 0;
+  bool courseCountError = false;
   bool quotePresent = false;
   bool quoteHasAuthor = false;
 
@@ -44,6 +46,7 @@ class GolfHomeActivity final : public Activity, protected UiAppHost {
   static void actionTrampoline(const freeink::ui::ActionEvent& event, void* user);
   void buildScreen(UiScreen& screen);
   void scanIndexSummary();
+  void scanCourseCount();
   void refreshDetail();
   void moveSelection(int delta);
   void activateSelected();

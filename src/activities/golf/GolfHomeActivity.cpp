@@ -9,6 +9,7 @@
 
 #include <cstdio>
 
+#include "GolfCourseMapListActivity.h"
 #include "GolfNavigation.h"
 #include "GolfPlayerSelectActivity.h"
 #include "GolfSetupActivity.h"
@@ -16,6 +17,7 @@
 #include "GolfUiLayout.h"
 #include "components/UITheme.h"
 #include "components/icons/golfTileIcons.h"
+#include "golf/CourseStore.h"
 #include "golf/GolfQuotesStore.h"
 #include "golf/GolfRoundStore.h"
 #include "golf/GolfTips.h"
@@ -56,6 +58,7 @@ void GolfHomeActivity::onEnter() {
   destinationCount = 0;
   if (showNewRound) destinations[destinationCount++] = Destination::NewRound;
   destinations[destinationCount++] = Destination::History;
+  destinations[destinationCount++] = Destination::CourseMap;
   destinations[destinationCount++] = Destination::Tips;
   selected = 0;
   resumeFocused = hasOpenRound;
@@ -66,6 +69,7 @@ void GolfHomeActivity::onEnter() {
     tipsError = tips.directoryError;
     tipsNoteCount = tips.count;
   }
+  scanCourseCount();
   refreshDetail();
 
   Activity::onEnter();
@@ -109,6 +113,8 @@ const char* GolfHomeActivity::destinationLabel(const Destination destination) co
       return tr(STR_GOLF_NEW_ROUND);
     case Destination::History:
       return tr(STR_GOLF_HISTORY);
+    case Destination::CourseMap:
+      return tr(STR_GOLF_COURSE_MAP);
     case Destination::Tips:
     default:
       return tr(STR_GOLF_TIPS);
@@ -121,6 +127,8 @@ fui::BitmapRef GolfHomeActivity::destinationIcon(const Destination destination) 
       return fui::bitmapFromIcon(icon_land_plot_32);
     case Destination::History:
       return fui::bitmapFromIcon(icon_scroll_text_32);
+    case Destination::CourseMap:
+      return fui::bitmapFromIcon(icon_map_32);
     case Destination::Tips:
     default:
       return fui::bitmapFromIcon(icon_lightbulb_32);
@@ -163,6 +171,15 @@ void GolfHomeActivity::refreshDetail() {
       snprintf(detailLine, sizeof(detailLine), tr(STR_GOLF_ROUNDS_RECORDED_FORMAT),
                static_cast<unsigned long>(indexSummary.totalRounds()));
       return;
+    case Destination::CourseMap:
+      if (courseCountError) {
+        snprintf(detailLine, sizeof(detailLine), "%s", tr(STR_GOLF_COURSES_UNAVAILABLE));
+      } else if (courseCount == 1) {
+        snprintf(detailLine, sizeof(detailLine), "%s", tr(STR_GOLF_COURSES_COUNT_ONE));
+      } else {
+        snprintf(detailLine, sizeof(detailLine), tr(STR_GOLF_COURSES_COUNT_FORMAT), static_cast<unsigned>(courseCount));
+      }
+      return;
     case Destination::Tips:
       if (tipsError) {
         snprintf(detailLine, sizeof(detailLine), "%s", tr(STR_GOLF_TIPS_UNAVAILABLE));
@@ -178,6 +195,19 @@ void GolfHomeActivity::refreshDetail() {
   }
 }
 
+void GolfHomeActivity::scanCourseCount() {
+  auto files = makeUniqueNoThrow<GolfCourseFile[]>(GOLF_MAX_COURSES);
+  if (!files) {
+    LOG_ERR("GOLF", "OOM: home course count scratch (%u entries)", GOLF_MAX_COURSES);
+    courseCountError = true;
+    courseCount = 0;
+    return;
+  }
+  const GolfCourseListResult result = CourseStore::enumerate(files.get(), GOLF_MAX_COURSES);
+  courseCountError = result.count == 0;
+  courseCount = result.count;
+}
+
 void GolfHomeActivity::activateDestination(const Destination destination) {
   app.clearTapFlash();
   switch (destination) {
@@ -188,6 +218,15 @@ void GolfHomeActivity::activateDestination(const Destination destination) {
       auto list = makeUniqueNoThrow<GolfTipListActivity>(renderer, mappedInput);
       if (!list) {
         LOG_ERR("GOLF", "OOM: tip list activity");
+        return;
+      }
+      startActivityForResult(std::move(list), nullptr);
+      return;
+    }
+    case Destination::CourseMap: {
+      auto list = makeUniqueNoThrow<GolfCourseMapListActivity>(renderer, mappedInput);
+      if (!list) {
+        LOG_ERR("GOLF", "OOM: course map list activity");
         return;
       }
       startActivityForResult(std::move(list), nullptr);

@@ -1761,3 +1761,90 @@ their existing constructors, content, and behavior untouched. This is purely an
 activity-graph simplification — one tile and one extra list screen replacing two
 tiles — done ahead of a fourth main-menu tile (§30) that needs the slot `Trends` used to
 occupy.
+
+## 30. Course Map on the main menu (v6.5)
+
+`GolfHomeActivity::Destination` gains `CourseMap`, third of four: New round / History /
+Course Map / Tips. Its icon is Lucide `map`
+(`src/components/icons/golfTileIcons.manifest`). Unlike every other tile, picking it never
+touches `state.json` or starts a round — it is a read-only reference browser, reachable
+with no round in progress and without disturbing one that is.
+
+### 30.1 Two new screens, one shared image pipeline
+
+`GolfCourseMapListActivity` lists every known course by **name**, built-ins first then SD
+courses alphabetical (the existing `golfCourseSortsBefore` order, same as
+`GolfSetupActivity`'s picker) — except a course split across two tee files collapses to one
+row instead of two (§30.2). Picking a row opens `GolfCourseMapBrowserActivity`, which pages
+one hole at a time with Prev/Next (front Left/Right or the side rocker, same convention as
+`GolfHoleReviewActivity`), showing:
+
+- **Header:** the course name.
+- **Hole band:** the hole number as a large digit (`golfDrawLargeNumber`, matching
+  `GolfScoringActivity::drawHoleBand`'s treatment), `PAR n`, and yardage for every tee that
+  has yardage data for that hole, e.g. "Blue 325 YD · White 310 YD"
+  (`STR_GOLF_TEE_YARDS_FORMAT` / `STR_GOLF_TEE_YARDS_JOIN_FORMAT`). A tee with no yardage
+  data is omitted from the line rather than shown blank; the whole line is omitted if
+  neither tee has yardage.
+- **Body:** the course-map image, same source and pipeline as §26's in-round screen.
+
+Back from the browser returns to the course list (not Home), so another course can be
+browsed without returning to the main menu; Back from the list returns to Home.
+
+Both screens are read-only: neither ever calls `openGolfPlayerSetup`, writes `state.json`,
+or otherwise touches a `GolfRound`. `GolfCourseMapBrowserActivity` never has a `GolfRound`
+in scope at all — it is driven entirely by a resolved `GolfCourseTeeSet` (§30.2), not a
+live round's hole/holeCount/courseName the way §26's screen is.
+
+§26's `GolfCourseMapActivity` (the MENU-long-press glance screen reached mid-round) is
+unchanged in behavior — no paging, no info band, still driven by the live round. What
+changed is internal: the `/golf/maps/<slug>/hole-<N>.bmp` resolve-load-and-render sequence
+(BMP open/parse, then the `displayGrayscaleBase`/LSB/MSB/`displayGrayBuffer` grayscale
+pass) moved out of `GolfCourseMapActivity` into a shared function,
+`golfRenderCourseMapImage()` (`GolfCourseMapImage.h/.cpp`), returning
+`Rendered`/`Missing`/`LoadFailed` instead of drawing a message itself. Both screens draw
+their own chrome and their own missing/load-failed text
+(`STR_GOLF_MAP_MISSING`/`STR_GOLF_MAP_LOAD_FAILED`) around it. Chrome must be drawn into
+the framebuffer *before* calling the shared function on a path that might succeed: the
+grayscale base pass captures whatever is already in the framebuffer, so a caller that drew
+its header/footer first gets them baked into the displayed image for free; a caller that
+draws them afterward would lose them to the grayscale passes' intermediate `clearScreen()`
+calls.
+
+### 30.2 The multi-tee data reality: two tees are usually two files
+
+A `GolfCourse` struct holds one tee's data (`docs/golf/examples/sanyang-suzhou.json` /
+`-white.json` are the concrete example: same `name`, different `tees`/`yards`). Before this
+section, the only place two tees resolved off one course row was a hardcoded special case
+for the built-in Sanyang course (`golfResolveBuiltInTeeYardages`); any SD course an owner
+splits into two tee files the normal way showed as two unrelated-looking rows, each with
+only its own tee's yardage.
+
+`CourseStore::resolveAllTees(courseName, result)` generalizes this: it scans every
+enumerated course file (built-ins + SD) for a matching `courseName` and resolves Blue and
+White independently via the existing `CourseStore::resolveTee()`, against whichever file
+actually carries each tee. The result is a `GolfCourseTeeSet` — `primary`/`primaryFile` from
+the first matching file (holeCount/par/si should agree across a course's tee files; if they
+don't, the primary is trusted rather than reconciled), plus `blue`/`white`
+`GolfTeeResolution`s and `hasBlue`/`hasWhite` flags. The built-in Sanyang special case still
+resolves through this same path — `resolveTee()` already knows about it — so
+`resolveAllTees()` needed no special-casing of its own.
+
+The SD-scanning part (`CourseStore::enumerate()` + `load()`) is not host-testable (it needs
+`HalStorage`), so the merge itself is factored out as a pure function,
+`golfResolveAllTeesFrom()` (`CourseOrder.h/.cpp`, alongside `golfCourseSortsBefore` — the
+existing home for course-list logic that takes already-loaded `(GolfCourseFile,
+GolfCourse)` pairs rather than touching SD directly). `CourseStore::resolveAllTees()` is a
+thin SD-enumerating wrapper around it. `test/golf_course_order/` covers the merge directly:
+two SD tee files sharing a name resolve both tees; a lone file resolves only its own tee;
+the built-in Sanyang course still resolves both through this path; a non-matching name
+resolves nothing.
+
+`GolfCourseMapListActivity` uses this same generalization for its own row dedup: after
+loading and sorting every course file exactly as `GolfSetupActivity` does, adjacent entries
+sharing a `courseName` (guaranteed contiguous by the sort's comparator, since equal-name
+entries are one equivalence class under `golfCourseSortsBefore`) collapse into a single row,
+whose subtitle comes from `golfResolveAllTeesFrom()` instead of a single file's
+`resolveTee()`. **`GolfSetupActivity`'s new-round course picker is deliberately unchanged**
+— it still lists one row per file, since starting a round needs one concrete tee's
+selection, not a merged view.

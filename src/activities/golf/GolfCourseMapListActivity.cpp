@@ -1,0 +1,141 @@
+#include "GolfCourseMapListActivity.h"
+
+#if defined(CROSSPOINT_GOLF)
+
+#include <I18n.h>
+#include <Logging.h>
+#include <Memory.h>
+
+#include <cstdio>
+#include <cstring>
+
+#include "GolfCourseMapBrowserActivity.h"
+#include "GolfUiLayout.h"
+#include "components/UITheme.h"
+#include "golf/CourseOrder.h"
+
+namespace fui = freeink::ui;
+
+void GolfCourseMapListActivity::onEnter() {
+  loadCourses();
+  UiListActivity::onEnter();
+}
+
+void GolfCourseMapListActivity::loadCourses() {
+  const GolfCourseListResult result = CourseStore::enumerate(files, GOLF_MAX_COURSES);
+  overflow = result.overflow;
+  loadedCount = 0;
+  for (uint8_t i = 0; i < result.count; ++i) {
+    GolfCourse course{};
+    if (CourseStore::load(files[i], course)) {
+      files[loadedCount] = files[i];
+      courses[loadedCount++] = course;
+    }
+  }
+  for (uint8_t i = 1; i < loadedCount; ++i) {
+    const GolfCourse value = courses[i];
+    const GolfCourseFile valueFile = files[i];
+    uint8_t position = i;
+    while (position > 0 && golfCourseSortsBefore(valueFile, value, files[position - 1], courses[position - 1])) {
+      courses[position] = courses[position - 1];
+      files[position] = files[position - 1];
+      --position;
+    }
+    courses[position] = value;
+    files[position] = valueFile;
+  }
+
+  // Course names sharing a comparator equivalence class land contiguously after the sort
+  // above; collapse each run into a single row keyed by its first (primary) entry.
+  courseCount = 0;
+  for (uint8_t i = 0; i < loadedCount; ++i) {
+    if (courseCount > 0 && strcmp(courses[i].courseName, courses[primaryIndex[courseCount - 1]].courseName) == 0) {
+      continue;
+    }
+    primaryIndex[courseCount++] = i;
+  }
+
+  noCourses = courseCount == 0;
+  uint8_t row = 0;
+  for (; row < courseCount; ++row) {
+    rows[row] = {};
+    rows[row].label = courses[primaryIndex[row]].courseName;
+    formatCourseRow(row);
+    rows[row].subtitle = courseDetails[row];
+    rows[row].value = parLabels[row];
+    rows[row].actionValue = row;
+  }
+  if (overflow) {
+    rows[row] = {};
+    rows[row].label = tr(STR_GOLF_COURSE_OVERFLOW);
+    rows[row].enabled = false;
+  }
+}
+
+void GolfCourseMapListActivity::formatCourseRow(const uint8_t row) {
+  if (row >= courseCount) return;
+  const GolfCourse& course = courses[primaryIndex[row]];
+  GolfCourseTeeSet teeSet{};
+  golfResolveAllTeesFrom(files, courses, loadedCount, course.courseName, teeSet);
+  char tees[24]{};
+  if (teeSet.hasBlue && teeSet.hasWhite) {
+    snprintf(tees, sizeof(tees), tr(STR_GOLF_TEE_PAIR_FORMAT), tr(STR_GOLF_BLUE), tr(STR_GOLF_WHITE));
+  } else {
+    snprintf(tees, sizeof(tees), "%s",
+             teeSet.hasBlue    ? tr(STR_GOLF_BLUE)
+             : teeSet.hasWhite ? tr(STR_GOLF_WHITE)
+                               : tr(STR_GOLF_EM_DASH));
+  }
+  snprintf(courseDetails[row], sizeof(courseDetails[row]), tr(STR_GOLF_COURSE_ROW_FORMAT), course.holeCount, tees);
+
+  uint16_t par = 0;
+  for (uint8_t hole = 0; hole < course.holeCount; ++hole) par += course.par[hole];
+  char parValue[8]{};
+  if (par == 0) {
+    snprintf(parValue, sizeof(parValue), "%s", tr(STR_GOLF_EM_DASH));
+  } else {
+    snprintf(parValue, sizeof(parValue), "%u", par);
+  }
+  snprintf(parLabels[row], sizeof(parLabels[row]), tr(STR_GOLF_PAR_VALUE_FORMAT), parValue);
+}
+
+int GolfCourseMapListActivity::listCount() const { return courseCount + (overflow ? 1 : 0); }
+
+const char* GolfCourseMapListActivity::headerTitle() const {
+  return noCourses ? tr(STR_GOLF_NO_COURSES) : tr(STR_GOLF_COURSE_MAP);
+}
+
+void GolfCourseMapListActivity::activateIndex(const int index) {
+  app.clearTapFlash();
+  if (index < 0 || index >= courseCount) return;
+  const GolfCourse& course = courses[primaryIndex[index]];
+  auto browser = makeUniqueNoThrow<GolfCourseMapBrowserActivity>(renderer, mappedInput, course.courseName);
+  if (!browser) {
+    LOG_ERR("GOLF", "OOM: course map browser activity");
+    return;
+  }
+  startActivityForResult(std::move(browser), nullptr);
+}
+
+void GolfCourseMapListActivity::buildScreen(UiScreen& screen) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const auto layout = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding);
+  screen.setContentMargin(layout.contentMargins);
+  screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
+  listProps = {};
+  listProps.items = rows;
+  listProps.count = static_cast<uint16_t>(listCount());
+  listProps.action = ACTION_ROW;
+  listProps.inputMask = fui::InputTouch;
+  listProps.rowHeight = 96;
+  syncListViewport(screen, listProps, true);
+  screen.list(listProps);
+}
+
+void GolfCourseMapListActivity::drawChrome() {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding);
+  golfui::drawHeader(renderer, layout.header, headerTitle());
+}
+
+#endif

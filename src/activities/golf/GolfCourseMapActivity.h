@@ -24,9 +24,8 @@ class GolfCourseMapActivity final : public Activity {
 
   void drawChrome(const char* message = nullptr) const;
   void renderMissing() const;
-  void renderLoadFailed(const char* path) const;
+  void renderLoadFailed() const;
   void loadAndRender();
-  bool renderBmp(const char* path, const freeink::ui::Rect& body) const;
 };
 
 #endif
