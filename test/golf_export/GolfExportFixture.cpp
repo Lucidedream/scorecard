@@ -18,8 +18,10 @@ int main(int argc, char** argv) {
   player.score.putts[0] = 2;
   player.score.out100[0] = 2;
   golfAppendPenalty(player.score, 0, GolfField::Out100, GolfPenaltyKind::Ob);
+  golfSetFairwayHit(player.score, 0, true);
   if (strcmp(argv[2], "summary") == 0) {
     data.detailed = false;
+    data.fairwaysRecorded = false;  // provenance unknown on a summary-only reload
     data.summary.holes = 9;
     data.summary.strokes = 8;
     data.summary.par = 4;
@@ -27,6 +29,11 @@ int main(int argc, char** argv) {
     data.summary.out100 = 3;
     data.summary.putts = 2;
     data.summary.obs = 1;
+    data.summary.fairways = 4;
+    data.summary.fairwayHoles = 6;
+    data.summary.gir = 5;
+    data.summary.girHoles = 9;
+    data.summary.girRecorded = true;
     strcpy(data.summary.course, data.round.courseName);
     strcpy(data.summary.playerName, player.name);
   }

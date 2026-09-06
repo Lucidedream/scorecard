@@ -13,8 +13,8 @@ namespace {
 
 using Label = GolfExportLabel;
 using Format = GolfExportFormat;
-constexpr uint8_t METADATA_COUNT = 10;
-constexpr uint8_t METRIC_COUNT = 15;
+constexpr uint8_t METADATA_COUNT = 11;
+constexpr uint8_t METRIC_COUNT = 21;
 
 class Writer {
  public:
@@ -133,10 +133,18 @@ constexpr const char* METRIC_KEYS[] = {"gross_strokes",
                                        "hole_count",
                                        "one_putt_holes",
                                        "three_plus_putt_holes",
-                                       "recovered"};
-constexpr Label METRIC_LABELS[] = {Label::Score,  Label::Par,   Label::ToPar,    Label::Putts,      Label::In100,
-                                   Label::Out100, Label::Short, Label::Penalty,  Label::Hazards,    Label::Obs,
-                                   Label::Thru,   Label::Holes, Label::OnePutts, Label::ThreePutts, Label::Recovered};
+                                       "recovered",
+                                       "fairways_hit",
+                                       "fairway_holes",
+                                       "fir_pct",
+                                       "greens_in_reg",
+                                       "gir_holes",
+                                       "gir_pct"};
+constexpr Label METRIC_LABELS[] = {
+    Label::Score,       Label::Par,        Label::ToPar,     Label::Putts,       Label::In100,        Label::Out100,
+    Label::Short,       Label::Penalty,    Label::Hazards,   Label::Obs,         Label::Thru,         Label::Holes,
+    Label::OnePutts,    Label::ThreePutts, Label::Recovered, Label::FairwaysHit, Label::FairwayHoles, Label::FirPct,
+    Label::GreensInReg, Label::GirHoles,   Label::GirPct};
 
 int metric(const GolfExportData& d, uint8_t index, bool& available) {
   const auto& r = d.round;
@@ -146,6 +154,8 @@ int metric(const GolfExportData& d, uint8_t index, bool& available) {
   if (index == 1 || index == 2) available = hasPar(d);
   if (index >= 7 && index <= 9) available = d.penaltiesRecorded;
   if (index == 10 || index == 12 || index == 13) available = d.detailed;
+  if (index >= 15 && index <= 17) available = d.fairwaysRecorded;
+  if (index >= 18 && index <= 20) available = d.detailed ? hasPar(d) : d.summary.girRecorded;
   switch (index) {
     case 0:
       return d.detailed ? golfScore(r, s) : h.strokes;
@@ -175,7 +185,25 @@ int metric(const GolfExportData& d, uint8_t index, bool& available) {
       return golfOnePutts(r, s);
     case 13:
       return golfThreePutts(r, s);
-    default:
+    case 15:
+      return d.detailed ? golfFairwaysHit(r, s) : h.fairways;
+    case 16:
+      return d.detailed ? golfFairwaysEligible(r, s) : h.fairwayHoles;
+    case 17: {
+      const int made = d.detailed ? golfFairwaysHit(r, s) : h.fairways;
+      const int denom = d.detailed ? golfFairwaysEligible(r, s) : h.fairwayHoles;
+      return denom ? (200 * made + denom) / (2 * denom) : 0;  // nearest whole percent
+    }
+    case 18:
+      return d.detailed ? golfGreensInRegulation(r, s) : h.gir;
+    case 19:
+      return d.detailed ? golfGreensEligible(r, s) : h.girHoles;
+    case 20: {
+      const int made = d.detailed ? golfGreensInRegulation(r, s) : h.gir;
+      const int denom = d.detailed ? golfGreensEligible(r, s) : h.girHoles;
+      return denom ? (200 * made + denom) / (2 * denom) : 0;  // nearest whole percent
+    }
+    default:  // index 14: recovered
       return d.repaired ? 1 : 0;
   }
 }
@@ -220,9 +248,14 @@ void metadata(Writer& w, const GolfExportData& d, GolfExportTranslate tr, uint8_
                                        : tr(d.penaltiesRecorded ? Label::Yes : Label::Unavailable));
       break;
     case 8:
-      w.field("distance_unit", tr(Label::Yards), w.format == Format::Json ? "yards" : tr(Label::Yards));
+      w.field("fairways_recorded", tr(Label::FairwaysHit),
+              w.format == Format::Json ? (d.fairwaysRecorded ? "recorded" : "unavailable")
+                                       : tr(d.fairwaysRecorded ? Label::Yes : Label::Unavailable));
       break;
     case 9:
+      w.field("distance_unit", tr(Label::Yards), w.format == Format::Json ? "yards" : tr(Label::Yards));
+      break;
+    case 10:
       if (w.format != Format::Json) {
         w.raw(w.format == Format::Html ? "</dl><p>" : "\n");
         w.text(tr(Label::Dictionary));
@@ -288,6 +321,10 @@ void holeBlock(Writer& w, const GolfExportData& d, uint8_t hole, GolfExportTrans
   w.metric("out100", tr(Label::Out100), s.out100[hole], played, missing);
   w.metric("penalty_strokes", tr(Label::Penalty), golfPenaltyStrokesForHole(s, hole), d.penaltiesRecorded && played,
            missing);
+  w.metric("fairway", tr(Label::Fairway), golfFairwayHit(s, hole) ? 1 : 0,
+           d.fairwaysRecorded && played && (r.par[hole] == 4 || r.par[hole] == 5), missing);
+  w.metric("gir", tr(Label::Gir), golfGreenInRegulation(r, s, hole) ? 1 : 0,
+           played && r.par[hole] >= 3 && r.par[hole] <= 5, missing);
   if (w.format == Format::Json)
     w.raw("\"penalty_events\":");
   else {
@@ -311,7 +348,7 @@ void csvBlock(Writer& w, const GolfExportData& d, uint16_t block, GolfExportTran
   if (block == 0) {
     w.raw(
         "course,player,player_slot,date,status,detail,hole,entered,par,si,yards,putts,in100,out100,gross_strokes,"
-        "penalty_strokes,penalty_events,penalties_recorded,recovered\r\n");
+        "penalty_strokes,fairway,gir,penalty_events,penalties_recorded,fairways_recorded,recovered\r\n");
     return;
   }
   char date[GOLF_DATE_BUFFER_SIZE]{};
@@ -353,6 +390,10 @@ void csvBlock(Writer& w, const GolfExportData& d, uint16_t block, GolfExportTran
     w.number(golfHoleScore(r, s, hole), played);
     w.raw(",");
     w.number(golfPenaltyStrokesForHole(s, hole), played && d.penaltiesRecorded);
+    w.raw(",");
+    w.number(golfFairwayHit(s, hole) ? 1 : 0, d.fairwaysRecorded && played && (r.par[hole] == 4 || r.par[hole] == 5));
+    w.raw(",");
+    w.number(golfGreenInRegulation(r, s, hole) ? 1 : 0, played && r.par[hole] >= 3 && r.par[hole] <= 5);
     w.raw(",\"");
     // CSV event tokens are stable machine fields, independent of UI language.
     for (uint8_t i = 0; d.penaltiesRecorded && i < s.penaltyCount[hole]; ++i) {
@@ -377,9 +418,11 @@ void csvBlock(Writer& w, const GolfExportData& d, uint16_t block, GolfExportTran
     w.number(d.summary.strokes);
     w.raw(",");
     w.number(d.summary.hazards + 2 * d.summary.obs, d.penaltiesRecorded);
-    w.raw(",,");
+    w.raw(",,,,");  // empty fairway, gir, penalty_events
   }
   w.number(d.penaltiesRecorded);
+  w.raw(",");
+  w.number(d.fairwaysRecorded);
   w.raw(",");
   w.number(d.repaired);
   w.raw("\r\n");

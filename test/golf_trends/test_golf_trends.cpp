@@ -11,20 +11,27 @@ constexpr char HEADER[] =
     "date,course,holes,playerSlot,playerName,strokes,par,putts,in100,out100,hazards,obs,fairways,fairwayHoles,gir,"
     "girHoles,file\r\n";
 
+// A blank cell for an unrecorded FIR/GIR pair; a non-negative value fills it.
+std::string cell(const int value) { return value < 0 ? std::string() : std::to_string(value); }
+
 std::string row(const uint8_t holes, const uint16_t strokes, const uint16_t par, const uint16_t putts,
-                const uint16_t in100, const uint16_t out100, const uint8_t slot = 0, const char* name = "Noah") {
+                const uint16_t in100, const uint16_t out100, const uint8_t slot = 0, const char* name = "Noah",
+                const int fairways = -1, const int fairwayHoles = -1, const int gir = -1, const int girHoles = -1) {
   char output[GOLF_CSV_ROW_BUFFER_SIZE];
-  snprintf(output, sizeof(output), ",Course,%u,%u,%s,%u,%u,%u,%u,%u,0,0,,,,,round.json\r\n", holes, slot, name, strokes,
-           par, putts, in100, out100);
+  snprintf(output, sizeof(output), ",Course,%u,%u,%s,%u,%u,%u,%u,%u,0,0,%s,%s,%s,%s,round.json\r\n", holes, slot, name,
+           strokes, par, putts, in100, out100, cell(fairways).c_str(), cell(fairwayHoles).c_str(), cell(gir).c_str(),
+           cell(girHoles).c_str());
   return output;
 }
 
 // A round that recorded penalty data (real hazards/obs counts).
 std::string penaltyRow(const uint16_t strokes, const uint16_t par, const uint16_t putts, const uint16_t in100,
-                       const uint16_t out100, const uint16_t hazards, const uint16_t obs) {
+                       const uint16_t out100, const uint16_t hazards, const uint16_t obs, const int fairways = -1,
+                       const int fairwayHoles = -1, const int gir = -1, const int girHoles = -1) {
   char output[GOLF_CSV_ROW_BUFFER_SIZE];
-  snprintf(output, sizeof(output), ",Course,18,0,Noah,%u,%u,%u,%u,%u,%u,%u,,,,,round.json\r\n", strokes, par, putts,
-           in100, out100, hazards, obs);
+  snprintf(output, sizeof(output), ",Course,18,0,Noah,%u,%u,%u,%u,%u,%u,%u,%s,%s,%s,%s,round.json\r\n", strokes, par,
+           putts, in100, out100, hazards, obs, cell(fairways).c_str(), cell(fairwayHoles).c_str(), cell(gir).c_str(),
+           cell(girHoles).c_str());
   return output;
 }
 
@@ -192,4 +199,49 @@ TEST(GolfTrends, SelectedSlotNeverConsumesInterleavedPlayers) {
   EXPECT_EQ(guest.scoringAverageTenths, 1210u);
   EXPECT_EQ(noah.best, 80);
   EXPECT_EQ(guest.best, 120);
+}
+
+TEST(GolfTrends, FairwayAndGreenPercentagesFoldOverRecordedRounds) {
+  const GolfTrendStats stats = calculate(row(18, 80, 72, 30, 50, 30, 0, "Noah", 7, 14, 10, 18) +
+                                         row(18, 82, 72, 32, 52, 30, 0, "Noah", 9, 14, 8, 18));
+  EXPECT_TRUE(stats.showsFir);
+  EXPECT_TRUE(stats.showsGir);
+  EXPECT_EQ(stats.firRounds, 2);
+  EXPECT_EQ(stats.girRounds, 2);
+  EXPECT_EQ(stats.firPercentTenths, 571u);  // 16 hit / 28 eligible
+  EXPECT_EQ(stats.girPercentTenths, 500u);  // 18 / 36
+}
+
+TEST(GolfTrends, GreenInRegFoldsDerivedRoundsWhileFairwayNeedsTheRecord) {
+  const GolfTrendStats stats = calculate(
+      row(18, 88, 72, 34, 56, 32, 0, "Noah", -1, -1, 12, 18) + row(18, 90, 72, 35, 58, 32, 0, "Noah", -1, -1, 9, 18) +
+      row(18, 80, 72, 30, 50, 30, 0, "Noah", 8, 14, 10, 18) + row(18, 82, 72, 31, 52, 30, 0, "Noah", 6, 14, 6, 18));
+  EXPECT_EQ(stats.girRounds, 4);
+  EXPECT_EQ(stats.firRounds, 2);
+  EXPECT_TRUE(stats.showsGir);
+  EXPECT_TRUE(stats.showsFir);
+  EXPECT_EQ(stats.girPercentTenths, 513u);  // 37 / 72
+  EXPECT_EQ(stats.firPercentTenths, 500u);  // 14 / 28
+}
+
+TEST(GolfTrends, SingleFairwayRoundDoesNotShowFairwayPercentage) {
+  const GolfTrendStats stats = calculate(row(18, 80, 72, 30, 50, 30, 0, "Noah", 7, 14, 10, 18) +
+                                         row(18, 82, 72, 32, 52, 30, 0, "Noah", -1, -1, 8, 18));
+  EXPECT_EQ(stats.firRounds, 1);
+  EXPECT_FALSE(stats.showsFir);
+  EXPECT_EQ(stats.firPercentTenths, 0u);
+  EXPECT_EQ(stats.girRounds, 2);
+  EXPECT_TRUE(stats.showsGir);
+}
+
+TEST(GolfTrends, ParFreeRoundIsExcludedFromFairwayAndGreenPercentages) {
+  const std::string good =
+      row(18, 80, 72, 30, 50, 30, 0, "Noah", 7, 14, 9, 18) + row(18, 82, 72, 32, 52, 30, 0, "Noah", 9, 14, 9, 18);
+  const GolfTrendStats baseline = calculate(good);
+  const GolfTrendStats withParFree = calculate(good + row(18, 95, 0, 40, 60, 35, 0, "Noah", 0, 0, 0, 0));
+  EXPECT_EQ(withParFree.firRounds, baseline.firRounds);
+  EXPECT_EQ(withParFree.girRounds, baseline.girRounds);
+  EXPECT_EQ(withParFree.firPercentTenths, baseline.firPercentTenths);
+  EXPECT_EQ(withParFree.girPercentTenths, baseline.girPercentTenths);
+  EXPECT_EQ(withParFree.firRounds, 2);
 }

@@ -177,9 +177,10 @@ void GolfTrendsActivity::buildScreen(UiScreen& screen) {
   const int16_t gap = static_cast<int16_t>(metrics.verticalSpacing);
   screen.target().text(screen.takeTop(subtitleHeight, gap), state.subtitle, subtitleStyle);
 
-  const char* labels[MAX_ROWS] = {tr(STR_GOLF_SCORING_AVERAGE), tr(STR_GOLF_AVERAGE_TO_PAR), tr(STR_GOLF_BEST_WORST),
-                                  tr(STR_GOLF_PUTTS_PER_ROUND), tr(STR_GOLF_LONG_GAME),      tr(STR_GOLF_SHORT_GAME),
-                                  tr(STR_GOLF_PUTTING),         tr(STR_GOLF_PENALTIES)};
+  const char* labels[MAX_ROWS] = {
+      tr(STR_GOLF_SCORING_AVERAGE), tr(STR_GOLF_AVERAGE_TO_PAR), tr(STR_GOLF_BEST_WORST), tr(STR_GOLF_PUTTS_PER_ROUND),
+      tr(STR_GOLF_LONG_GAME),       tr(STR_GOLF_SHORT_GAME),     tr(STR_GOLF_PUTTING),    tr(STR_GOLF_PENALTIES),
+      tr(STR_GOLF_FAIRWAYS_IN_REG), tr(STR_GOLF_GREENS_IN_REG)};
   const uint32_t averages[MAX_ROWS] = {trends.scoringAverageTenths,
                                        0,
                                        0,
@@ -187,26 +188,48 @@ void GolfTrendsActivity::buildScreen(UiScreen& screen) {
                                        trends.longAverageTenths,
                                        trends.shortAverageTenths,
                                        trends.puttingAverageTenths,
-                                       trends.penaltyStrokesAverageTenths};
-  const uint32_t percentages[4] = {trends.longPercentTenths, trends.shortPercentTenths, trends.puttingPercentTenths,
-                                   trends.penaltyPercentTenths};
-  uint8_t rowCount = MAX_ROWS;
-  if (!trends.showsToPar) --rowCount;
-  if (!trends.showsPenalties) rowCount = static_cast<uint8_t>(rowCount - 4);
+                                       trends.penaltyStrokesAverageTenths,
+                                       0,
+                                       0};
+  // Indexed by dataRow; only rows 4..9 carry a percentage.
+  const uint32_t percentages[MAX_ROWS] = {0,
+                                          0,
+                                          0,
+                                          0,
+                                          trends.longPercentTenths,
+                                          trends.shortPercentTenths,
+                                          trends.puttingPercentTenths,
+                                          trends.penaltyPercentTenths,
+                                          trends.firPercentTenths,
+                                          trends.girPercentTenths};
+
+  // The four penalty rows (4..7) are gated as a block; the to-par row (1) and
+  // the FIR/GIR rows (8, 9) each gate independently. Build the visible dataRow
+  // list explicitly rather than juggling row-count arithmetic.
+  uint8_t visibleRows[MAX_ROWS];
+  uint8_t rowCount = 0;
+  for (uint8_t dataRow = 0; dataRow < MAX_ROWS; ++dataRow) {
+    const bool suppressed = (dataRow == 1 && !trends.showsToPar) ||
+                            (dataRow >= 4 && dataRow <= 7 && !trends.showsPenalties) ||
+                            (dataRow == 8 && !trends.showsFir) || (dataRow == 9 && !trends.showsGir);
+    if (!suppressed) visibleRows[rowCount++] = dataRow;
+  }
+
   for (uint8_t row = 0; row < rowCount; ++row) {
-    const uint8_t dataRow = !trends.showsToPar && row > 0 ? static_cast<uint8_t>(row + 1) : row;
+    const uint8_t dataRow = visibleRows[row];
     snprintf(cells[row][0], sizeof(cells[row][0]), "%s", labels[dataRow]);
+    cells[row][1][0] = '\0';
     cells[row][2][0] = '\0';
     if (dataRow == 1) {
       formatSignedTenths(trends.toParAverageTenths, cells[row][1], sizeof(cells[row][1]));
     } else if (dataRow == 2) {
       snprintf(cells[row][1], sizeof(cells[row][1]), tr(STR_GOLF_BEST_WORST_FORMAT), static_cast<unsigned>(trends.best),
                static_cast<unsigned>(trends.worst));
-    } else {
+    } else if (dataRow < 8) {
       formatTenths(averages[dataRow], cells[row][1], sizeof(cells[row][1]));
     }
-    if (dataRow >= 4 && dataRow <= 7) {
-      formatPercent(percentages[dataRow - 4], cells[row][2], sizeof(cells[row][2]));
+    if (dataRow >= 4) {
+      formatPercent(percentages[dataRow], cells[row][2], sizeof(cells[row][2]));
     }
   }
 

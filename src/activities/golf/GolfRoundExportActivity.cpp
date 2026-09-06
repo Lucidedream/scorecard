@@ -43,7 +43,13 @@ GolfRoundExportActivity::GolfRoundExportActivity(GfxRenderer& renderer, MappedIn
   summary.out100 = golfLongTotal(round, player.score);
   summary.hazards = golfHazardsForRound(player.score, round.holeCount);
   summary.obs = golfObsForRound(player.score, round.holeCount);
-  summary.penaltiesRecorded = false;  // If archive reload fails, old provenance is unknown.
+  summary.fairways = golfFairwaysHit(round, player.score);
+  summary.fairwayHoles = golfFairwaysEligible(round, player.score);
+  summary.gir = golfGreensInRegulation(round, player.score);
+  summary.girHoles = golfGreensEligible(round, player.score);
+  summary.penaltiesRecorded = false;        // If archive reload fails, old provenance is unknown.
+  summary.fairwaysRecorded = false;         // Same: the fairway record's provenance is unknown on reload failure.
+  summary.girRecorded = golfHasPar(round);  // GIR is derived, so it is correct for the in-memory round.
 }
 
 GolfRoundExportActivity::GolfRoundExportActivity(GfxRenderer& renderer, MappedInputManager& input,
@@ -53,6 +59,7 @@ GolfRoundExportActivity::GolfRoundExportActivity(GfxRenderer& renderer, MappedIn
   data.playerSlot = summary.playerSlot;
   data.detailed = false;
   data.penaltiesRecorded = summary.penaltiesRecorded;
+  data.fairwaysRecorded = summary.fairwaysRecorded;
   if (filename) snprintf(archiveFilename, sizeof(archiveFilename), "%s", filename);
 }
 
@@ -68,6 +75,7 @@ void GolfRoundExportActivity::onEnter() {
     snprintf(archivePath, sizeof(archivePath), "/golf/rounds/%s", archiveFilename);
     data.detailed = safe && loadGolfRoundFile(archivePath, data.round, &info);
     data.penaltiesRecorded = data.detailed ? info.penaltiesRecorded : data.summary.penaltiesRecorded;
+    data.fairwaysRecorded = data.detailed ? info.fairwaysRecorded : data.summary.fairwaysRecorded;
     data.repaired = data.detailed && info.repaired;
   }
   if (WiFi.getMode() != WIFI_MODE_NULL) {

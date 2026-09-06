@@ -54,6 +54,14 @@ enum class GolfExportLabel : uint8_t {
   Worst,
   Blue,
   White,
+  Fairway,
+  Gir,
+  FairwaysHit,
+  FairwayHoles,
+  GreensInReg,
+  GirHoles,
+  FirPct,
+  GirPct,
   Count
 };
 using GolfExportTranslate = const char* (*)(GolfExportLabel);
@@ -65,6 +73,7 @@ struct GolfExportData {
   bool detailed = true;
   bool archived = true;
   bool penaltiesRecorded = true;
+  bool fairwaysRecorded = true;
   bool repaired = false;
 };
 

@@ -50,6 +50,10 @@ GolfTrendStats golfCalculateTrends(const GolfHistoryReader& history) {
   uint16_t worst = 0;
   uint32_t hazards = 0;
   uint32_t obs = 0;
+  uint32_t firMade = 0;
+  uint32_t firHoles = 0;
+  uint32_t girMade = 0;
+  uint32_t girHoles = 0;
 
   for (uint8_t index = 0; index < history.count(); ++index) {
     const GolfHistoryEntry& entry = history.newest(index);
@@ -72,6 +76,16 @@ GolfTrendStats golfCalculateTrends(const GolfHistoryReader& history) {
       mixPutting += entry.putts;
       hazards += entry.hazards;
       obs += entry.obs;
+    }
+    if (entry.fairwaysRecorded && entry.fairwayHoles > 0) {
+      ++result.firRounds;
+      firMade += entry.fairways;
+      firHoles += entry.fairwayHoles;
+    }
+    if (entry.girRecorded && entry.girHoles > 0) {
+      ++result.girRounds;
+      girMade += entry.gir;
+      girHoles += entry.girHoles;
     }
   }
 
@@ -100,6 +114,11 @@ GolfTrendStats golfCalculateTrends(const GolfHistoryReader& history) {
     result.puttingPercentTenths = percentages[2];
     result.penaltyPercentTenths = percentages[3];
   }
+
+  result.showsFir = result.firRounds >= 2;
+  result.showsGir = result.girRounds >= 2;
+  if (result.showsFir) result.firPercentTenths = firHoles ? 1000u * firMade / firHoles : 0;
+  if (result.showsGir) result.girPercentTenths = girHoles ? 1000u * girMade / girHoles : 0;
   return result;
 }
 

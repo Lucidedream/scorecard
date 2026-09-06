@@ -28,6 +28,16 @@ struct GolfTrendStats {
   uint32_t obsAverageTenths = 0;
   uint32_t penaltyStrokesAverageTenths = 0;
 
+  // FIR and GIR fold independently of the penalty mix: a v4-era round carries a
+  // derived GIR but never a fairway record, so each has its own round count and
+  // "shows" gate (>= 2 qualifying 18-hole rounds).
+  uint32_t firPercentTenths = 0;
+  uint32_t girPercentTenths = 0;
+  uint8_t firRounds = 0;
+  uint8_t girRounds = 0;
+  bool showsFir = false;
+  bool showsGir = false;
+
   bool enoughRounds() const { return rounds >= 2; }
   bool enoughMixRounds() const { return penaltyRounds >= 2; }
 };

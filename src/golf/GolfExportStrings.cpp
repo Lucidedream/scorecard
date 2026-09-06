@@ -97,6 +97,22 @@ const char* golfExportTranslate(const GolfExportLabel label) {
       return tr(STR_GOLF_EXPORT_BLUE);
     case GolfExportLabel::White:
       return tr(STR_GOLF_EXPORT_WHITE);
+    case GolfExportLabel::Fairway:
+      return tr(STR_GOLF_EXPORT_FAIRWAY);
+    case GolfExportLabel::Gir:
+      return tr(STR_GOLF_EXPORT_GIR);
+    case GolfExportLabel::FairwaysHit:
+      return tr(STR_GOLF_EXPORT_FAIRWAYS_HIT);
+    case GolfExportLabel::FairwayHoles:
+      return tr(STR_GOLF_EXPORT_FAIRWAY_HOLES);
+    case GolfExportLabel::GreensInReg:
+      return tr(STR_GOLF_EXPORT_GREENS_IN_REG);
+    case GolfExportLabel::GirHoles:
+      return tr(STR_GOLF_EXPORT_GIR_HOLES);
+    case GolfExportLabel::FirPct:
+      return tr(STR_GOLF_EXPORT_FIR_PCT);
+    case GolfExportLabel::GirPct:
+      return tr(STR_GOLF_EXPORT_GIR_PCT);
     default:
       return "";
   }

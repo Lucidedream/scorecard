@@ -120,6 +120,56 @@ TEST_F(GolfExportTest, SummaryDoesNotInventHoleDetails) {
   EXPECT_NE(json.find("\"holes\":[\n]}"), std::string::npos);
 }
 
+TEST_F(GolfExportTest, EmitsFairwayAndGreenInRegulationForV5DetailedRound) {
+  golfSetFairwayHit(data.round.players[0].score, 0, true);
+  const auto json = render(GolfExportFormat::Json);
+  EXPECT_NE(json.find("\"fairways_recorded\":\"recorded\""), std::string::npos);
+  EXPECT_NE(json.find("\"fairway\":1,"), std::string::npos);
+  EXPECT_NE(json.find("\"fairways_hit\":1,"), std::string::npos);
+  EXPECT_NE(json.find("\"fairway_holes\":1,"), std::string::npos);
+  EXPECT_NE(json.find("\"greens_in_reg\":0,"), std::string::npos);
+  EXPECT_NE(json.find("\"gir_holes\":1,"), std::string::npos);
+  const auto csv = render(GolfExportFormat::Csv);
+  EXPECT_NE(csv.find(",penalty_strokes,fairway,gir,penalty_events,penalties_recorded,fairways_recorded,recovered"),
+            std::string::npos);
+}
+
+TEST_F(GolfExportTest, Par3IsExcludedFromFairwayHolesButParFreeHoleDropsGir) {
+  data.round.par[0] = 3;  // entered par 3: not a fairway hole, still GIR-eligible
+  const auto json = render(GolfExportFormat::Json);
+  EXPECT_NE(json.find("\"fairway_holes\":0,"), std::string::npos);           // the par 3 does not count
+  EXPECT_NE(json.find("\"gir_holes\":1,"), std::string::npos);               // but it is GIR-eligible
+  EXPECT_NE(json.find("\"fairway\":null,\n\"gir\":0,"), std::string::npos);  // entered par 3 -> fairway null
+
+  for (auto& par : data.round.par) par = 0;  // par-free round: GIR metrics unavailable
+  const auto parFree = render(GolfExportFormat::Json);
+  EXPECT_NE(parFree.find("\"greens_in_reg\":null"), std::string::npos);
+  EXPECT_NE(parFree.find("\"gir_holes\":null"), std::string::npos);
+}
+
+TEST_F(GolfExportTest, SummaryOnlyOmitsFairwayButKeepsGreenInRegulation) {
+  data.detailed = false;
+  data.fairwaysRecorded = false;
+  data.summary.holes = 18;
+  data.summary.strokes = 90;
+  data.summary.par = 72;
+  data.summary.in100 = 40;
+  data.summary.putts = 30;
+  data.summary.fairways = 6;
+  data.summary.fairwayHoles = 13;
+  data.summary.gir = 8;
+  data.summary.girHoles = 18;
+  data.summary.girRecorded = true;
+  strcpy(data.summary.course, "Archive");
+  strcpy(data.summary.playerName, "Selected");
+  const auto json = render(GolfExportFormat::Json);
+  EXPECT_NE(json.find("\"fairways_recorded\":\"unavailable\""), std::string::npos);
+  EXPECT_NE(json.find("\"fairways_hit\":null"), std::string::npos);
+  EXPECT_NE(json.find("\"fairway_holes\":null"), std::string::npos);
+  EXPECT_NE(json.find("\"greens_in_reg\":8,"), std::string::npos);
+  EXPECT_NE(json.find("\"gir_holes\":18,"), std::string::npos);
+}
+
 TEST_F(GolfExportTest, EscapesNamesForJsonHtmlAndSpreadsheets) {
   strcpy(data.round.courseName, "=SUM(1,2)\"<script>&");
   EXPECT_NE(render(GolfExportFormat::Html).find("&lt;script&gt;&amp;"), std::string::npos);

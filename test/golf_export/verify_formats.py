@@ -15,11 +15,28 @@ for kind in ('detailed', 'summary'):
     assert data['played_par'] == 4
     assert data['penalty_strokes'] == 2
     assert data['putts'] == 2 and data['in100'] == 3
+    if kind == 'detailed':
+        assert data['fairways_recorded'] == 'recorded'
+        assert data['fairways_hit'] == 1 and data['fairway_holes'] == 1
+        assert data['greens_in_reg'] == 0 and data['gir_holes'] == 1
+        assert data['holes'][0]['fairway'] == 1 and data['holes'][0]['gir'] == 0
+        assert data['holes'][1]['fairway'] is None and data['holes'][1]['gir'] is None
+    else:
+        assert data['fairways_recorded'] == 'unavailable'
+        assert data['fairways_hit'] is None and data['fairway_holes'] is None
+        assert data['greens_in_reg'] == 5 and data['gir_holes'] == 9
     assert data['course'] == '=Golf, "山" <&>'
     rows = list(csv.DictReader(io.StringIO(report(1))))
     assert all(None not in row and None not in row.values() for row in rows)
     assert sum(int(row['gross_strokes'] or 0) for row in rows) == data['gross_strokes']
     assert int(rows[0]['par']) == 4
+    if kind == 'detailed':
+        assert rows[0]['fairway'] == '1' and rows[0]['gir'] == '0'
+        assert rows[1]['fairway'] == '' and rows[1]['gir'] == ''
+        assert all(row['fairways_recorded'] == '1' for row in rows)
+    else:
+        assert rows[0]['fairway'] == '' and rows[0]['gir'] == ''
+        assert rows[0]['fairways_recorded'] == '0'
     assert rows[0]['course'] == "'" + data['course']
     assert 'Gross strokes: 8' in report(0)
     assert report(0).count('Inside 100 includes putts.') == 1
