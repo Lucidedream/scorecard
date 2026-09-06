@@ -227,6 +227,11 @@ class BaseTheme {
   virtual void fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage) const;
   virtual void drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                const char* btn4) const;
+  // Two-cell footer: only the two front buttons a modal sheet actually uses
+  // (Back, Confirm), with no dead hint group where cells 3-4 would be
+  // (CONTRACTS-V2 §31.2). Concrete themes that draw a fixed right-hand hint
+  // group override this to omit it.
+  virtual void drawButtonHintsTwo(GfxRenderer& renderer, const char* btn1, const char* btn2) const;
   // Shared by every theme's drawButtonHints(): centres a hint label in its box,
   // wrapping to two lines rather than overflowing when it's too wide to fit.
   static void drawHintLabel(GfxRenderer& renderer, int fontId, const char* label, int x, int boxWidth, int boxTop,

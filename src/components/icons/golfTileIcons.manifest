@@ -2,7 +2,7 @@
 #   python3 <freeink-sdk>/libs/assets/Icons/tools/gen_icons.py \
 #     --manifest src/components/icons/golfTileIcons.manifest \
 #     --svgdir <lucide checkout>/icons \
-#     --sizes 24,32 --out src/components/icons/golfTileIcons.h
+#     --sizes 16,24,32 --out src/components/icons/golfTileIcons.h
 #   then PATH=/opt/homebrew/opt/llvm/bin:$PATH ./bin/clang-format-fix -g
 #
 # Golf (fork) main-menu / round-menu tile icons. Kept out of the upstream
@@ -15,3 +15,4 @@ scroll-text = scroll-text
 trending-up = trending-up
 lightbulb = lightbulb
 map = map
+circle-check = circle-check

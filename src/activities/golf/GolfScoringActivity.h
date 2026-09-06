@@ -34,11 +34,24 @@ class GolfScoringActivity final : public Activity, protected UiAppHost {
   mutable char statusPlayerLabel[GOLF_PLAYER_LABEL_CAPACITY]{};
   mutable char statusTime[9]{};
 
-  // Penalty picker (CONTRACTS-V2 §12). While pickerOpen the scoring screen
-  // still renders in full and the sheet draws over it.
+  // Mark picker (CONTRACTS-V2 §12, §31.2). While pickerOpen the scoring screen
+  // still renders in full and the sheet draws over it. pickerRow is the
+  // highlighted row: 0 = Hazard, 1 = OB, 2 = Fairway hit (only present on the
+  // score-zone field of a par 4/5 or a par-free course).
   bool pickerOpen = false;
-  GolfPenaltyKind pickerKind = GolfPenaltyKind::Hazard;
+  uint8_t pickerRow = 0;
   bool pickerHoleFull = false;
+
+  static constexpr uint8_t PICKER_ROW_FAIRWAY = 2;
+
+  // The Mark sheet opens on every field except Putts (§31.2).
+  bool markSheetOpensOnFocusedField() const;
+  // The Fairway hit row shows on the score-zone field for a par 4/5, or on
+  // every score-zone hole when the course has no usable par data (§31.2).
+  bool fairwayRowAvailable() const;
+  uint8_t pickerRowCount() const;
+  GolfPenaltyKind pickerKindForRow() const;
+  void toggleFairwayHit();
 
   // Seeds the current player's current hole to its par preview if unentered.
   // Mutation paths call this inside their RenderLock before changing the same

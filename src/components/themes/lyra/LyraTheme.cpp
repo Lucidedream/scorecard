@@ -148,6 +148,38 @@ void LyraTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   renderer.setOrientation(orig_orientation);
 }
 
+void LyraTheme::drawButtonHintsTwo(GfxRenderer& renderer, const char* btn1, const char* btn2) const {
+  if (gpio.hasTouch()) {
+    return;
+  }
+
+  const GfxRenderer::Orientation orig_orientation = renderer.getOrientation();
+  renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+
+  const int pageHeight = renderer.getScreenHeight();
+  constexpr int buttonWidth = 80;
+  constexpr int buttonHeight = LyraMetrics::values.buttonHintsHeight;
+  constexpr int buttonY = LyraMetrics::values.buttonHintsHeight;
+  constexpr int textYOffset = 7;
+  constexpr int narrowButtonPositions[] = {58, 146, 254, 342};
+  constexpr int wideButtonPositions[] = {65, 157, 291, 383};
+  const int* buttonPositions = renderer.getScreenWidth() >= 528 ? wideButtonPositions : narrowButtonPositions;
+  // Only the two cells the sheet uses: no small stub buttons where cells 3-4
+  // would be (CONTRACTS-V2 §31.2).
+  const char* labels[] = {btn1, btn2};
+
+  for (int i = 0; i < 2; i++) {
+    if (labels[i] == nullptr || labels[i][0] == '\0') continue;
+    const int x = buttonPositions[i];
+    renderer.fillRoundedRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, cornerRadius, Color::White);
+    renderer.drawRoundedRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, 1, cornerRadius, true, true, false,
+                             false, true);
+    drawHintLabel(renderer, SMALL_FONT_ID, labels[i], x, buttonWidth, pageHeight - buttonY, buttonHeight, textYOffset);
+  }
+
+  renderer.setOrientation(orig_orientation);
+}
+
 void LyraTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const {
   if (gpio.hasTouch()) {
     return;

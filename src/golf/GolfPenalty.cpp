@@ -47,7 +47,9 @@ bool golfPenaltyEventAt(const GolfPlayerScore& score, const uint8_t hole, const 
 GolfPenaltyMutationStatus golfAppendPenalty(GolfPlayerScore& score, const uint8_t hole, const GolfField field,
                                             const GolfPenaltyKind kind) {
   if (!validHole(hole)) return GolfPenaltyMutationStatus::InvalidHole;
-  if (static_cast<uint8_t>(field) > static_cast<uint8_t>(GolfField::Out100) ||
+  // Putts takes no new penalty: you cannot hit a hazard or go OB with a putt
+  // (CONTRACTS-V2 §31.2). Pre-existing Putts markers still read and remove.
+  if (field == GolfField::Putts || static_cast<uint8_t>(field) > static_cast<uint8_t>(GolfField::Out100) ||
       static_cast<uint8_t>(kind) > static_cast<uint8_t>(GolfPenaltyKind::Ob)) {
     return GolfPenaltyMutationStatus::InvalidEvent;
   }

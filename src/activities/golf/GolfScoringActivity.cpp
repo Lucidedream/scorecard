@@ -20,6 +20,7 @@
 #include "GolfRoundMenuActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
+#include "components/icons/golfTileIcons.h"
 #include "fontIds.h"
 #include "golf/GolfPenalty.h"
 #include "golf/GolfRoundStore.h"
@@ -38,14 +39,34 @@ constexpr int MARKER_FONT_ID = UI_10_FONT_ID;
 constexpr int MARKER_GUTTER = 26;        // gap between the number and the first marker
 constexpr int MARKER_RIGHT_MARGIN = 20;  // right inset for the marker run
 
-// Penalty picker sheet, anchored to the bottom edge over the scoring screen.
+// Mark picker sheet, anchored to the bottom edge over the scoring screen.
 constexpr int SHEET_BORDER = 3;
 constexpr int SHEET_TITLE_H = 44;
 constexpr int SHEET_NOTICE_H = 32;   // "hole is full" strip, shown only at the cap
-constexpr int SHEET_OPTION_H = 104;  // each of the two option rows
+constexpr int SHEET_OPTION_H = 104;  // each option row
 constexpr int SHEET_PAD_X = 20;
-constexpr int SHEET_TAG_COL_W = 72;  // centred "H" / "OB" column
+constexpr int SHEET_TAG_COL_W = 72;  // centred "H" / "OB" / icon column
 constexpr int SHEET_TEXT_X = 92;     // title / subtitle left edge
+
+// circle-check marker for a recorded fairway hit (§31.3): 16 px beside the
+// score-zone number, 24 px in the sheet's Fairway hit row.
+constexpr int FAIRWAY_ICON_PX = 16;
+constexpr int FAIRWAY_ICON_SHEET_PX = 24;
+constexpr int FAIRWAY_ICON_GUTTER = 6;  // gap between the icon and the marker run
+
+// Plots a freeink::Icon (row-major, MSB-first, bit 0 = ink) through drawPixel so
+// the current orientation transform applies -- the same contract as the home
+// tiles' fui bitmap path. ink=false paints the icon in the focused row's
+// inverse colour, matching the marker text.
+void blitIcon(const GfxRenderer& renderer, const freeink::Icon& icon, const int x, const int y, const bool ink) {
+  const int rowBytes = (icon.w + 7) / 8;
+  for (int row = 0; row < icon.h; ++row) {
+    for (int col = 0; col < icon.w; ++col) {
+      const uint8_t byte = icon.bits[row * rowBytes + (col >> 3)];
+      if (((byte >> (7 - (col & 7))) & 1) == 0) renderer.drawPixel(x + col, y + row, ink);
+    }
+  }
+}
 
 // A Confirm hold this long opens the picker when Confirm is the field-cycle
 // button (i.e. Power cannot cycle, §12.6).
@@ -172,7 +193,7 @@ void GolfScoringActivity::resetTurnState() {
   focusedField = GolfField::Putts;
   carryNotice = nullptr;
   pickerOpen = false;
-  pickerKind = GolfPenaltyKind::Hazard;
+  pickerRow = 0;
   pickerHoleFull = false;
   lastRepeatAt = 0;
 }
@@ -189,6 +210,26 @@ bool GolfScoringActivity::ensureHoleSeeded() {
   GolfRound& round = GOLF_ROUND_STORE.getRound();
   GolfPlayerScore& score = round.players[round.currentPlayer].score;
   return seedGolfHoleAtPar(score, round.currentHole, round.par[round.currentHole]);
+}
+
+bool GolfScoringActivity::markSheetOpensOnFocusedField() const {
+  // You cannot hit a hazard or go OB with a putt, and Fairway hit is a
+  // score-zone datum -- nothing to mark on Putts (§31.2).
+  return focusedField != GolfField::Putts;
+}
+
+bool GolfScoringActivity::fairwayRowAvailable() const {
+  if (focusedField != GolfField::Out100) return false;
+  const GolfRound& round = GOLF_ROUND_STORE.getRound();
+  if (!golfHasPar(round)) return true;
+  const uint8_t par = round.par[round.currentHole];
+  return par == 4 || par == 5;
+}
+
+uint8_t GolfScoringActivity::pickerRowCount() const { return fairwayRowAvailable() ? 3 : 2; }
+
+GolfPenaltyKind GolfScoringActivity::pickerKindForRow() const {
+  return pickerRow == 1 ? GolfPenaltyKind::Ob : GolfPenaltyKind::Hazard;
 }
 
 void GolfScoringActivity::mutateCounter(const bool increment) {
@@ -261,7 +302,7 @@ bool GolfScoringActivity::confirmFromFrontButton() const {
 void GolfScoringActivity::openPenaltyPicker() {
   {
     RenderLock lock(*this);
-    pickerKind = GolfPenaltyKind::Hazard;
+    pickerRow = 0;
     pickerHoleFull = false;
     pickerOpen = true;
   }
@@ -285,26 +326,33 @@ void GolfScoringActivity::handlePickerInput() {
     closePenaltyPicker();
     return;
   }
-  if (mappedInput.wasPressed(MappedInputManager::Button::Up) && pickerKind != GolfPenaltyKind::Hazard) {
+  // Up / Down move the highlight within the available rows (2 or 3). Found by
+  // feel -- no footer cell (§13.2 / §13.3).
+  const uint8_t rowCount = pickerRowCount();
+  if (mappedInput.wasPressed(MappedInputManager::Button::Up) && pickerRow > 0) {
     {
       RenderLock lock(*this);
-      pickerKind = GolfPenaltyKind::Hazard;
+      --pickerRow;
       pickerHoleFull = false;
     }
     requestUpdate();
     return;
   }
-  if (mappedInput.wasPressed(MappedInputManager::Button::Down) && pickerKind != GolfPenaltyKind::Ob) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Down) && pickerRow + 1 < rowCount) {
     {
       RenderLock lock(*this);
-      pickerKind = GolfPenaltyKind::Ob;
+      ++pickerRow;
       pickerHoleFull = false;
     }
     requestUpdate();
     return;
   }
   if (confirmFromFrontButton()) {
-    applyPenaltyPick();
+    if (pickerRow == PICKER_ROW_FAIRWAY) {
+      toggleFairwayHit();
+    } else {
+      applyPenaltyPick();
+    }
     return;
   }
 }
@@ -318,7 +366,7 @@ void GolfScoringActivity::applyPenaltyPick() {
     GolfRound& round = GOLF_ROUND_STORE.getRound();
     GolfPlayerScore& score = round.players[round.currentPlayer].score;
     seeded = ensureHoleSeeded();
-    status = golfAppendPenalty(score, round.currentHole, focusedField, pickerKind);
+    status = golfAppendPenalty(score, round.currentHole, focusedField, pickerKindForRow());
   }
   if (seeded || status == GolfPenaltyMutationStatus::Changed) markDirtyForIdle();
   switch (status) {
@@ -339,6 +387,21 @@ void GolfScoringActivity::applyPenaltyPick() {
       closePenaltyPicker();
       break;
   }
+}
+
+void GolfScoringActivity::toggleFairwayHit() {
+  if (rejectArchivedMutation()) return;
+  // A checkbox, not an add action (§31.2): flip the hole's bit, no counter
+  // moves, no cap. Seed first, exactly as every mutation path must (§13.1).
+  {
+    RenderLock lock(*this);
+    GolfRound& round = GOLF_ROUND_STORE.getRound();
+    GolfPlayerScore& score = round.players[round.currentPlayer].score;
+    ensureHoleSeeded();
+    golfSetFairwayHit(score, round.currentHole, !golfFairwayHit(score, round.currentHole));
+  }
+  markDirtyForIdle();
+  closePenaltyPicker();
 }
 
 void GolfScoringActivity::handleConfirm() {
@@ -492,12 +555,14 @@ void GolfScoringActivity::loop() {
       return;
     }
     if (confirmFromFrontButton()) {
-      openPenaltyPicker();
+      // No-op on Putts: the sheet has nothing to offer there (§31.2). Power
+      // still cycles and the rocker still counts, so §12.6 holds.
+      if (markSheetOpensOnFocusedField()) openPenaltyPicker();
       return;
     }
   } else {
     if (mappedInput.wasLongPressed(MappedInputManager::Button::Confirm, PICKER_LONGPRESS_MS)) {
-      openPenaltyPicker();
+      if (markSheetOpensOnFocusedField()) openPenaltyPicker();
       return;
     }
     if (confirmFromFrontButton()) {
@@ -658,16 +723,29 @@ void GolfScoringActivity::drawCounters(const golfui::ScoringLayout& layout) cons
     golfDrawLargeNumber(renderer, rect.x + rect.width / 2, rect.y + (rect.height - digitHeight) / 2 + 12, digitHeight,
                         display.counters[index], !inverse, display.seeded);
 
+    // The circle-check icon shares the marker run on the score-zone field,
+    // sitting left of any H / OB letters -- good news first, and it is the tee
+    // shot (§31.3). Its fixed slot is reserved out of the marker budget.
+    const bool fairway = index == 2 && golfFairwayHit(score, hole);
+    const int iconSlot = fairway ? FAIRWAY_ICON_PX + FAIRWAY_ICON_GUTTER : 0;
+    const int markerLine = rect.y + (rect.height - renderer.getLineHeight(MARKER_FONT_ID)) / 2;
+    const int runRight = rect.x + rect.width - MARKER_RIGHT_MARGIN;
     const int markerLeft = rect.x + rect.width / 2 + digitHeight + MARKER_GUTTER;
-    const int markerMaxWidth = rect.x + rect.width - MARKER_RIGHT_MARGIN - markerLeft;
+    const int markerMaxWidth = runRight - markerLeft - iconSlot;
+    int markerTextLeft = runRight;
     if (markerMaxWidth > 0) {
       char markers[48];
       const int markerWidth = formatHoleMarkers(score, hole, index, markerMaxWidth, markers, sizeof(markers));
       if (markerWidth > 0) {
-        renderer.drawText(MARKER_FONT_ID, rect.x + rect.width - MARKER_RIGHT_MARGIN - markerWidth,
-                          rect.y + (rect.height - renderer.getLineHeight(MARKER_FONT_ID)) / 2, markers, !inverse,
-                          EpdFontFamily::BOLD);
+        markerTextLeft = runRight - markerWidth;
+        renderer.drawText(MARKER_FONT_ID, markerTextLeft, markerLine, markers, !inverse, EpdFontFamily::BOLD);
       }
+    }
+    if (fairway) {
+      const int iconRight = markerTextLeft < runRight ? markerTextLeft - FAIRWAY_ICON_GUTTER : runRight;
+      const int opticalCenter = markerLine + renderer.getTextHeight(MARKER_FONT_ID) / 2;
+      blitIcon(renderer, icon_circle_check_16, iconRight - FAIRWAY_ICON_PX,
+               opticalCenter - icon_circle_check_16.opticalCenterY, !inverse);
     }
 
     renderer.drawLine(rect.x, rect.y + rect.height - 1, rect.x + rect.width - 1, rect.y + rect.height - 1, !inverse);
@@ -771,15 +849,23 @@ void GolfScoringActivity::drawNineStrip(const golfui::ScoringLayout& layout) con
 }
 
 void GolfScoringActivity::drawFooter() const {
-  const auto labels = mappedInput.mapLabels(tr(STR_GOLF_FOOTER_MENU),
-                                            powerCyclesField() ? tr(STR_GOLF_PENALTY) : tr(STR_GOLF_FOOTER_FIELD),
-                                            tr(STR_GOLF_FOOTER_PREVIOUS), tr(STR_GOLF_FOOTER_NEXT));
+  // Cell 2 (Confirm): FIELD when Power cannot cycle (Confirm carries that role);
+  // otherwise MARK where the Mark sheet can open, and blank on Putts (§31.2).
+  const char* cell2 = tr(STR_GOLF_FOOTER_FIELD);
+  if (powerCyclesField()) cell2 = markSheetOpensOnFocusedField() ? tr(STR_GOLF_MARK) : "";
+  const auto labels =
+      mappedInput.mapLabels(tr(STR_GOLF_FOOTER_MENU), cell2, tr(STR_GOLF_FOOTER_PREVIOUS), tr(STR_GOLF_FOOTER_NEXT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void GolfScoringActivity::drawPenaltyPicker(const freeink::ui::Rect safe) const {
+  const GolfRound& round = GOLF_ROUND_STORE.getRound();
+  const GolfPlayerScore& score = round.players[round.currentPlayer].score;
+  const uint8_t hole = round.currentHole;
+  const int rowCount = pickerRowCount();  // 2 (Hazard, OB) or 3 (+ Fairway hit)
+
   const int noticeHeight = pickerHoleFull ? SHEET_NOTICE_H : 0;
-  const int desiredHeight = SHEET_TITLE_H + noticeHeight + SHEET_OPTION_H * 2;
+  const int desiredHeight = SHEET_TITLE_H + noticeHeight + SHEET_OPTION_H * rowCount;
   const int sheetHeight = golfui::clampValue(desiredHeight, 0, safe.height);
   const int sheetTop = safe.y + safe.height - sheetHeight;
   const int titleHeight = golfui::clampValue(SHEET_TITLE_H, 0, sheetHeight);
@@ -792,7 +878,7 @@ void GolfScoringActivity::drawPenaltyPicker(const freeink::ui::Rect safe) const 
 
   int y = sheetTop + golfui::minValue(SHEET_BORDER, titleHeight);
   renderer.drawText(UI_10_FONT_ID, safe.x + SHEET_PAD_X, y + (titleHeight - renderer.getLineHeight(UI_10_FONT_ID)) / 2,
-                    tr(STR_GOLF_ADD_PENALTY), true, EpdFontFamily::BOLD);
+                    tr(STR_GOLF_MARK_SHEET_TITLE), true, EpdFontFamily::BOLD);
   y = sheetTop + titleHeight;
   renderer.drawLine(safe.x, y - 1, safe.x + safe.width - 1, y - 1, true);
 
@@ -804,30 +890,56 @@ void GolfScoringActivity::drawPenaltyPicker(const freeink::ui::Rect safe) const 
     y += appliedNotice;
   }
 
-  for (int option = 0; option < 2; ++option) {
-    const int rowTop = y + static_cast<int32_t>(optionAreaHeight) * option / 2;
-    const int rowBottom = y + static_cast<int32_t>(optionAreaHeight) * (option + 1) / 2;
+  const int tagColumn = golfui::minValue(SHEET_TAG_COL_W, static_cast<int16_t>(safe.width / 4));
+  const int textX = safe.x + golfui::minValue(SHEET_TEXT_X, static_cast<int16_t>(safe.width / 3));
+  const int nameHeight = renderer.getLineHeight(UI_12_FONT_ID);
+  const int costHeight = renderer.getLineHeight(UI_10_FONT_ID);
+
+  for (int option = 0; option < rowCount; ++option) {
+    const int rowTop = y + static_cast<int32_t>(optionAreaHeight) * option / rowCount;
+    const int rowBottom = y + static_cast<int32_t>(optionAreaHeight) * (option + 1) / rowCount;
     const int rowHeight = rowBottom - rowTop;
-    const bool selected = (option == 0) == (pickerKind == GolfPenaltyKind::Hazard);
+    const bool selected = option == pickerRow;
     if (selected) renderer.fillRect(safe.x, rowTop, safe.width, rowHeight, true);
     const bool ink = !selected;
-    const char* tag = option == 0 ? tr(STR_GOLF_HAZARD_TAG) : tr(STR_GOLF_OUT_OF_BOUNDS_TAG);
-    const char* name = option == 0 ? tr(STR_GOLF_HAZARD) : tr(STR_GOLF_OUT_OF_BOUNDS);
-    const char* cost = option == 0 ? tr(STR_GOLF_HAZARD_COST) : tr(STR_GOLF_OUT_OF_BOUNDS_COST);
-    const int tagColumn = golfui::minValue(SHEET_TAG_COL_W, static_cast<int16_t>(safe.width / 4));
-    const int textX = safe.x + golfui::minValue(SHEET_TEXT_X, static_cast<int16_t>(safe.width / 3));
-    const int tagWidth = renderer.getTextWidth(UI_12_FONT_ID, tag, EpdFontFamily::BOLD);
-    renderer.drawText(UI_12_FONT_ID, safe.x + (tagColumn - tagWidth) / 2,
-                      rowTop + (rowHeight - renderer.getLineHeight(UI_12_FONT_ID)) / 2, tag, ink, EpdFontFamily::BOLD);
-    const int nameHeight = renderer.getLineHeight(UI_12_FONT_ID);
-    const int costHeight = renderer.getLineHeight(UI_10_FONT_ID);
+    const bool fairway = option == PICKER_ROW_FAIRWAY;
+    const char* name =
+        fairway ? tr(STR_GOLF_FAIRWAY_HIT) : (option == 0 ? tr(STR_GOLF_HAZARD) : tr(STR_GOLF_OUT_OF_BOUNDS));
+    const char* cost = fairway ? tr(STR_GOLF_FAIRWAY_HIT_COST)
+                               : (option == 0 ? tr(STR_GOLF_HAZARD_COST) : tr(STR_GOLF_OUT_OF_BOUNDS_COST));
+
+    if (fairway) {
+      // The tag column carries the circle-check icon, not a letter (§31.3).
+      blitIcon(renderer, icon_circle_check_24, safe.x + (tagColumn - FAIRWAY_ICON_SHEET_PX) / 2,
+               rowTop + (rowHeight - FAIRWAY_ICON_SHEET_PX) / 2, ink);
+    } else {
+      const char* tag = option == 0 ? tr(STR_GOLF_HAZARD_TAG) : tr(STR_GOLF_OUT_OF_BOUNDS_TAG);
+      const int tagWidth = renderer.getTextWidth(UI_12_FONT_ID, tag, EpdFontFamily::BOLD);
+      renderer.drawText(UI_12_FONT_ID, safe.x + (tagColumn - tagWidth) / 2,
+                        rowTop + (rowHeight - renderer.getLineHeight(UI_12_FONT_ID)) / 2, tag, ink,
+                        EpdFontFamily::BOLD);
+    }
+
     const int textTop = rowTop + (rowHeight - nameHeight - costHeight) / 2;
     renderer.drawText(UI_12_FONT_ID, textX, textTop, name, ink, EpdFontFamily::BOLD);
     renderer.drawText(UI_10_FONT_ID, textX, textTop + nameHeight, cost, ink);
+
+    if (fairway) {
+      // A checkbox reflecting the hole's current state; Confirm toggles it.
+      constexpr int box = 22;
+      const int boxX = safe.x + safe.width - SHEET_PAD_X - box;
+      const int boxY = rowTop + (rowHeight - box) / 2;
+      renderer.drawRect(boxX, boxY, box, box, 2, ink);
+      if (golfFairwayHit(score, hole)) {
+        renderer.drawLine(boxX + 4, boxY + box / 2, boxX + box / 2 - 1, boxY + box - 5, 2, ink);
+        renderer.drawLine(boxX + box / 2 - 1, boxY + box - 5, boxX + box - 4, boxY + 5, 2, ink);
+      }
+    }
+
     renderer.drawLine(safe.x, rowBottom - 1, safe.x + safe.width - 1, rowBottom - 1, true);
   }
   const auto labels = mappedInput.mapLabels(tr(STR_GOLF_FOOTER_BACK), tr(STR_GOLF_FOOTER_CONFIRM), "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHintsTwo(renderer, labels.btn1, labels.btn2);
 }
 
 void GolfScoringActivity::render(RenderLock&&) {

@@ -202,6 +202,12 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   renderer.setOrientation(orig_orientation);
 }
 
+void BaseTheme::drawButtonHintsTwo(GfxRenderer& renderer, const char* btn1, const char* btn2) const {
+  // The base layout already omits a box for any empty label, so two cells plus
+  // two blanks leaves nothing dead to the right.
+  drawButtonHints(renderer, btn1, btn2, "", "");
+}
+
 void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const {
   if (gpio.hasTouch()) {
     return;

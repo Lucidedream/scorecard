@@ -249,3 +249,41 @@ void RoundedRaffTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, 
 
   renderer.setOrientation(origOrientation);
 }
+
+void RoundedRaffTheme::drawButtonHintsTwo(GfxRenderer& renderer, const char* btn1, const char* btn2) const {
+  if (gpio.hasTouch()) {
+    return;
+  }
+
+  const GfxRenderer::Orientation origOrientation = renderer.getOrientation();
+  renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+
+  const int pageWidth = renderer.getScreenWidth();
+  const int pageHeight = renderer.getScreenHeight();
+  const int sidePadding = 20;
+  const int groupGap = 10;
+  const int bottomMargin = 10;
+  const int hintHeight = RoundedRaffMetrics::values.buttonHintsHeight - 10;
+  // One group where the left one lives; the right group (and its empty pill) is
+  // never drawn (CONTRACTS-V2 §31.2).
+  const int groupWidth = (pageWidth - sidePadding * 2 - groupGap) / 2;
+  const int groupX = sidePadding;
+  const int hintY = pageHeight - hintHeight - bottomMargin;
+  const int textY = hintY + (hintHeight - renderer.getLineHeight(kGuideFontId)) / 2;
+
+  const bool leftDisabled = (btn1 == nullptr || btn1[0] == '\0');
+  const std::string leftLabel = leftDisabled ? "" : std::string(btn1);
+  const std::string rightLabel = (btn2 && btn2[0] != '\0') ? std::string(btn2) : "";
+  const int rightWidth = renderer.getTextWidth(kGuideFontId, rightLabel.c_str(), EpdFontFamily::REGULAR);
+  constexpr int innerEdgePadding = 16;
+
+  renderer.fillRect(groupX, hintY, groupWidth, hintHeight, false);
+  renderer.drawRoundedRect(groupX, hintY, groupWidth, hintHeight, 2, kBottomRadius, true);
+  if (!leftDisabled) {
+    renderer.drawText(kGuideFontId, groupX + innerEdgePadding, textY, leftLabel.c_str(), true, EpdFontFamily::REGULAR);
+  }
+  renderer.drawText(kGuideFontId, groupX + groupWidth - innerEdgePadding - rightWidth, textY, rightLabel.c_str(), true,
+                    EpdFontFamily::REGULAR);
+
+  renderer.setOrientation(origOrientation);
+}
