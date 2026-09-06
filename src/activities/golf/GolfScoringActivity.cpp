@@ -326,28 +326,33 @@ void GolfScoringActivity::handlePickerInput() {
     closePenaltyPicker();
     return;
   }
-  // Up / Down move the highlight within the available rows (2 or 3). Found by
-  // feel -- no footer cell (§13.2 / §13.3).
+  // Up / Down move the highlight within the available rows (2 or 3), wrapping at
+  // the ends like every other golf menu. Found by feel -- no footer cell
+  // (§13.2 / §13.3). rowCount never changes while the sheet is open, so
+  // pickerRow stays in range.
   const uint8_t rowCount = pickerRowCount();
-  if (mappedInput.wasPressed(MappedInputManager::Button::Up) && pickerRow > 0) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
     {
       RenderLock lock(*this);
-      --pickerRow;
+      pickerRow = static_cast<uint8_t>((pickerRow + rowCount - 1) % rowCount);
       pickerHoleFull = false;
     }
     requestUpdate();
     return;
   }
-  if (mappedInput.wasPressed(MappedInputManager::Button::Down) && pickerRow + 1 < rowCount) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
     {
       RenderLock lock(*this);
-      ++pickerRow;
+      pickerRow = static_cast<uint8_t>((pickerRow + 1) % rowCount);
       pickerHoleFull = false;
     }
     requestUpdate();
     return;
   }
-  if (confirmFromFrontButton()) {
+  // Confirm applies the highlighted row. A bare Power release also confirms:
+  // the scoring screen's §12.6 reservation of Power for field-cycling does not
+  // apply once the sheet is open (loop() routes here and returns first).
+  if (confirmFromFrontButton() || mappedInput.wasReleased(MappedInputManager::Button::Power)) {
     if (pickerRow == PICKER_ROW_FAIRWAY) {
       toggleFairwayHit();
     } else {

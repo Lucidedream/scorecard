@@ -203,8 +203,22 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
 }
 
 void BaseTheme::drawButtonHintsTwo(GfxRenderer& renderer, const char* btn1, const char* btn2) const {
-  // The base layout already omits a box for any empty label, so two cells plus
-  // two blanks leaves nothing dead to the right.
+  if (gpio.hasTouch()) {
+    return;
+  }
+
+  // The 4-cell version omits a box for an empty label but leaves whatever was
+  // there untouched, so a previously-drawn footer (e.g. the scoring screen's
+  // MENU / MARK / PREV / NEXT) bleeds through cells 3-4. Clear the whole band
+  // first, then draw just the two cells.
+  const GfxRenderer::Orientation origOrientation = renderer.getOrientation();
+  renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+  const int pageHeight = renderer.getScreenHeight();
+  const int pageWidth = renderer.getScreenWidth();
+  constexpr int band = BaseMetrics::values.buttonHintsHeight;
+  renderer.fillRect(0, pageHeight - band, pageWidth, band, false);
+  renderer.setOrientation(origOrientation);
+
   drawButtonHints(renderer, btn1, btn2, "", "");
 }
 

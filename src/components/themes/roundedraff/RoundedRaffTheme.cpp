@@ -277,6 +277,10 @@ void RoundedRaffTheme::drawButtonHintsTwo(GfxRenderer& renderer, const char* btn
   const int rightWidth = renderer.getTextWidth(kGuideFontId, rightLabel.c_str(), EpdFontFamily::REGULAR);
   constexpr int innerEdgePadding = 16;
 
+  // Clear the whole guide band before drawing the single group, so a
+  // previously-drawn 4-cell footer (e.g. the scoring screen's PREV / NEXT
+  // pill) can't bleed through where the right group would be.
+  renderer.fillRect(0, hintY, pageWidth, hintHeight, false);
   renderer.fillRect(groupX, hintY, groupWidth, hintHeight, false);
   renderer.drawRoundedRect(groupX, hintY, groupWidth, hintHeight, 2, kBottomRadius, true);
   if (!leftDisabled) {

@@ -165,7 +165,10 @@ void LyraTheme::drawButtonHintsTwo(GfxRenderer& renderer, const char* btn1, cons
   constexpr int wideButtonPositions[] = {65, 157, 291, 383};
   const int* buttonPositions = renderer.getScreenWidth() >= 528 ? wideButtonPositions : narrowButtonPositions;
   // Only the two cells the sheet uses: no small stub buttons where cells 3-4
-  // would be (CONTRACTS-V2 §31.2).
+  // would be (CONTRACTS-V2 §31.2). Clear the whole band first so a
+  // previously-drawn 4-cell footer (buttons and stubs alike) can't bleed
+  // through the empty right half.
+  renderer.fillRect(0, pageHeight - buttonHeight, renderer.getScreenWidth(), buttonHeight, false);
   const char* labels[] = {btn1, btn2};
 
   for (int i = 0; i < 2; i++) {
