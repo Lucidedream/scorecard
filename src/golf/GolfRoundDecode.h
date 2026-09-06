@@ -25,6 +25,8 @@ struct GolfPlayerColumnLengths {
   uint16_t in100;
   uint16_t out100;
   uint16_t penalties;
+  // Wire length of the v5 "fairways" array; 0 for a v2/v3/v4 record (not checked).
+  uint16_t fairways;
 };
 
 struct GolfRoundColumnLengths {

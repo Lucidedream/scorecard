@@ -25,7 +25,7 @@ class GolfCardActivity final : public Activity, protected UiAppHost {
   static constexpr uint8_t LABEL_COLUMN_UNITS = 2;
   static constexpr freeink::ui::ActionId ACTION_TAB = 1;
 
-  // GolfRound is 906 bytes. Activities are heap-owned, so the live/archive snapshot
+  // GolfRound is 922 bytes. Activities are heap-owned, so the live/archive snapshot
   // stays here rather than consuming the embedded activity task stack.
   GolfRound round{};
   char dataCells[MAX_TABLE_ROWS][MAX_DATA_COLS][8]{};

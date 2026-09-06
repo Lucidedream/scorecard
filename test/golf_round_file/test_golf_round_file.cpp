@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include "GolfPenalty.h"
 #include "GolfRoundDecode.h"
 
 namespace {
@@ -21,8 +22,14 @@ GolfRoundColumnLengths v4Lengths(const uint16_t count) {
   lengths.si = count;
   lengths.players = GolfRound::MAX_PLAYERS;
   for (GolfPlayerColumnLengths& player : lengths.player) {
-    player = {count, count, count, count, count};
+    player = {count, count, count, count, count, 0};
   }
+  return lengths;
+}
+
+GolfRoundColumnLengths v5Lengths(const uint16_t count) {
+  GolfRoundColumnLengths lengths = v4Lengths(count);
+  for (GolfPlayerColumnLengths& player : lengths.player) player.fairways = count;
   return lengths;
 }
 
@@ -128,6 +135,35 @@ TEST_F(GolfRoundDecodeTest, V4RejectsNonZeroPayloadForDisabledPlayer) {
   prepareV4();
   round.players[3].score.out100[0] = 1;
   EXPECT_EQ(golfCheckRound(round, 4, 18, 0, 0, v4Lengths(18), validation),
+            GolfRoundDecodeStatus::RejectedDisabledPlayerData);
+}
+
+TEST_F(GolfRoundDecodeTest, V5AcceptsFourPlayersWithFairwayArraysAndValidatesTheirLength) {
+  prepareV4();
+  round.players[0].score.in100[3] = 2;
+  round.players[0].score.out100[3] = 3;
+  golfSetFairwayHit(round.players[0].score, 3, true);
+  EXPECT_EQ(golfCheckRound(round, 5, 18, 0, 0, v5Lengths(18), validation), GolfRoundDecodeStatus::Ok);
+
+  GolfRoundColumnLengths shortFairways = v5Lengths(18);
+  shortFairways.player[1].fairways = 17;
+  EXPECT_EQ(golfCheckRound(round, 5, 18, 0, 0, shortFairways, validation), GolfRoundDecodeStatus::RejectedArrayLength);
+}
+
+TEST_F(GolfRoundDecodeTest, V4IgnoresFairwayArrayLengthAndKeepsBitsClear) {
+  prepareV4();
+  // A v4 record carries no "fairways" wire array (length 0); the v5-only check
+  // must not fire.
+  EXPECT_EQ(golfCheckRound(round, 4, 18, 0, 0, v4Lengths(18), validation), GolfRoundDecodeStatus::Ok);
+  for (uint8_t hole = 0; hole < GolfRound::MAX_HOLES; ++hole) {
+    EXPECT_FALSE(golfFairwayHit(round.players[0].score, hole));
+  }
+}
+
+TEST_F(GolfRoundDecodeTest, V5RejectsFairwayBitOnDisabledSlot) {
+  prepareV4();
+  golfSetFairwayHit(round.players[3].score, 0, true);
+  EXPECT_EQ(golfCheckRound(round, 5, 18, 0, 0, v5Lengths(18), validation),
             GolfRoundDecodeStatus::RejectedDisabledPlayerData);
 }
 

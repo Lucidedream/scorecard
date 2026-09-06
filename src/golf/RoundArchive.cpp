@@ -638,6 +638,17 @@ bool writePenalties(ArchiveWriter& file, const GolfPlayerScore& score, const uin
   return writeText(file, "]");
 }
 
+bool writeFairways(ArchiveWriter& file, const GolfPlayerScore& score, const uint8_t holeCount, const bool writeZeros) {
+  if (!writeText(file, "[")) return false;
+  for (uint8_t hole = 0; hole < holeCount; ++hole) {
+    const unsigned value = writeZeros ? 0U : (golfFairwayHit(score, hole) ? 1U : 0U);
+    char number[4];
+    snprintf(number, sizeof(number), hole == 0 ? "%u" : ",%u", value);
+    if (!writeText(file, number)) return false;
+  }
+  return writeText(file, "]");
+}
+
 bool writePlayer(ArchiveWriter& file, const GolfPlayer& player, const uint8_t holeCount) {
   const char* tee = golfTeeSelectionToken(player.tee);
   if (tee == nullptr || !writeText(file, "{\"name\":") || !writeJsonString(file, player.name) ||
@@ -648,7 +659,8 @@ bool writePlayer(ArchiveWriter& file, const GolfPlayer& player, const uint8_t ho
   return writeArray(file, player.yards, holeCount, disabled) && writeText(file, ",\"putts\":") &&
          writeArray(file, player.score.putts, holeCount, disabled) && writeText(file, ",\"in100\":") &&
          writeArray(file, player.score.in100, holeCount, disabled) && writeText(file, ",\"out100\":") &&
-         writeArray(file, player.score.out100, holeCount, disabled) && writeText(file, ",\"penalties\":") &&
+         writeArray(file, player.score.out100, holeCount, disabled) && writeText(file, ",\"fairways\":") &&
+         writeFairways(file, player.score, holeCount, disabled) && writeText(file, ",\"penalties\":") &&
          writePenalties(file, player.score, holeCount, disabled) && writeText(file, "}");
 }
 
@@ -656,7 +668,7 @@ bool writePlayer(ArchiveWriter& file, const GolfPlayer& player, const uint8_t ho
 [[gnu::noinline]] bool writeCompletedRound(ArchiveWriter& file, const GolfRound& round) {
   char date[GOLF_DATE_BUFFER_SIZE];
   char metadata[48];
-  if (!writeText(file, "{\"v\":4,\"date\":")) return false;
+  if (!writeText(file, "{\"v\":5,\"date\":")) return false;
   if (golfFormatDate(round.dateYmd, date, sizeof(date))) {
     if (!writeJsonString(file, date)) return false;
   } else if (!writeText(file, "null")) {

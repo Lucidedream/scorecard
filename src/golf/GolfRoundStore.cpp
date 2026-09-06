@@ -80,7 +80,7 @@ void GolfRoundStore::toJson(JsonDocument& doc) const {
   }
 
   char date[GOLF_DATE_BUFFER_SIZE];
-  doc["v"] = 4;
+  doc["v"] = 5;
   if (golfFormatDate(round.dateYmd, date, sizeof(date))) {
     doc["date"] = date;
   } else {
@@ -117,7 +117,7 @@ bool GolfRoundStore::fromJson(const JsonVariantConst doc) {
     return true;
   }
 
-  // Transactional decode needs a second 906-byte round. Heap staging avoids a
+  // Transactional decode needs a second 922-byte round. Heap staging avoids a
   // task-stack overflow and leaves the live member untouched on parse failure.
   auto loaded = makeUniqueNoThrow<GolfRound>();
   if (!loaded) {

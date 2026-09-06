@@ -33,3 +33,11 @@ uint16_t golfHazardsForRound(const GolfPlayerScore& score, uint8_t holeCount);
 uint16_t golfObsForRound(const GolfPlayerScore& score, uint8_t holeCount);
 uint16_t golfPenaltyStrokesForHole(const GolfPlayerScore& score, uint8_t hole);
 uint16_t golfPenaltyStrokesForRound(const GolfPlayerScore& score, uint8_t holeCount);
+
+// Fairway hit is a dedicated per-hole bit, not a GolfPenaltyKind (see CONTRACTS-V2
+// §31.5). It records a good outcome and adds no stroke. These are plain bit
+// accessors: they do not seed, touch counters, or consider par -- callers seed
+// first, exactly as every mutation path must (§13.1).
+bool golfFairwayHit(const GolfPlayerScore& score, uint8_t hole);
+void golfSetFairwayHit(GolfPlayerScore& score, uint8_t hole, bool hit);
+uint16_t golfFairwayHitsForRound(const GolfPlayerScore& score, uint8_t holeCount);

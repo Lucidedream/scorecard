@@ -15,7 +15,7 @@ class GolfHistoryRoundMenuActivity final : public UiListActivity {
   static constexpr uint8_t ROW_COUNT = 5;
 
   // The archived group snapshot is activity-owned (heap), never an automatic
-  // 906-byte task-stack value. playerSlot identifies the History-selected row.
+  // 922-byte task-stack value. playerSlot identifies the History-selected row.
   GolfRound round{};
   freeink::ui::ListItem rows[ROW_COUNT]{};
   freeink::ui::ListProps listProps{};

@@ -68,8 +68,7 @@ GolfPenaltyMutationStatus golfAppendPenalty(GolfPlayerScore& score, const uint8_
   return GolfPenaltyMutationStatus::Changed;
 }
 
-GolfPenaltyMutationStatus golfRemoveLatestPenalty(GolfPlayerScore& score, const uint8_t hole,
-                                                  const GolfField field) {
+GolfPenaltyMutationStatus golfRemoveLatestPenalty(GolfPlayerScore& score, const uint8_t hole, const GolfField field) {
   if (!validHole(hole)) return GolfPenaltyMutationStatus::InvalidHole;
   if (static_cast<uint8_t>(field) > static_cast<uint8_t>(GolfField::Out100)) {
     return GolfPenaltyMutationStatus::InvalidEvent;
@@ -82,8 +81,8 @@ GolfPenaltyMutationStatus golfRemoveLatestPenalty(GolfPlayerScore& score, const 
     if (golfUnpackPenaltyEvent(packedAt(score, hole, removeIndex), event) && event.field == field) break;
   }
   GolfPenaltyEvent removed{};
-  if (removeIndex >= score.penaltyCount[hole] ||
-      !golfUnpackPenaltyEvent(packedAt(score, hole, removeIndex), removed) || removed.field != field) {
+  if (removeIndex >= score.penaltyCount[hole] || !golfUnpackPenaltyEvent(packedAt(score, hole, removeIndex), removed) ||
+      removed.field != field) {
     return GolfPenaltyMutationStatus::NoMarker;
   }
 
@@ -156,6 +155,29 @@ uint16_t golfPenaltyStrokesForHole(const GolfPlayerScore& score, const uint8_t h
 
 uint16_t golfPenaltyStrokesForRound(const GolfPlayerScore& score, const uint8_t holeCount) {
   return static_cast<uint16_t>(golfHazardsForRound(score, holeCount) + golfObsForRound(score, holeCount) * 2);
+}
+
+bool golfFairwayHit(const GolfPlayerScore& score, const uint8_t hole) {
+  if (!validHole(hole)) return false;
+  return (score.fairwayHit[hole / 8] & (1 << (hole % 8))) != 0;
+}
+
+void golfSetFairwayHit(GolfPlayerScore& score, const uint8_t hole, const bool hit) {
+  if (!validHole(hole)) return;
+  const uint8_t mask = static_cast<uint8_t>(1 << (hole % 8));
+  if (hit) {
+    score.fairwayHit[hole / 8] |= mask;
+  } else {
+    score.fairwayHit[hole / 8] &= static_cast<uint8_t>(~mask);
+  }
+}
+
+uint16_t golfFairwayHitsForRound(const GolfPlayerScore& score, const uint8_t holeCount) {
+  uint16_t total = 0;
+  for (uint8_t hole = 0; hole < holesInRound(holeCount); ++hole) {
+    if (golfFairwayHit(score, hole)) ++total;
+  }
+  return total;
 }
 
 #endif

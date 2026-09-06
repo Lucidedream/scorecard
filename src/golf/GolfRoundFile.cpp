@@ -24,7 +24,7 @@ bool loadGolfRoundFile(const char* path, GolfRound& out, GolfRoundFileInfo* info
     return false;
   }
 
-  // A 906-byte transactional staging value is unsafe on the activity task
+  // A 922-byte transactional staging value is unsafe on the activity task
   // stack. One checked heap allocation keeps `out` unchanged on every failure.
   auto loaded = makeUniqueNoThrow<GolfRound>();
   if (!loaded) {

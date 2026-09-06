@@ -15,6 +15,9 @@ struct GolfPlayerScore {
   uint8_t out100[GOLF_MAX_HOLES];
   uint8_t penaltyCount[GOLF_MAX_HOLES];
   uint8_t penaltyEvents[GOLF_MAX_HOLES][GOLF_MAX_PENALTIES_PER_HOLE / 2];
+  // Bit `hole` (fairwayHit[hole / 8] & (1 << (hole % 8))) set means the tee shot
+  // found the fairway on that hole. Not a stroke and not a penalty.
+  uint8_t fairwayHit[3];
 };
 
 struct GolfPlayer {
@@ -58,9 +61,9 @@ inline void initializeGolfPlayerDefaults(GolfRound& round) {
 constexpr bool golfPlayerIsEnabled(const GolfPlayer& player) { return player.tee != TeeSelection::NotPlay; }
 
 static_assert(sizeof(TeeSelection) == 1);
-static_assert(sizeof(GolfPlayerScore) == 144);
-static_assert(sizeof(GolfPlayer) == 206);
-static_assert(sizeof(GolfRound) == 906);
+static_assert(sizeof(GolfPlayerScore) == 147);
+static_assert(sizeof(GolfPlayer) == 210);
+static_assert(sizeof(GolfRound) == 922);
 static_assert(std::is_standard_layout_v<GolfPlayerScore>);
 static_assert(std::is_trivially_copyable_v<GolfPlayerScore>);
 static_assert(std::is_standard_layout_v<GolfPlayer>);

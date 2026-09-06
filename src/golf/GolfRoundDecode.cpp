@@ -16,6 +16,9 @@ bool playerPayloadIsZero(const GolfPlayer& player, const uint8_t holes) {
       if (player.score.penaltyEvents[hole][byte] != 0) return false;
     }
   }
+  for (uint8_t byte = 0; byte < sizeof(player.score.fairwayHit); ++byte) {
+    if (player.score.fairwayHit[byte] != 0) return false;
+  }
   return true;
 }
 
@@ -81,12 +84,14 @@ void golfInitializeLegacyRound(GolfRound& round, const char* legacyTee) {
 GolfRoundDecodeStatus golfCheckRound(GolfRound& out, const int version, const int holes, const int currentHole,
                                      const int currentPlayer, const GolfRoundColumnLengths& lengths,
                                      GolfValidationResult& validation) {
-  if (version != 2 && version != 3 && version != 4) return GolfRoundDecodeStatus::RejectedVersion;
+  if (version != 2 && version != 3 && version != 4 && version != 5) {
+    return GolfRoundDecodeStatus::RejectedVersion;
+  }
   if (holes != 9 && holes != 18) return GolfRoundDecodeStatus::RejectedHoleCount;
   const uint8_t holeCount = static_cast<uint8_t>(holes);
 
   if (lengths.par != holeCount) return GolfRoundDecodeStatus::RejectedArrayLength;
-  if (version == 4) {
+  if (version >= 4) {
     if (lengths.players != GolfRound::MAX_PLAYERS) return GolfRoundDecodeStatus::RejectedPlayerCount;
     if (lengths.si != holeCount) return GolfRoundDecodeStatus::RejectedArrayLength;
     for (uint8_t slot = 0; slot < GolfRound::MAX_PLAYERS; ++slot) {
@@ -95,6 +100,7 @@ GolfRoundDecodeStatus golfCheckRound(GolfRound& out, const int version, const in
           player.out100 != holeCount || player.penalties != holeCount) {
         return GolfRoundDecodeStatus::RejectedArrayLength;
       }
+      if (version >= 5 && player.fairways != holeCount) return GolfRoundDecodeStatus::RejectedArrayLength;
       if (!golfPlayerIsEnabled(out.players[slot]) && !playerPayloadIsZero(out.players[slot], holeCount)) {
         return GolfRoundDecodeStatus::RejectedDisabledPlayerData;
       }
@@ -103,8 +109,7 @@ GolfRoundDecodeStatus golfCheckRound(GolfRound& out, const int version, const in
   } else {
     const GolfPlayerColumnLengths& player = lengths.player[0];
     if (player.putts != holeCount || player.in100 != holeCount || player.out100 != holeCount ||
-        (lengths.expectLegacyYards && player.yards != holeCount) ||
-        (version == 3 && player.penalties != holeCount)) {
+        (lengths.expectLegacyYards && player.yards != holeCount) || (version == 3 && player.penalties != holeCount)) {
       return GolfRoundDecodeStatus::RejectedArrayLength;
     }
   }

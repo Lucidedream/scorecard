@@ -165,6 +165,12 @@ jobs:
           path: build/test/_deps/googletest-src
           key: ${{ runner.os }}-googletest-${{ hashFiles('test/CMakeLists.txt') }}
 
+      - name: Cache ArduinoJson source
+        uses: actions/cache@v4
+        with:
+          path: build/test/_deps/arduinojson-src
+          key: ${{ runner.os }}-arduinojson-${{ hashFiles('test/golf_round_json/CMakeLists.txt') }}
+
       - name: Configure
         run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
 

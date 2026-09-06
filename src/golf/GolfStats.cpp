@@ -14,6 +14,8 @@ bool isEntered(const GolfPlayerScore& score, const uint8_t hole) {
   return static_cast<uint16_t>(score.in100[hole]) + score.out100[hole] != 0;
 }
 
+bool parIsGirEligible(const uint8_t par) { return par >= 3 && par <= 5; }
+
 }  // namespace
 
 uint8_t golfLongGame(const GolfRound& round, const GolfPlayerScore& score, const uint8_t hole) {
@@ -162,6 +164,47 @@ uint8_t golfWorstHoles(const GolfRound& round, const GolfPlayerScore& score, Gol
     holes[position] = candidate;
   }
   return count;
+}
+
+bool golfGreenInRegulation(const GolfRound& round, const GolfPlayerScore& score, const uint8_t hole) {
+  if (hole >= holesInRound(round) || !isEntered(score, hole) || !parIsGirEligible(round.par[hole])) {
+    return false;
+  }
+  const int strokesToGreen = static_cast<int>(golfHoleScore(round, score, hole)) - score.putts[hole];
+  return strokesToGreen <= round.par[hole] - 2;
+}
+
+uint8_t golfGreensInRegulation(const GolfRound& round, const GolfPlayerScore& score) {
+  uint8_t total = 0;
+  for (uint8_t hole = 0; hole < holesInRound(round); ++hole) {
+    if (golfGreenInRegulation(round, score, hole)) ++total;
+  }
+  return total;
+}
+
+uint8_t golfGreensEligible(const GolfRound& round, const GolfPlayerScore& score) {
+  uint8_t total = 0;
+  for (uint8_t hole = 0; hole < holesInRound(round); ++hole) {
+    if (isEntered(score, hole) && parIsGirEligible(round.par[hole])) ++total;
+  }
+  return total;
+}
+
+uint8_t golfFairwaysHit(const GolfRound& round, const GolfPlayerScore& score) {
+  uint8_t total = 0;
+  for (uint8_t hole = 0; hole < holesInRound(round); ++hole) {
+    if (isEntered(score, hole) && golfFairwayHit(score, hole)) ++total;
+  }
+  return total;
+}
+
+uint8_t golfFairwaysEligible(const GolfRound& round, const GolfPlayerScore& score) {
+  if (!golfHasPar(round)) return 0;
+  uint8_t total = 0;
+  for (uint8_t hole = 0; hole < holesInRound(round); ++hole) {
+    if (isEntered(score, hole) && (round.par[hole] == 4 || round.par[hole] == 5)) ++total;
+  }
+  return total;
 }
 
 #endif

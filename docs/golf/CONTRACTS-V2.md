@@ -1937,9 +1937,11 @@ spare bit (`0x08`) is the corrupt-event sentinel in both `golfUnpackPenaltyEvent
 `golfReadJsonPenalties`, and a kind that set it would be indistinguishable from a damaged
 penalty to an older build.
 
-`sizeof(GolfPlayerScore)` goes 144 → 147, `GolfPlayer` 206 → 209, `GolfRound` 906 → 918
-(approx; the `static_assert`s move with the real numbers). Accessors:
-`golfFairwayHit(score, hole)`, `golfSetFairwayHit(score, hole, bool)`. Seeding (§13.1) still
+`sizeof(GolfPlayerScore)` goes 144 → 147, `GolfPlayer` 206 → 210, `GolfRound` 906 → 922
+(`GolfPlayer` and `GolfRound` keep 2-byte alignment, so their sizes round up past the
++3 the new array adds). Accessors: `golfFairwayHit(score, hole)`,
+`golfSetFairwayHit(score, hole, bool)`, `golfFairwayHitsForRound(score, holeCount)` live
+next to the penalty accessors in `GolfPenalty.{h,cpp}`. Seeding (§13.1) still
 runs before the toggle, exactly as every mutation path must — a hole whose only recorded
 event is a fairway hit is legal (unlike a penalty, §12.1, it adds no shot), and seeding
 stores it at its par preview.

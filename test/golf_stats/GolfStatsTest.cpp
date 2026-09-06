@@ -198,4 +198,138 @@ TEST_F(GolfStatsTest, WorkedPenaltyHolesUseDerivedStrokeArithmetic) {
   }
 }
 
+// --- Fairway hit bit accessors (CONTRACTS-V2 §31.5) ---
+
+TEST_F(GolfStatsTest, FairwayAccessorsSetClearAndCountAreIdempotentAndBounded) {
+  EXPECT_FALSE(golfFairwayHit(score(), 0));
+  golfSetFairwayHit(score(), 0, true);
+  golfSetFairwayHit(score(), 0, true);  // idempotent
+  EXPECT_TRUE(golfFairwayHit(score(), 0));
+  golfSetFairwayHit(score(), 17, true);
+  golfSetFairwayHit(score(), 18, true);  // out of range -> no-op
+  EXPECT_FALSE(golfFairwayHit(score(), 18));
+  EXPECT_EQ(golfFairwayHitsForRound(score(), 18), 2);
+
+  golfSetFairwayHit(score(), 0, false);
+  golfSetFairwayHit(score(), 0, false);  // idempotent clear
+  EXPECT_FALSE(golfFairwayHit(score(), 0));
+  EXPECT_EQ(golfFairwayHitsForRound(score(), 18), 1);
+  EXPECT_EQ(golfFairwayHitsForRound(score(), 9), 0);  // hole 17 outside a 9-hole round
+}
+
+TEST_F(GolfStatsTest, FairwayBitsAreIndependentAcrossAByteBoundary) {
+  golfSetFairwayHit(score(), 7, true);
+  golfSetFairwayHit(score(), 8, true);
+  EXPECT_TRUE(golfFairwayHit(score(), 7));
+  EXPECT_TRUE(golfFairwayHit(score(), 8));
+  EXPECT_FALSE(golfFairwayHit(score(), 6));
+  EXPECT_FALSE(golfFairwayHit(score(), 9));
+  golfSetFairwayHit(score(), 7, false);
+  EXPECT_FALSE(golfFairwayHit(score(), 7));
+  EXPECT_TRUE(golfFairwayHit(score(), 8));
+}
+
+// --- Green in regulation (CONTRACTS-V2 §31.4) ---
+
+TEST_F(GolfStatsTest, GreenInRegulationWorkedParFourCasesFromTheMock) {
+  // Every par is 4 (SetUp); GIR threshold = par - 2 = 2.
+  // Case 1: putts 2, in100 3, out100 1, no penalty -> holeScore 4, toGreen 2 -> GIR.
+  score().putts[0] = 2;
+  score().in100[0] = 3;
+  score().out100[0] = 1;
+  EXPECT_EQ(golfHoleScore(round, score(), 0), 4);
+  EXPECT_TRUE(golfGreenInRegulation(round, score(), 0));
+
+  // Case 2: putts 1, same strokes -> toGreen 3 -> not GIR.
+  score().putts[1] = 1;
+  score().in100[1] = 3;
+  score().out100[1] = 1;
+  EXPECT_FALSE(golfGreenInRegulation(round, score(), 1));
+
+  // Case 3: putts 2, in100 3, out100 1 + one hazard (out100 -> 2, +1 stroke) ->
+  // holeScore 6, toGreen 4 -> not GIR.
+  score().putts[2] = 2;
+  score().in100[2] = 3;
+  score().out100[2] = 1;
+  ASSERT_EQ(golfAppendPenalty(score(), 2, GolfField::Out100, GolfPenaltyKind::Hazard),
+            GolfPenaltyMutationStatus::Changed);
+  EXPECT_EQ(golfHoleScore(round, score(), 2), 6);
+  EXPECT_FALSE(golfGreenInRegulation(round, score(), 2));
+
+  EXPECT_EQ(golfGreensInRegulation(round, score()), 1);
+  EXPECT_EQ(golfGreensEligible(round, score()), 3);
+}
+
+TEST_F(GolfStatsTest, GreenInRegulationParThreeParFiveChipInAndIneligiblePars) {
+  round.par[0] = 3;  // holeScore 3, putts 2 -> toGreen 1 <= 1 -> GIR
+  score().putts[0] = 2;
+  score().in100[0] = 2;
+  score().out100[0] = 1;
+  EXPECT_TRUE(golfGreenInRegulation(round, score(), 0));
+
+  round.par[1] = 3;  // holeScore 3, putts 1 -> toGreen 2 > 1 -> not GIR
+  score().putts[1] = 1;
+  score().in100[1] = 1;
+  score().out100[1] = 2;
+  EXPECT_FALSE(golfGreenInRegulation(round, score(), 1));
+
+  round.par[2] = 5;  // holeScore 5, putts 2 -> toGreen 3 <= 3 -> GIR
+  score().putts[2] = 2;
+  score().in100[2] = 3;
+  score().out100[2] = 2;
+  EXPECT_TRUE(golfGreenInRegulation(round, score(), 2));
+
+  // Chip-in birdie par 4: holeScore 3, putts 0 -> toGreen 3 > 2 -> not GIR.
+  score().putts[3] = 0;
+  score().in100[3] = 1;
+  score().out100[3] = 2;
+  EXPECT_FALSE(golfGreenInRegulation(round, score(), 3));
+
+  // Not entered -> false, and counted in neither total.
+  EXPECT_FALSE(golfGreenInRegulation(round, score(), 5));
+
+  // Par 6 and par 0 (par-free) holes: entered but never GIR / GIR-eligible.
+  round.par[6] = 6;
+  score().putts[6] = 2;
+  score().in100[6] = 3;
+  score().out100[6] = 1;
+  round.par[7] = 0;
+  score().putts[7] = 2;
+  score().in100[7] = 3;
+  score().out100[7] = 1;
+  EXPECT_FALSE(golfGreenInRegulation(round, score(), 6));
+  EXPECT_FALSE(golfGreenInRegulation(round, score(), 7));
+
+  EXPECT_EQ(golfGreensEligible(round, score()), 4);      // entered holes 0,1,2,3 (par 3,3,5,4)
+  EXPECT_EQ(golfGreensInRegulation(round, score()), 2);  // holes 0 and 2
+}
+
+// --- Fairways in regulation (CONTRACTS-V2 §31.4 / §31.7) ---
+
+TEST_F(GolfStatsTest, FairwaysHitCountsEnteredSetBitsAndEligibleCountsParFourFive) {
+  round.par[0] = 4;
+  round.par[1] = 5;
+  round.par[2] = 3;
+  round.par[3] = 4;
+  for (uint8_t hole = 0; hole < 3; ++hole) {
+    score().in100[hole] = 2;
+    score().out100[hole] = 2;
+  }
+  golfSetFairwayHit(score(), 0, true);
+  golfSetFairwayHit(score(), 1, true);
+  golfSetFairwayHit(score(), 2, true);  // par 3 -- helper does not re-filter by par
+  golfSetFairwayHit(score(), 3, true);  // hole 3 not entered -> not counted
+  EXPECT_EQ(golfFairwaysHit(round, score()), 3);
+  EXPECT_EQ(golfFairwaysEligible(round, score()), 2);  // entered par 4/5 = holes 0,1
+}
+
+TEST_F(GolfStatsTest, FairwaysEligibleIsZeroOnParFreeRound) {
+  for (uint8_t hole = 0; hole < round.holeCount; ++hole) round.par[hole] = 0;
+  score().in100[0] = 2;
+  score().out100[0] = 2;
+  golfSetFairwayHit(score(), 0, true);
+  EXPECT_EQ(golfFairwaysEligible(round, score()), 0);
+  EXPECT_EQ(golfFairwaysHit(round, score()), 1);  // the bit is still counted
+}
+
 }  // namespace
