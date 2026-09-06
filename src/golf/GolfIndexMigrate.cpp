@@ -156,7 +156,7 @@ GolfIndexTransactionResult golfRunIndexTransaction(GolfIndexLiveState live, cons
   GolfIndexTransactionResult result{};
   result.live = live;
   const bool knownVersion = live.version == GolfIndexVersion::V2 || live.version == GolfIndexVersion::V3 ||
-                            live.version == GolfIndexVersion::V4;
+                            live.version == GolfIndexVersion::V4 || live.version == GolfIndexVersion::V5;
   if (!transactionOpsValid(storage) || (live.present && !knownVersion) ||
       (!live.present && (live.version != GolfIndexVersion::Unknown || live.rows != 0)) ||
       appendRows > GolfRound::MAX_PLAYERS) {
@@ -164,12 +164,13 @@ GolfIndexTransactionResult golfRunIndexTransaction(GolfIndexLiveState live, cons
     return result;
   }
 
-  if (live.version == GolfIndexVersion::V2 || live.version == GolfIndexVersion::V3) {
+  if (live.version == GolfIndexVersion::V2 || live.version == GolfIndexVersion::V3 ||
+      live.version == GolfIndexVersion::V4) {
     const StageTransactionResult migration =
         runStageTransaction(GolfIndexStagePurpose::Migration, live, live.rows, storage);
     result.cleanupPending = migration.cleanupPending;
     if (migration.published) {
-      live.version = GolfIndexVersion::V4;
+      live.version = GolfIndexVersion::V5;
       result.live = live;
     }
     if (migration.error != GolfIndexTransactionError::None) {
@@ -179,7 +180,7 @@ GolfIndexTransactionResult golfRunIndexTransaction(GolfIndexLiveState live, cons
   }
 
   if (appendRows == 0) return result;
-  if ((live.present && live.version != GolfIndexVersion::V4) || UINT32_MAX - live.rows < appendRows) {
+  if ((live.present && live.version != GolfIndexVersion::V5) || UINT32_MAX - live.rows < appendRows) {
     result.error = GolfIndexTransactionError::InvalidState;
     return result;
   }
@@ -189,7 +190,7 @@ GolfIndexTransactionResult golfRunIndexTransaction(GolfIndexLiveState live, cons
   result.cleanupPending = append.cleanupPending;
   if (append.published) {
     result.appendCommitted = true;
-    result.live = {expectedRows, GolfIndexVersion::V4, true};
+    result.live = {expectedRows, GolfIndexVersion::V5, true};
   }
   result.error = append.error;
   return result;
@@ -277,16 +278,16 @@ void GolfIndexMigrator::reset() {
   aborted_ = false;
   deleting_ = false;
   strictValidation_ = false;
-  requireV4_ = false;
+  requireV5_ = false;
   duplicateGroupSlot_ = false;
   groupFilename_ = nullptr;
   sourceVersion_ = GolfIndexVersion::Unknown;
 }
 
-void GolfIndexMigrator::resetForStrictValidation(const bool requireV4) {
+void GolfIndexMigrator::resetForStrictValidation(const bool requireV5) {
   reset();
   strictValidation_ = true;
-  requireV4_ = requireV4;
+  requireV5_ = requireV5;
 }
 
 bool GolfIndexMigrator::resetForDelete(const char* filename) {
@@ -325,9 +326,10 @@ bool GolfIndexMigrator::feed(const char* data, const size_t size, const GolfInde
 }
 
 bool GolfIndexMigrator::finish() {
-  // Legacy migration alone may drop an interrupted tail. A v4 reader or any
+  // Legacy migration alone may drop an interrupted tail. A v4/v5 reader or any
   // strict verifier must reject it because the final record was not committed.
-  if (lineLength_ > 0 && (deleting_ || strictValidation_ || sourceVersion_ == GolfIndexVersion::V4)) {
+  if (lineLength_ > 0 && (deleting_ || strictValidation_ || sourceVersion_ == GolfIndexVersion::V4 ||
+                          sourceVersion_ == GolfIndexVersion::V5)) {
     aborted_ = true;
   }
   lineLength_ = 0;
@@ -343,13 +345,16 @@ void GolfIndexMigrator::recordGroupRow(const uint8_t playerSlot) {
 }
 
 bool GolfIndexMigrator::parseSourceRow(GolfIndexRow& row) const {
+  if (sourceVersion_ == GolfIndexVersion::V5) {
+    return golfParseIndexRow(line_, GolfIndexVersion::V5, row);
+  }
   if (sourceVersion_ == GolfIndexVersion::V4) {
     return golfParseIndexRow(line_, GolfIndexVersion::V4, row);
   }
   if (sourceVersion_ != GolfIndexVersion::V2 && sourceVersion_ != GolfIndexVersion::V3) return false;
 
   // Only explicit legacy migration accepts the historical mixed 9/11-column
-  // shape. Each attempt still parses against a known schema; v4 is never tried.
+  // shape. Each attempt still parses against a known schema; v4/v5 are never tried.
   if (golfParseIndexRow(line_, sourceVersion_, row)) return true;
   const GolfIndexVersion alternate =
       sourceVersion_ == GolfIndexVersion::V2 ? GolfIndexVersion::V3 : GolfIndexVersion::V2;
@@ -362,7 +367,7 @@ bool GolfIndexMigrator::acceptLine(const GolfIndexMigrateSink sink, void* user) 
   if (lineNumber_ == 1) {
     sourceVersion_ = lineOverflow_ ? GolfIndexVersion::Unknown : golfIndexHeaderVersion(line_);
     if ((deleting_ || strictValidation_) &&
-        (sourceVersion_ == GolfIndexVersion::Unknown || (requireV4_ && sourceVersion_ != GolfIndexVersion::V4))) {
+        (sourceVersion_ == GolfIndexVersion::Unknown || (requireV5_ && sourceVersion_ != GolfIndexVersion::V5))) {
       aborted_ = true;
       return false;
     }
@@ -376,7 +381,8 @@ bool GolfIndexMigrator::acceptLine(const GolfIndexMigrateSink sink, void* user) 
   if (sourceVersion_ == GolfIndexVersion::Unknown || lineLength_ == 0) return true;
   GolfIndexRow parsed{};
   if (lineOverflow_ || !parseSourceRow(parsed)) {
-    if (deleting_ || strictValidation_ || sourceVersion_ == GolfIndexVersion::V4) {
+    if (deleting_ || strictValidation_ || sourceVersion_ == GolfIndexVersion::V4 ||
+        sourceVersion_ == GolfIndexVersion::V5) {
       aborted_ = true;
       return false;
     }
@@ -391,7 +397,7 @@ bool GolfIndexMigrator::acceptLine(const GolfIndexMigrateSink sink, void* user) 
   }
 
   if (deleting_ || (!strictValidation_ && needsMigration())) {
-    if (sourceVersion_ != GolfIndexVersion::V4) {
+    if (sourceVersion_ != GolfIndexVersion::V4 && sourceVersion_ != GolfIndexVersion::V5) {
       parsed.playerSlot = 0;
       memcpy(parsed.playerName, GOLF_DEFAULT_PLAYER_NAMES[0], sizeof(parsed.playerName));
     }

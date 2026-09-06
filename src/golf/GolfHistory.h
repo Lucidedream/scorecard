@@ -18,9 +18,16 @@ struct GolfHistoryEntry {
   uint16_t out100;
   uint16_t hazards;
   uint16_t obs;
+  uint16_t fairways;
+  uint16_t fairwayHoles;
+  uint16_t gir;
+  uint16_t girHoles;
   uint8_t holes;
   uint8_t playerSlot;
   bool penaltiesRecorded;
+  // See GolfIndexRow: each pair is present or blank as a unit (CONTRACTS-V2 §31.6).
+  bool fairwaysRecorded;
+  bool girRecorded;
 };
 
 static_assert(sizeof(GolfHistoryEntry) <= 96);

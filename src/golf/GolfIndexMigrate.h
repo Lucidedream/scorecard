@@ -11,7 +11,7 @@ struct GolfIndexRecoveryOps {
   void* user;
   bool (*exists)(const char* path, void* user);
   enum class ValidationStatus : uint8_t { Valid, Unreadable, Failed };
-  ValidationStatus (*validate)(const char* path, bool requireV4, void* user);
+  ValidationStatus (*validate)(const char* path, bool requireV5, void* user);
   bool (*remove)(const char* path, void* user);
   bool (*rename)(const char* from, const char* to, void* user);
   bool (*quarantine)(const char* path, void* user);
@@ -108,13 +108,13 @@ GolfIndexTransactionResult golfRunIndexTransaction(GolfIndexLiveState live, uint
 
 bool golfIndexGroupRowsValid(uint8_t rowCount, uint8_t slotMask);
 
-// Streams v2/v3 index rows into normalized v4 rows. It also verifies v4 files,
+// Streams v2/v3/v4 index rows into normalized v5 rows. It also verifies v5 files,
 // counts one filename group, or rewrites an index while removing a whole group.
 // Storage is one fixed row buffer; no heap or whole-file buffering is used.
 class GolfIndexMigrator {
  public:
   void reset();
-  void resetForStrictValidation(bool requireV4);
+  void resetForStrictValidation(bool requireV5);
   bool resetForDelete(const char* filename);
   bool resetForGroupCount(const char* filename);
   bool feed(const char* data, size_t size, GolfIndexMigrateSink sink, void* user);
@@ -122,7 +122,8 @@ class GolfIndexMigrator {
 
   GolfIndexVersion sourceVersion() const { return sourceVersion_; }
   bool needsMigration() const {
-    return sourceVersion_ == GolfIndexVersion::V2 || sourceVersion_ == GolfIndexVersion::V3;
+    return sourceVersion_ == GolfIndexVersion::V2 || sourceVersion_ == GolfIndexVersion::V3 ||
+           sourceVersion_ == GolfIndexVersion::V4;
   }
   uint32_t dataRows() const { return dataRows_; }
   uint32_t outputRows() const { return outputRows_; }
@@ -145,7 +146,7 @@ class GolfIndexMigrator {
   bool aborted_ = false;
   bool deleting_ = false;
   bool strictValidation_ = false;
-  bool requireV4_ = false;
+  bool requireV5_ = false;
   bool duplicateGroupSlot_ = false;
   // Borrowed for the synchronous feed/finish pass; never retained by storage.
   const char* groupFilename_ = nullptr;

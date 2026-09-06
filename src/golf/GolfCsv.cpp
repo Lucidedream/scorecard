@@ -120,8 +120,8 @@ bool validUtf8(const char* value) {
       continue;
     }
     if (*current >= 0xe0 && *current <= 0xef) {
-      if ((current[1] & 0xc0) != 0x80 || (current[2] & 0xc0) != 0x80 ||
-          (*current == 0xe0 && current[1] < 0xa0) || (*current == 0xed && current[1] >= 0xa0)) {
+      if ((current[1] & 0xc0) != 0x80 || (current[2] & 0xc0) != 0x80 || (*current == 0xe0 && current[1] < 0xa0) ||
+          (*current == 0xed && current[1] >= 0xa0)) {
         return false;
       }
       current += 3;
@@ -149,10 +149,37 @@ void copyDefaultPlayerName(char* output, const size_t capacity) {
   snprintf(output, capacity, "%s", GOLF_DEFAULT_PLAYER_NAMES[0]);
 }
 
+// Renders an optional numeric cell: the decimal value when recorded, otherwise
+// an empty string. buffer must hold at least 6 bytes (5 digits + NUL).
+void optionalNumberCell(char* buffer, const size_t size, const bool recorded, const uint16_t value) {
+  if (recorded) {
+    snprintf(buffer, size, "%u", value);
+  } else {
+    buffer[0] = '\0';
+  }
+}
+
+// A both-empty-or-both-present numeric pair (CONTRACTS-V2 §31.6). A half-filled
+// pair or a non-numeric cell is rejected; `recorded` is set only when present.
+bool parseOptionalNumberPair(const char* first, const char* second, uint16_t& firstOut, uint16_t& secondOut,
+                             bool& recorded) {
+  const bool firstEmpty = first[0] == '\0';
+  const bool secondEmpty = second[0] == '\0';
+  if (firstEmpty != secondEmpty) return false;
+  if (firstEmpty) return true;
+  if (!parseUnsigned(first, std::numeric_limits<uint16_t>::max(), firstOut) ||
+      !parseUnsigned(second, std::numeric_limits<uint16_t>::max(), secondOut)) {
+    return false;
+  }
+  recorded = true;
+  return true;
+}
+
 }  // namespace
 
 GolfIndexVersion golfIndexHeaderVersion(const char* line) {
   if (line == nullptr) return GolfIndexVersion::Unknown;
+  if (strcmp(line, GOLF_INDEX_HEADER_V5) == 0) return GolfIndexVersion::V5;
   if (strcmp(line, GOLF_INDEX_HEADER_V4) == 0) return GolfIndexVersion::V4;
   if (strcmp(line, GOLF_INDEX_HEADER_V3) == 0) return GolfIndexVersion::V3;
   if (strcmp(line, GOLF_INDEX_HEADER_V2) == 0) return GolfIndexVersion::V2;
@@ -169,21 +196,32 @@ bool golfFormatIndexRow(const GolfIndexRowView& row, char* output, const size_t 
 
   size_t written = 0;
   char holesAndSlot[12];
-  char totals[72];
+  // Widest row: ",strokes,par,putts,in100,out100,hazards,obs,fairways,fairwayHoles,gir,girHoles,"
+  // = 11 uint16 cells (5 digits) + 12 commas + NUL = 68 bytes.
+  char totals[80];
+  char hazardsCell[6];
+  char obsCell[6];
+  char fairwaysCell[6];
+  char fairwayHolesCell[6];
+  char girCell[6];
+  char girHolesCell[6];
+  optionalNumberCell(hazardsCell, sizeof(hazardsCell), row.penaltiesRecorded, row.hazards);
+  optionalNumberCell(obsCell, sizeof(obsCell), row.penaltiesRecorded, row.obs);
+  optionalNumberCell(fairwaysCell, sizeof(fairwaysCell), row.fairwaysRecorded, row.fairways);
+  optionalNumberCell(fairwayHolesCell, sizeof(fairwayHolesCell), row.fairwaysRecorded, row.fairwayHoles);
+  optionalNumberCell(girCell, sizeof(girCell), row.girRecorded, row.gir);
+  optionalNumberCell(girHolesCell, sizeof(girHolesCell), row.girRecorded, row.girHoles);
   const int holesAndSlotLength = snprintf(holesAndSlot, sizeof(holesAndSlot), ",%u,%u,", row.holes, row.playerSlot);
-  const int totalsLength = row.penaltiesRecorded
-                               ? snprintf(totals, sizeof(totals), ",%u,%u,%u,%u,%u,%u,%u,", row.strokes, row.par,
-                                          row.putts, row.in100, row.out100, row.hazards, row.obs)
-                               : snprintf(totals, sizeof(totals), ",%u,%u,%u,%u,%u,,,", row.strokes, row.par,
-                                          row.putts, row.in100, row.out100);
+  const int totalsLength =
+      snprintf(totals, sizeof(totals), ",%u,%u,%u,%u,%u,%s,%s,%s,%s,%s,%s,", row.strokes, row.par, row.putts, row.in100,
+               row.out100, hazardsCell, obsCell, fairwaysCell, fairwayHolesCell, girCell, girHolesCell);
   if (holesAndSlotLength < 0 || static_cast<size_t>(holesAndSlotLength) >= sizeof(holesAndSlot) || totalsLength < 0 ||
-      static_cast<size_t>(totalsLength) >= sizeof(totals) ||
-      !appendText(row.date, output, outputSize, written) || !appendChar(',', output, outputSize, written) ||
-      !appendCsvField(row.course, output, outputSize, written) ||
+      static_cast<size_t>(totalsLength) >= sizeof(totals) || !appendText(row.date, output, outputSize, written) ||
+      !appendChar(',', output, outputSize, written) || !appendCsvField(row.course, output, outputSize, written) ||
       !appendText(holesAndSlot, output, outputSize, written) ||
       !appendCsvField(row.playerName, output, outputSize, written) ||
-      !appendText(totals, output, outputSize, written) ||
-      !appendText(row.file, output, outputSize, written) || !appendText("\r\n", output, outputSize, written)) {
+      !appendText(totals, output, outputSize, written) || !appendText(row.file, output, outputSize, written) ||
+      !appendText("\r\n", output, outputSize, written)) {
     output[0] = '\0';
     return false;
   }
@@ -192,15 +230,20 @@ bool golfFormatIndexRow(const GolfIndexRowView& row, char* output, const size_t 
 }
 
 bool golfFormatIndexRow(const GolfIndexRow& row, char* output, const size_t outputSize) {
-  return golfFormatIndexRow({row.date,       row.course, row.holes,  row.playerSlot, row.playerName,
-                             row.strokes,    row.par,    row.putts,  row.in100,      row.out100,
-                             row.hazards,    row.obs,    row.penaltiesRecorded,      row.file},
-                            output, outputSize);
+  return golfFormatIndexRow(
+      {row.date,        row.course,       row.holes, row.playerSlot, row.playerName,        row.strokes,
+       row.par,         row.putts,        row.in100, row.out100,     row.hazards,           row.obs,
+       row.fairways,    row.fairwayHoles, row.gir,   row.girHoles,   row.penaltiesRecorded, row.fairwaysRecorded,
+       row.girRecorded, row.file},
+      output, outputSize);
 }
 
 bool golfParseIndexRow(const char* input, const GolfIndexVersion version, GolfIndexRow& row) {
   if (input == nullptr || version == GolfIndexVersion::Unknown) return false;
-  const uint8_t expectedFields = version == GolfIndexVersion::V2 ? 9 : version == GolfIndexVersion::V3 ? 11 : 13;
+  const uint8_t expectedFields = version == GolfIndexVersion::V2   ? 9
+                                 : version == GolfIndexVersion::V3 ? 11
+                                 : version == GolfIndexVersion::V4 ? 13
+                                                                   : 17;
   uint8_t fieldCount = 0;
   if (!countFields(input, fieldCount) || fieldCount != expectedFields) return false;
 
@@ -215,7 +258,7 @@ bool golfParseIndexRow(const char* input, const GolfIndexVersion version, GolfIn
   uint16_t value = 0;
   if (!parseNumberField(current, std::numeric_limits<uint8_t>::max(), value, true)) return false;
   parsed.holes = static_cast<uint8_t>(value);
-  if (version == GolfIndexVersion::V4) {
+  if (version == GolfIndexVersion::V4 || version == GolfIndexVersion::V5) {
     if (!parseNumberField(current, GolfRound::MAX_PLAYERS - 1, value, true)) return false;
     parsed.playerSlot = static_cast<uint8_t>(value);
     if (!parseField(current, parsed.playerName, sizeof(parsed.playerName)) || *current++ != ',' ||
@@ -232,24 +275,35 @@ bool golfParseIndexRow(const char* input, const GolfIndexVersion version, GolfIn
     if (!parseNumberField(current, std::numeric_limits<uint16_t>::max(), *totals[field], true)) return false;
   }
 
-  if (version == GolfIndexVersion::V3 || version == GolfIndexVersion::V4) {
+  if (version == GolfIndexVersion::V5) {
     char hazards[6]{};
     char obs[6]{};
-    if (!parseField(current, hazards, sizeof(hazards)) || *current++ != ',' ||
-        !parseField(current, obs, sizeof(obs)) || *current++ != ',' ||
+    char fairways[6]{};
+    char fairwayHoles[6]{};
+    char gir[6]{};
+    char girHoles[6]{};
+    if (!parseField(current, hazards, sizeof(hazards)) || *current++ != ',' || !parseField(current, obs, sizeof(obs)) ||
+        *current++ != ',' || !parseField(current, fairways, sizeof(fairways)) || *current++ != ',' ||
+        !parseField(current, fairwayHoles, sizeof(fairwayHoles)) || *current++ != ',' ||
+        !parseField(current, gir, sizeof(gir)) || *current++ != ',' ||
+        !parseField(current, girHoles, sizeof(girHoles)) || *current++ != ',' ||
         !parseField(current, parsed.file, sizeof(parsed.file))) {
       return false;
     }
-    const bool hazardsEmpty = hazards[0] == '\0';
-    const bool obsEmpty = obs[0] == '\0';
-    if (hazardsEmpty != obsEmpty) return false;
-    if (!hazardsEmpty) {
-      if (!parseUnsigned(hazards, std::numeric_limits<uint16_t>::max(), parsed.hazards) ||
-          !parseUnsigned(obs, std::numeric_limits<uint16_t>::max(), parsed.obs)) {
-        return false;
-      }
-      parsed.penaltiesRecorded = true;
+    if (!parseOptionalNumberPair(hazards, obs, parsed.hazards, parsed.obs, parsed.penaltiesRecorded) ||
+        !parseOptionalNumberPair(fairways, fairwayHoles, parsed.fairways, parsed.fairwayHoles,
+                                 parsed.fairwaysRecorded) ||
+        !parseOptionalNumberPair(gir, girHoles, parsed.gir, parsed.girHoles, parsed.girRecorded)) {
+      return false;
     }
+  } else if (version == GolfIndexVersion::V3 || version == GolfIndexVersion::V4) {
+    char hazards[6]{};
+    char obs[6]{};
+    if (!parseField(current, hazards, sizeof(hazards)) || *current++ != ',' || !parseField(current, obs, sizeof(obs)) ||
+        *current++ != ',' || !parseField(current, parsed.file, sizeof(parsed.file))) {
+      return false;
+    }
+    if (!parseOptionalNumberPair(hazards, obs, parsed.hazards, parsed.obs, parsed.penaltiesRecorded)) return false;
   } else if (!parseField(current, parsed.file, sizeof(parsed.file))) {
     return false;
   }
@@ -262,7 +316,7 @@ bool golfParseIndexRow(const char* input, const GolfIndexVersion version, GolfIn
 }
 
 bool golfParseIndexRow(const char* input, GolfIndexRow& row) {
-  return golfParseIndexRow(input, GolfIndexVersion::V4, row);
+  return golfParseIndexRow(input, GolfIndexVersion::V5, row);
 }
 
 uint8_t golfEnabledPlayerMask(const GolfRound& round) {
@@ -273,7 +327,8 @@ uint8_t golfEnabledPlayerMask(const GolfRound& round) {
   return mask;
 }
 
-bool golfMakeIndexRow(const GolfRound& round, const uint8_t playerSlot, const char* filename, GolfIndexRow& row) {
+bool golfMakeIndexRow(const GolfRound& round, const uint8_t playerSlot, const char* filename,
+                      const bool fairwaysRecorded, GolfIndexRow& row) {
   if (playerSlot >= GolfRound::MAX_PLAYERS || !golfPlayerIsEnabled(round.players[playerSlot]) || filename == nullptr ||
       filename[0] == '\0' || strlen(filename) >= GOLF_ROUND_FILENAME_BUFFER_SIZE ||
       strpbrk(filename, ",\r\n") != nullptr || memchr(round.courseName, '\0', sizeof(round.courseName)) == nullptr ||
@@ -298,22 +353,33 @@ bool golfMakeIndexRow(const GolfRound& round, const uint8_t playerSlot, const ch
   built.hazards = golfHazardsForRound(score, round.holeCount);
   built.obs = golfObsForRound(score, round.holeCount);
   built.penaltiesRecorded = true;
+  // FIR is written only when the source round actually carries the fairway array
+  // (v5+). GIR is derived, so it is written for any round with usable par.
+  if (fairwaysRecorded) {
+    built.fairways = golfFairwaysHit(round, score);
+    built.fairwayHoles = golfFairwaysEligible(round, score);
+    built.fairwaysRecorded = true;
+  }
+  if (golfHasPar(round)) {
+    built.gir = golfGreensInRegulation(round, score);
+    built.girHoles = golfGreensEligible(round, score);
+    built.girRecorded = true;
+  }
   row = built;
   return true;
 }
 
 GolfIndexGroupWriteResult golfWriteIndexGroupRows(const GolfRound& round, const char* filename,
-                                                  GolfIndexRow& rowScratch, char* rowBuffer,
-                                                  const size_t rowBufferSize, const GolfIndexRowSink sink,
-                                                  void* user) {
+                                                  const bool fairwaysRecorded, GolfIndexRow& rowScratch,
+                                                  char* rowBuffer, const size_t rowBufferSize,
+                                                  const GolfIndexRowSink sink, void* user) {
   GolfIndexGroupWriteResult result{};
   if (rowBuffer == nullptr || rowBufferSize == 0 || sink == nullptr) return result;
   const uint8_t expectedMask = golfEnabledPlayerMask(round);
   for (uint8_t slot = 0; slot < GolfRound::MAX_PLAYERS; ++slot) {
     if ((expectedMask & (1U << slot)) == 0) continue;
-    if (!golfMakeIndexRow(round, slot, filename, rowScratch) ||
-        !golfFormatIndexRow(rowScratch, rowBuffer, rowBufferSize) ||
-        !sink(rowBuffer, strlen(rowBuffer), user)) {
+    if (!golfMakeIndexRow(round, slot, filename, fairwaysRecorded, rowScratch) ||
+        !golfFormatIndexRow(rowScratch, rowBuffer, rowBufferSize) || !sink(rowBuffer, strlen(rowBuffer), user)) {
       return result;
     }
     result.slotMask |= static_cast<uint8_t>(1U << slot);

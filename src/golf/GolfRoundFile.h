@@ -4,6 +4,10 @@
 
 struct GolfRoundFileInfo {
   bool penaltiesRecorded = true;
+  // The round carried the per-hole fairway array (file "v" >= 5). When false,
+  // every fairwayHit bit is clear only because the format predates the feature,
+  // so FIR must not be written to index.csv for this round.
+  bool fairwaysRecorded = true;
   bool repaired = false;
 };
 

@@ -46,6 +46,7 @@ bool loadGolfRoundFile(const char* path, GolfRound& out, GolfRoundFileInfo* info
   out = *loaded;
   if (info != nullptr) {
     info->penaltiesRecorded = (doc["v"] | 0) >= 3;
+    info->fairwaysRecorded = (doc["v"] | 0) >= 5;
     info->repaired = false;
     for (const auto& player : validation.players) info->repaired |= player.repaired();
   }

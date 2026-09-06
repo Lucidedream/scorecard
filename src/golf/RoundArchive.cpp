@@ -133,23 +133,23 @@ IndexStreamStatus runMigrator(const char* path, GolfIndexMigrator& migrator, con
 
 bool indexExists(const char* path, void*) { return Storage.exists(path); }
 
-GolfIndexRecoveryOps::ValidationStatus indexValid(const char* path, const bool requireV4, void* user) {
+GolfIndexRecoveryOps::ValidationStatus indexValid(const char* path, const bool requireV5, void* user) {
   auto* verifier = static_cast<GolfIndexMigrator*>(user);
   if (verifier == nullptr) {
     LOG_ERR("GOLF", "index recovery verify missing scratch: %s", path);
     return GolfIndexRecoveryOps::ValidationStatus::Failed;
   }
-  if (requireV4) {
+  if (requireV5) {
     verifier->resetForStrictValidation(true);
   } else {
-    // v4 is intrinsically strict. A recognized legacy live file remains
+    // v5 is intrinsically strict. A recognized legacy live file remains
     // recoverable so the explicit migration pass can normalize it.
     verifier->reset();
   }
   const IndexStreamStatus stream = runMigrator(path, *verifier, nullptr, nullptr);
   const GolfIndexVersion version = verifier->sourceVersion();
   const bool valid = stream == IndexStreamStatus::Complete && !verifier->aborted() &&
-                     (requireV4 ? version == GolfIndexVersion::V4 : version != GolfIndexVersion::Unknown);
+                     (requireV5 ? version == GolfIndexVersion::V5 : version != GolfIndexVersion::Unknown);
   if (!valid) {
     LOG_ERR("GOLF", "index recovery verify failed: %s (stream=%u version=%u)", path, static_cast<unsigned>(stream),
             static_cast<unsigned>(version));
@@ -264,7 +264,7 @@ IndexRewriteResult commitStagedIndex(const bool hadOriginal, const uint32_t expe
       groupFilename == nullptr ||
       (expectedGroupMask == 0 ? verifier.groupRows() == 0
                               : verifier.groupValid() && verifier.groupSlotMask() == expectedGroupMask);
-  if (stream != IndexStreamStatus::Complete || verifier.sourceVersion() != GolfIndexVersion::V4 || !rowsMatch ||
+  if (stream != IndexStreamStatus::Complete || verifier.sourceVersion() != GolfIndexVersion::V5 || !rowsMatch ||
       !groupMatches) {
     LOG_ERR("GOLF", "index %s verify failed: %s (stream=%u rows=%lu expected=%lu)", operation, INDEX_NEW_PATH,
             static_cast<unsigned>(stream), static_cast<unsigned long>(verifier.dataRows()),
@@ -350,8 +350,10 @@ GolfIndexStageWriteStatus writeIndexStage(const GolfIndexStagePurpose purpose, c
       return GolfIndexStageWriteStatus::WriteFailed;
     }
 
-    const GolfIndexGroupWriteResult group = golfWriteIndexGroupRows(
-        *context->round, context->filename, *context->indexRow, context->csv, context->csvSize, &migrateSink, &staged);
+    // A live archive-append is always a freshly written v5 round.
+    const GolfIndexGroupWriteResult group =
+        golfWriteIndexGroupRows(*context->round, context->filename, /*fairwaysRecorded=*/true, *context->indexRow,
+                                context->csv, context->csvSize, &migrateSink, &staged);
     if (!group.complete || group.slotMask != context->expectedMask ||
         !golfIndexGroupRowsValid(group.rowCount, group.slotMask)) {
       LOG_ERR("GOLF", "index append group write failed: %s (rows=%u mask=0x%02x)", INDEX_NEW_PATH,
@@ -388,7 +390,7 @@ bool verifyIndexStage(const GolfIndexStagePurpose purpose, const uint32_t expect
       purpose != GolfIndexStagePurpose::Append ||
       (context->migrator->groupValid() && context->migrator->groupSlotMask() == context->expectedMask);
   const bool valid = stream == IndexStreamStatus::Complete &&
-                     context->migrator->sourceVersion() == GolfIndexVersion::V4 && rowsMatch && groupMatches;
+                     context->migrator->sourceVersion() == GolfIndexVersion::V5 && rowsMatch && groupMatches;
   if (!valid) {
     LOG_ERR("GOLF", "index %s stage verify failed: %s (stream=%u rows=%lu expected=%lu)", indexPurposeName(purpose),
             INDEX_NEW_PATH, static_cast<unsigned>(stream), static_cast<unsigned long>(context->migrator->dataRows()),
@@ -406,7 +408,7 @@ void logIndexTransactionFailure(const GolfIndexTransactionResult& result) {
           static_cast<unsigned>(result.error), result.appendCommitted ? 1U : 0U, result.cleanupPending ? 1U : 0U);
 }
 
-bool migrateIndexToV4IfNeeded(GolfIndexLiveState& live, GolfIndexMigrator& migrator) {
+bool migrateIndexToV5IfNeeded(GolfIndexLiveState& live, GolfIndexMigrator& migrator) {
   const GolfIndexVersion originalVersion = live.version;
   IndexTransactionContext context{};
   context.migrator = &migrator;
@@ -416,8 +418,9 @@ bool migrateIndexToV4IfNeeded(GolfIndexLiveState& live, GolfIndexMigrator& migra
     logIndexTransactionFailure(result);
     return false;
   }
-  if (originalVersion == GolfIndexVersion::V2 || originalVersion == GolfIndexVersion::V3) {
-    LOG_INF("GOLF", "index.csv migrated to v4 (%lu rows)", static_cast<unsigned long>(live.rows));
+  if (originalVersion == GolfIndexVersion::V2 || originalVersion == GolfIndexVersion::V3 ||
+      originalVersion == GolfIndexVersion::V4) {
+    LOG_INF("GOLF", "index.csv migrated to v5 (%lu rows)", static_cast<unsigned long>(live.rows));
   }
   return true;
 }
@@ -470,10 +473,14 @@ bool hasJsonSuffix(const char* filename) {
       continue;
     }
     entry.close();
-    if (!loadGolfRoundFile(scratch.path, scratch.round)) continue;
+    GolfRoundFileInfo info{};
+    if (!loadGolfRoundFile(scratch.path, scratch.round, &info)) continue;
 
-    const GolfIndexGroupWriteResult group = golfWriteIndexGroupRows(
-        scratch.round, scratch.filename, scratch.indexRow, scratch.csv, sizeof(scratch.csv), &migrateSink, &staged);
+    // GIR is derived and written for every round; FIR only for rounds that were
+    // v5+ when archived (info.fairwaysRecorded).
+    const GolfIndexGroupWriteResult group =
+        golfWriteIndexGroupRows(scratch.round, scratch.filename, info.fairwaysRecorded, scratch.indexRow, scratch.csv,
+                                sizeof(scratch.csv), &migrateSink, &staged);
     if (!group.complete || !golfIndexGroupRowsValid(group.rowCount, group.slotMask) ||
         UINT32_MAX - rows < group.rowCount) {
       LOG_ERR("GOLF", "index rebuild group write failed: %s", scratch.filename);
@@ -490,7 +497,7 @@ bool hasJsonSuffix(const char* filename) {
 
   const IndexRewriteResult published = commitStagedIndex(false, rows, "rebuild", scratch.indexMigrator);
   if (!published.committed()) return false;
-  live = {rows, GolfIndexVersion::V4, true};
+  live = {rows, GolfIndexVersion::V5, true};
   LOG_INF("GOLF", "index.csv rebuilt from %lu rounds (%lu rows)", static_cast<unsigned long>(rounds),
           static_cast<unsigned long>(rows));
   return true;
@@ -527,7 +534,7 @@ IndexRewriteResult rewriteIndexWithout(const char* filename, GolfIndexMigrator& 
     LOG_ERR("GOLF", "index delete has no recovered live index: %s", INDEX_PATH);
     return {};
   }
-  if (!migrateIndexToV4IfNeeded(live, rewrite)) return {};
+  if (!migrateIndexToV5IfNeeded(live, rewrite)) return {};
   if (!rewrite.resetForDelete(filename)) {
     LOG_ERR("GOLF", "index delete verify setup failed for filename: %s", filename);
     return {};

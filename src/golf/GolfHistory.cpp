@@ -72,9 +72,15 @@ void GolfHistoryReader::acceptLine(const GolfHistoryMalformedCallback malformedC
   entry.out100 = parsed.out100;
   entry.hazards = parsed.hazards;
   entry.obs = parsed.obs;
+  entry.fairways = parsed.fairways;
+  entry.fairwayHoles = parsed.fairwayHoles;
+  entry.gir = parsed.gir;
+  entry.girHoles = parsed.girHoles;
   entry.holes = parsed.holes;
   entry.playerSlot = parsed.playerSlot;
   entry.penaltiesRecorded = parsed.penaltiesRecorded;
+  entry.fairwaysRecorded = parsed.fairwaysRecorded;
+  entry.girRecorded = parsed.girRecorded;
   nextEntry = static_cast<uint8_t>((nextEntry + 1) % GOLF_HISTORY_CAPACITY);
   if (entryCount < GOLF_HISTORY_CAPACITY) ++entryCount;
   ++validRows;

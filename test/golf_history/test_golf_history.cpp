@@ -7,13 +7,15 @@
 
 namespace {
 
-constexpr char HEADER[] = "date,course,holes,playerSlot,playerName,strokes,par,putts,in100,out100,hazards,obs,file\r\n";
+constexpr char HEADER[] =
+    "date,course,holes,playerSlot,playerName,strokes,par,putts,in100,out100,hazards,obs,fairways,fairwayHoles,gir,"
+    "girHoles,file\r\n";
 static_assert(sizeof(GolfHistoryEntry) <= 96);
 
 std::string row(const int number, const uint8_t slot = 0, const char* name = "Noah", const uint16_t par = 72) {
   char output[GOLF_CSV_ROW_BUFFER_SIZE];
-  snprintf(output, sizeof(output), ",Course %d,18,%u,%s,%d,%u,32,54,32,1,2,round-%04d.json\r\n", number, slot, name,
-           80 + number, par, number);
+  snprintf(output, sizeof(output), ",Course %d,18,%u,%s,%d,%u,32,54,32,1,2,9,14,7,16,round-%04d.json\r\n", number, slot,
+           name, 80 + number, par, number);
   return output;
 }
 
@@ -93,7 +95,7 @@ TEST(GolfHistory, NormalReaderDoesNotMapLegacyRowsIntoSlotZero) {
   EXPECT_EQ(read(input, 1).count(), 0);
 }
 
-TEST(GolfHistory, V4HeaderFlagsEveryLegacyShapedNonemptyRow) {
+TEST(GolfHistory, V5HeaderFlagsEveryLegacyShapedNonemptyRow) {
   const std::string input = std::string(HEADER) + ",Old,18,85,72,33,52,30,round-0001.json\r\n" +
                             ",New,18,90,72,35,55,30,2,1,round-0002.json\r\n";
   GolfHistoryReader reader;
@@ -109,6 +111,24 @@ TEST(GolfHistory, ParFreeRowSuppressesToPar) {
   const GolfHistoryReader reader = read(std::string(HEADER) + row(1, 0, "Noah", 0), 0);
   ASSERT_EQ(reader.count(), 1);
   EXPECT_FALSE(golfHistoryShowsToPar(reader.newest(0)));
+}
+
+TEST(GolfHistory, V5RegulationFieldsReachTheEntry) {
+  const GolfHistoryReader recorded = read(std::string(HEADER) + row(1, 0, "Noah"), 0);  // row() writes 9,14,7,16
+  ASSERT_EQ(recorded.count(), 1);
+  const GolfHistoryEntry& entry = recorded.newest(0);
+  EXPECT_TRUE(entry.fairwaysRecorded);
+  EXPECT_EQ(entry.fairways, 9);
+  EXPECT_EQ(entry.fairwayHoles, 14);
+  EXPECT_TRUE(entry.girRecorded);
+  EXPECT_EQ(entry.gir, 7);
+  EXPECT_EQ(entry.girHoles, 16);
+
+  const GolfHistoryReader blank =
+      read(std::string(HEADER) + ",Course A,18,0,Noah,83,72,32,54,32,1,2,,,,,round-0001.json\r\n", 0);
+  ASSERT_EQ(blank.count(), 1);
+  EXPECT_FALSE(blank.newest(0).fairwaysRecorded);
+  EXPECT_FALSE(blank.newest(0).girRecorded);
 }
 
 TEST(GolfHistory, RejectsInvalidSelectedSlot) {
