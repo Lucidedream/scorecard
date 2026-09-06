@@ -1,0 +1,917 @@
+<title>Fairway Hit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Libre+Franklin:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+:root {
+  --paper:      #F1F4F1;
+  --card:       #FBFCFA;
+  --ink:        #13181A;
+  --ink-2:      #4C5654;
+  --ink-3:      #737E7A;
+  --rule:       #D2D9D2;
+  --rule-soft:  #E3E8E2;
+  --accent:     #1E5C3E;
+  --accent-ink: #123A28;
+  --accent-wash:#E2ECE4;
+  --flag:       #A93826;
+  --flag-wash:  #F4E4E0;
+  --panel-bg:   #FFFFFF;
+  --panel-ink:  #000000;
+  --panel-edge: #98A29C;
+
+  --measure: 68ch;
+  --gutter: 13rem;
+
+  --step--1: clamp(0.78rem, 0.76rem + 0.10vw, 0.84rem);
+  --step-0:  clamp(1.00rem, 0.97rem + 0.14vw, 1.08rem);
+  --step-1:  clamp(1.22rem, 1.15rem + 0.32vw, 1.42rem);
+  --step-2:  clamp(1.55rem, 1.40rem + 0.68vw, 2.05rem);
+  --step-3:  clamp(2.05rem, 1.72rem + 1.55vw, 3.30rem);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0F1412; --card: #161C19; --ink: #E6EBE6; --ink-2: #A3AEA8;
+    --ink-3: #7B8681; --rule: #29322D; --rule-soft: #1E2622;
+    --accent: #6FC08D; --accent-ink: #A5DCB9; --accent-wash: #17251D;
+    --flag: #E1745F; --flag-wash: #2A1A16;
+    --panel-bg: #E9EBE7; --panel-ink: #0B0E0C; --panel-edge: #3A433D;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0F1412; --card: #161C19; --ink: #E6EBE6; --ink-2: #A3AEA8;
+  --ink-3: #7B8681; --rule: #29322D; --rule-soft: #1E2622;
+  --accent: #6FC08D; --accent-ink: #A5DCB9; --accent-wash: #17251D;
+  --flag: #E1745F; --flag-wash: #2A1A16;
+  --panel-bg: #E9EBE7; --panel-ink: #0B0E0C; --panel-edge: #3A433D;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--paper); color: var(--ink);
+  font-family: "Libre Franklin", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: var(--step-0); line-height: 1.62; -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3, h4 {
+  font-family: Archivo, "Libre Franklin", system-ui, sans-serif;
+  text-wrap: balance; margin: 0; line-height: 1.14; letter-spacing: -0.014em;
+}
+p { margin: 0; }
+a { color: var(--accent); }
+code, .mono { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-variant-numeric: tabular-nums; }
+
+.wrap { max-width: 78rem; margin: 0 auto; padding: 0 clamp(1.15rem, 4vw, 3rem); }
+
+.masthead { padding: clamp(3rem, 8vw, 5.5rem) 0 clamp(2rem, 4vw, 3rem); border-bottom: 2px solid var(--ink); }
+.eyebrow {
+  font-family: Archivo, system-ui, sans-serif; font-size: var(--step--1); font-weight: 600;
+  letter-spacing: 0.15em; text-transform: uppercase; color: var(--flag); margin-bottom: 1.15rem;
+}
+.masthead h1 { font-size: var(--step-3); font-weight: 700; letter-spacing: -0.03em; max-width: 18ch; }
+.standfirst { margin-top: 1.4rem; max-width: 60ch; font-size: var(--step-1); line-height: 1.5; color: var(--ink-2); }
+.meta-strip { margin-top: 2.4rem; display: flex; flex-wrap: wrap; gap: 0 2.5rem; row-gap: 1.1rem; font-size: var(--step--1); }
+.meta-strip div { display: flex; flex-direction: column; gap: 0.2rem; }
+.meta-strip .k {
+  font-family: Archivo, system-ui, sans-serif; font-weight: 600; letter-spacing: 0.11em;
+  text-transform: uppercase; color: var(--ink-3); font-size: 0.72rem;
+}
+.meta-strip .v { font-weight: 500; color: var(--ink); }
+
+section.doc {
+  display: grid; grid-template-columns: var(--gutter) minmax(0, 1fr); gap: 0 3rem;
+  padding: clamp(2.6rem, 6vw, 4.4rem) 0; border-bottom: 1px solid var(--rule);
+}
+section.doc:last-of-type { border-bottom: 0; }
+.rail { position: sticky; top: 1.5rem; align-self: start; }
+.rail .idx {
+  font-family: Archivo, system-ui, sans-serif; font-size: var(--step--1); font-weight: 700;
+  letter-spacing: 0.12em; color: var(--flag); display: block; margin-bottom: 0.5rem;
+}
+.rail .label { font-size: var(--step--1); color: var(--ink-3); line-height: 1.4; max-width: 15ch; }
+.body > * + * { margin-top: 1.35rem; }
+.body h2 { font-size: var(--step-2); font-weight: 700; max-width: 24ch; }
+.body h3 { font-size: var(--step-1); font-weight: 600; margin-top: 2.6rem; }
+.body h4 {
+  font-family: Archivo, system-ui, sans-serif; font-size: var(--step--1); font-weight: 600;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); margin-top: 2rem;
+}
+.body p, .body li { max-width: var(--measure); }
+.body ul, .body ol { margin: 0; padding-left: 1.25rem; }
+.body li + li { margin-top: 0.5rem; }
+strong { font-weight: 600; }
+
+@media (max-width: 860px) {
+  section.doc { grid-template-columns: minmax(0, 1fr); gap: 1.2rem; }
+  .rail { position: static; display: flex; align-items: baseline; gap: 0.85rem; }
+  .rail .idx { margin-bottom: 0; }
+}
+
+.callout {
+  border-left: 3px solid var(--accent); background: var(--accent-wash);
+  padding: 1.05rem 1.3rem; max-width: var(--measure); font-size: 0.96rem;
+}
+.callout.warn { border-left-color: var(--flag); background: var(--flag-wash); }
+.callout h4 { margin-top: 0; color: var(--ink-2); }
+.callout > * + * { margin-top: 0.6rem; }
+
+.scroller { overflow-x: auto; max-width: 100%; padding-bottom: 0.4rem; }
+table { border-collapse: collapse; width: 100%; min-width: 32rem; font-size: 0.93rem; }
+caption {
+  caption-side: top; text-align: left; font-family: Archivo, system-ui, sans-serif;
+  font-size: var(--step--1); font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--ink-3); padding-bottom: 0.7rem;
+}
+th, td { text-align: left; padding: 0.6rem 1rem 0.6rem 0; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+thead th {
+  font-family: Archivo, system-ui, sans-serif; font-size: 0.74rem; font-weight: 600;
+  letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-3);
+  border-bottom: 1px solid var(--rule); white-space: nowrap;
+}
+tbody tr:last-child td { border-bottom: 0; }
+td.num { font-family: "JetBrains Mono", monospace; font-variant-numeric: tabular-nums; }
+
+kbd {
+  display: inline-block; border: 1px solid var(--rule); border-bottom-width: 2px; border-radius: 3px;
+  background: var(--card); padding: 0.05em 0.42em; font-size: 0.8em; font-weight: 500;
+  white-space: nowrap; color: var(--ink);
+}
+pre {
+  background: var(--card); border: 1px solid var(--rule); padding: 1rem 1.15rem;
+  overflow-x: auto; font-size: 0.82rem; line-height: 1.62; margin: 0;
+  font-family: "JetBrains Mono", monospace;
+}
+:not(pre) > code { background: var(--rule-soft); padding: 0.1em 0.36em; font-size: 0.86em; border-radius: 2px; }
+
+/* ---- device mockups: strict 1-bit, 480x800 at 1:1 ---- */
+.mockrow { display: flex; gap: 2rem; align-items: flex-start; overflow-x: auto; padding-bottom: 0.6rem; }
+figure { margin: 0; }
+figcaption { margin-top: 0.85rem; font-size: var(--step--1); color: var(--ink-3); max-width: 30rem; }
+figcaption b {
+  display: block; font-family: Archivo, system-ui, sans-serif; font-weight: 600;
+  letter-spacing: 0.09em; text-transform: uppercase; font-size: 0.72rem; color: var(--ink-2); margin-bottom: 0.3rem;
+}
+
+.panel {
+  width: 480px; height: 800px; flex: none; background: var(--panel-bg); color: var(--panel-ink);
+  border: 1px solid var(--panel-edge); display: flex; flex-direction: column;
+  font-family: Archivo, system-ui, sans-serif; overflow: hidden; position: relative;
+}
+.p-status {
+  display: flex; justify-content: space-between; align-items: center; padding: 0 16px; height: 44px;
+  border-bottom: 2px solid var(--panel-ink); font-size: 15px; font-weight: 600; letter-spacing: 0.04em;
+}
+.p-hole {
+  padding: 14px 18px 12px; border-bottom: 1px solid var(--panel-ink);
+  display: flex; justify-content: space-between; align-items: flex-end;
+}
+.p-hole .lab { font-size: 12px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; }
+.p-hole .big { font-size: 46px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.p-hole .h-r { text-align: right; font-size: 15px; font-weight: 500; line-height: 1.5; font-variant-numeric: tabular-nums; }
+.p-hole .h-r b { font-weight: 700; }
+
+.p-field {
+  display: flex; align-items: center; gap: 12px; padding: 0 18px; height: 104px;
+  border-bottom: 1px solid var(--panel-ink);
+}
+.p-field.focus { background: var(--panel-ink); color: var(--panel-bg); height: 132px; }
+.p-field .cue { width: 16px; font-size: 20px; font-weight: 700; line-height: 1; }
+.p-field .name { flex: 1; font-size: 14px; font-weight: 600; letter-spacing: 0.13em; text-transform: uppercase; }
+.p-field .marks {
+  font-family: "JetBrains Mono", monospace; font-size: 15px; font-weight: 700;
+  letter-spacing: 0.08em; text-align: right; line-height: 1.25; max-width: 120px;
+}
+.p-field .val {
+  font-size: 50px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums;
+  min-width: 58px; text-align: right;
+}
+.p-field.focus .val { font-size: 74px; }
+.p-field .val.ghost { opacity: 0.4; }
+
+.p-totals { display: flex; border-bottom: 1px solid var(--panel-ink); }
+.p-totals div { flex: 1; padding: 10px 14px; border-right: 1px solid var(--panel-ink); }
+.p-totals div:last-child { border-right: 0; }
+.p-totals .k { font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; }
+.p-totals .v { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
+
+.p-pen {
+  display: flex; justify-content: space-between; align-items: center; padding: 9px 16px;
+  border-bottom: 2px solid var(--panel-ink); background: var(--panel-ink); color: var(--panel-bg);
+  font-size: 15px; font-weight: 700; letter-spacing: 0.1em;
+}
+.p-pen .seq { font-family: "JetBrains Mono", monospace; letter-spacing: 0.14em; }
+
+.p-strip { padding: 10px 14px; border-bottom: 1px solid var(--panel-ink); }
+.p-strip table { min-width: 0; width: 100%; font-family: Archivo, sans-serif; font-size: 14px; }
+.p-strip th, .p-strip td { border: 0; padding: 2px 0; text-align: center; font-variant-numeric: tabular-nums; }
+.p-strip th { font-size: 11px; font-weight: 600; opacity: 0.62; text-transform: none; color: inherit; }
+.p-strip td { font-size: 16px; font-weight: 600; }
+.p-strip td.now { background: var(--panel-ink); color: var(--panel-bg); }
+.p-strip td.none { opacity: 0.4; }
+.p-strip td sup { font-size: 9px; font-weight: 700; }
+
+.p-foot {
+  margin-top: auto; display: flex; border-top: 2px solid var(--panel-ink);
+  font-size: 12px; font-weight: 600; letter-spacing: 0.02em;
+}
+.p-foot div { flex: 1; text-align: center; padding: 12px 3px; border-right: 1px solid var(--panel-ink); }
+.p-foot div:last-child { border-right: 0; }
+/* two-cell footer: only the two front buttons the sheet actually uses */
+.p-foot.two div { flex: 0 0 50%; }
+.p-foot.two div:last-child { border-right: 0; }
+
+/* picker overlay */
+.p-scrim { position: absolute; inset: 0; background: var(--panel-ink); opacity: 0.26; }
+.p-sheet {
+  position: absolute; left: 0; right: 0; bottom: 0; background: var(--panel-bg);
+  border-top: 3px solid var(--panel-ink);
+}
+.p-sheet .title {
+  padding: 13px 18px 11px; font-size: 13px; font-weight: 700;
+  letter-spacing: 0.16em; text-transform: uppercase; border-bottom: 1px solid var(--panel-ink);
+  display: flex; justify-content: space-between; align-items: baseline;
+}
+.p-sheet .title .on-field { font-size: 11px; font-weight: 600; letter-spacing: 0.1em; opacity: 0.66; }
+.p-opt {
+  display: flex; align-items: center; gap: 14px; padding: 0 18px; height: 92px;
+  border-bottom: 1px solid var(--panel-ink);
+}
+.p-opt.sel { background: var(--panel-ink); color: var(--panel-bg); }
+.p-opt .tag {
+  font-family: "JetBrains Mono", monospace; font-size: 26px; font-weight: 700;
+  width: 56px; text-align: center; flex: none;
+}
+.p-opt .desc { flex: 1; }
+.p-opt .desc .t { font-size: 18px; font-weight: 700; letter-spacing: 0.02em; }
+.p-opt .desc .s { font-size: 12.5px; font-weight: 500; opacity: 0.72; margin-top: 2px; }
+.p-opt .check {
+  width: 26px; height: 26px; border: 2px solid currentColor; flex: none;
+  display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700;
+}
+
+.legend { display: flex; flex-wrap: wrap; gap: 0.5rem 1.4rem; max-width: var(--measure); font-size: 0.9rem; }
+.legend span { display: inline-flex; align-items: center; gap: 0.5rem; }
+.legend .chip {
+  font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 0.8rem;
+  border: 1px solid var(--ink-3); padding: 0.05em 0.4em; border-radius: 2px;
+}
+
+/* fairway marker icon, inline with the field's number */
+.fwico { display: inline-block; vertical-align: -0.18em; }
+.p-field .marks .fwico { vertical-align: -0.2em; }
+
+/* icon candidate comparison */
+.icopick { display: flex; flex-wrap: wrap; gap: 1rem; max-width: var(--measure); }
+.icopick figure {
+  border: 1px solid var(--rule); background: var(--card); padding: 1rem 1.1rem 0.9rem;
+  display: flex; flex-direction: column; align-items: center; gap: 0.55rem; width: 8.2rem; text-align: center;
+}
+.icopick .swatches { display: flex; align-items: flex-end; gap: 0.85rem; color: var(--ink); }
+.icopick figcaption {
+  margin: 0; font-family: Archivo, system-ui, sans-serif; font-size: 0.74rem; font-weight: 600;
+  letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-2);
+}
+.icopick .rec { color: var(--accent); }
+.icopick small { font-size: 0.7rem; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--ink-3); }
+
+footer.end { padding: 3.5rem 0 5rem; border-top: 2px solid var(--ink); font-size: var(--step--1); color: var(--ink-3); }
+footer.end p { max-width: var(--measure); }
+footer.end p + p { margin-top: 0.8rem; }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="eyebrow">Scorecard · Design mock · decisions settled</div>
+    <h1>Fairway Hit</h1>
+    <p class="standfirst">
+      One tap on the tee shot of a par 4 or par 5 to record that it found the fairway.
+      It shows as a small <strong>check icon</strong> next to the field &mdash; not a letter,
+      because &ldquo;F&rdquo; reads as <em>false</em>. It changes no stroke, no total, and no
+      penalty. The button that opens the sheet is renamed <strong>Mark</strong>, and it no
+      longer opens on the Putts field. Alongside it, the round now derives
+      <strong>greens in regulation</strong> from data it already has &mdash; and both
+      &ldquo;in regulation&rdquo; figures land in trends and the phone report.
+    </p>
+    <div class="meta-strip">
+      <div><span class="k">Surface</span><span class="v">Hole-by-hole scoring</span></div>
+      <div><span class="k">Entry</span><span class="v">Mark button &rarr; sheet</span></div>
+      <div><span class="k">Fairway hit on</span><span class="v">Par 4 / 5 (all holes if par-free)</span></div>
+      <div><span class="k">Stroke cost</span><span class="v">None</span></div>
+      <div><span class="k">Marker</span><span class="v">Check icon &middot; checkbox toggle</span></div>
+      <div><span class="k">Derived too</span><span class="v">Green in regulation (no new input)</span></div>
+      <div><span class="k">Persistence</span><span class="v">Round file v5, index.csv +4 cols</span></div>
+      <div><span class="k">In trends &amp; report</span><span class="v">FIR % and GIR %</span></div>
+    </div>
+  </header>
+
+  <!-- 1 -->
+  <section class="doc">
+    <div class="rail"><span class="idx">§ 1</span><span class="label">What it is</span></div>
+    <div class="body">
+      <h2>A positive marker on the same sheet the penalties live on</h2>
+      <p>
+        Today <kbd>Confirm</kbd> (while Power cycles the field) opens a small sheet with two
+        choices &mdash; <strong>Hazard</strong> and <strong>OB</strong>. Each one adds a shot to
+        the focused field and adds penalty strokes. <strong>Fairway Hit</strong> joins that sheet
+        as a third choice, but it is a different kind of thing:
+      </p>
+      <ul>
+        <li><strong>No shot is added.</strong> The tee shot was already counted in the
+          score-zone field (or by the par pre-seed). Fairway Hit only annotates it.</li>
+        <li><strong>No penalty, no total change.</strong> <code>strokes</code>, <code>THRU</code>,
+          <code>HOLE</code>, <code>TOTAL</code> and the <code>PENALTY +N</code> band are all
+          untouched.</li>
+        <li><strong>It is a per-hole yes/no</strong>, not a counter. You either hit the fairway
+          off the tee or you didn't &mdash; there is nothing to add twice.</li>
+      </ul>
+      <div class="callout">
+        <h4>Why it belongs on that sheet and not its own button</h4>
+        <p>
+          The X4 has four front buttons and they are all spoken for (§13.2). The Mark sheet is
+          already the place you go to say something about the shot you just played that the
+          three counters can't express. &ldquo;It found the fairway&rdquo; is one more thing of
+          exactly that shape.
+        </p>
+      </div>
+      <h4>The name</h4>
+      <p>
+        &ldquo;Penalty&rdquo; is now wrong on the footer and wrong as the sheet title.
+        <strong>Mark</strong> replaces it in both places &mdash; footer cell 2 and the sheet
+        title.
+      </p>
+      <h4>The marker is an icon, not a letter</h4>
+      <p>
+        A lone <code>F</code> beside <code>H</code> and <code>OB</code> reads as a grade or a
+        <em>false</em> &mdash; the opposite of what a fairway hit is. An icon breaks it out of
+        the penalty-letter set entirely: same slot, but visibly a different <em>kind</em> of
+        thing &mdash; the good kind. The mock uses <strong>circle-check</strong> (Lucide); it
+        also closes a nice loop with the picker's checkbox. Alternatives in §3.
+      </p>
+      <h4>Putts loses Hazard and OB</h4>
+      <p>
+        You cannot hit a hazard or go out of bounds with a putt. The Mark sheet had those two
+        rows on every field, including Putts; it now does not open at all while Putts is
+        focused, and footer cell 2 goes blank there. Existing rounds that somehow carry a
+        Putts marker still <em>display</em> and can still be removed with <kbd>Down</kbd> &mdash;
+        only the entry path is closed.
+      </p>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section class="doc">
+    <div class="rail"><span class="idx">§ 2</span><span class="label">When the option appears</span></div>
+    <div class="body">
+      <h2>Fairway Hit shows only where it means something</h2>
+      <p>
+        The sheet already attaches to whichever field is focused. Fairway Hit is added as a third
+        row when the focused field is <strong>To Score Zone</strong> and either the hole is a
+        par 4 / 5, <em>or</em> the course has no par data at all. Everywhere else the sheet is
+        unchanged &mdash; Hazard and OB &mdash; and on Putts it doesn't open.
+      </p>
+      <div class="scroller">
+        <table>
+          <caption>What the Mark button does, by field and par</caption>
+          <thead>
+            <tr><th>Focused field</th><th>Hole par</th><th>Mark sheet</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Putts</td><td>any</td><td>Does not open &mdash; footer cell 2 blank</td></tr>
+            <tr><td>Inside 100</td><td>any</td><td>Hazard · OB</td></tr>
+            <tr><td>To Score Zone</td><td>3</td><td>Hazard · OB</td></tr>
+            <tr><td><strong>To Score Zone</strong></td><td><strong>4 or 5</strong></td><td><strong>Hazard · OB · Fairway Hit</strong></td></tr>
+            <tr><td><strong>To Score Zone</strong></td><td><strong>par-free course</strong></td><td><strong>Hazard · OB · Fairway Hit</strong> &mdash; on every hole</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout">
+        <h4>Par 3 vs. par-free</h4>
+        <p>
+          On a <em>par-rated</em> course the row is left off par 3s &mdash; the tee shot targets
+          the green, and &ldquo;fairway hit&rdquo; isn't a par-3 stat. On a <em>par-free</em>
+          course the device can't tell a 3 from a 5, so it offers the row everywhere on the
+          score-zone field and trusts you not to tick it on a one-shotter. Par-free rounds are
+          then excluded from the FIR <em>percentage</em> in trends (no reliable denominator), but
+          the raw count still shows in that round's report.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section class="doc">
+    <div class="rail"><span class="idx">§ 3</span><span class="label">The screens</span></div>
+    <div class="body">
+      <h2>Scoring, the sheet, the two-row sheet, and Putts</h2>
+      <p>All at 1:1 &mdash; 480 &times; 800, pure black on white, because that is what the panel renders.</p>
+
+      <div class="mockrow">
+
+        <!-- A: scoring screen, F recorded -->
+        <figure>
+          <div class="panel">
+            <div class="p-status"><span>SANYANG GOLF CLUB</span><span>87%</span></div>
+            <div class="p-hole">
+              <div><div class="lab">Hole</div><div class="big">7</div></div>
+              <div class="h-r">PAR <b>4</b><br>425 YDS &middot; SI 3</div>
+            </div>
+            <div class="p-field">
+              <div class="cue"></div><div class="name">Putts</div>
+              <div class="marks"></div><div class="val">2</div>
+            </div>
+            <div class="p-field">
+              <div class="cue"></div><div class="name">Inside 100</div>
+              <div class="marks"></div><div class="val">2</div>
+            </div>
+            <div class="p-field focus">
+              <div class="cue">&#9656;</div><div class="name">To Score<br>Zone</div>
+              <div class="marks"><svg class="fwico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg></div><div class="val">2</div>
+            </div>
+            <div class="p-totals">
+              <div><div class="k">Thru</div><div class="v">7</div></div>
+              <div><div class="k">Hole</div><div class="v">E</div></div>
+              <div><div class="k">Total</div><div class="v">28</div></div>
+            </div>
+            <div class="p-strip">
+              <table>
+                <thead><tr><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th><th>9</th></tr></thead>
+                <tbody><tr>
+                  <td>4</td><td>5</td><td>3</td><td>4</td><td>5</td><td>3</td>
+                  <td class="now">4</td><td class="none">&middot;</td><td class="none">&middot;</td>
+                </tr></tbody>
+              </table>
+            </div>
+            <div class="p-foot">
+              <div>&#8617; MENU</div>
+              <div>&#9679; MARK</div>
+              <div>&#9666; PREV</div>
+              <div>&#9656; NEXT</div>
+            </div>
+          </div>
+          <figcaption>
+            <b>Scoring &mdash; hole 7, fairway hit off the tee</b>
+            The check sits where <code>H</code> / <code>OB</code> sit &mdash; right of the field's
+            number &mdash; but as a shape, not a letter, so it never reads as a grade. The
+            score-zone count is still <code>2</code>, HOLE is still <code>E</code>, and there is
+            no <code>PENALTY</code> band. Cell 2 of the footer now reads <code>MARK</code>.
+          </figcaption>
+        </figure>
+
+        <!-- B: the sheet, 3 rows, over the scoring screen -->
+        <figure>
+          <div class="panel">
+            <div class="p-status"><span>SANYANG GOLF CLUB</span><span>87%</span></div>
+            <div class="p-hole">
+              <div><div class="lab">Hole</div><div class="big">7</div></div>
+              <div class="h-r">PAR <b>4</b><br>425 YDS &middot; SI 3</div>
+            </div>
+            <div class="p-field">
+              <div class="cue"></div><div class="name">Putts</div>
+              <div class="marks"></div><div class="val">2</div>
+            </div>
+            <div class="p-field">
+              <div class="cue"></div><div class="name">Inside 100</div>
+              <div class="marks"></div><div class="val">2</div>
+            </div>
+            <div class="p-field focus">
+              <div class="cue">&#9656;</div><div class="name">To Score<br>Zone</div>
+              <div class="marks"></div><div class="val">2</div>
+            </div>
+
+            <div class="p-scrim"></div>
+            <div class="p-sheet">
+              <div class="title"><span>Mark</span><span class="on-field">On: To Score Zone</span></div>
+              <div class="p-opt">
+                <div class="tag">H</div>
+                <div class="desc"><div class="t">Hazard</div><div class="s">+1 stroke &middot; water or penalty area</div></div>
+              </div>
+              <div class="p-opt">
+                <div class="tag">OB</div>
+                <div class="desc"><div class="t">Out of bounds</div><div class="s">+2 strokes &middot; local rule E-5</div></div>
+              </div>
+              <div class="p-opt sel">
+                <div class="tag"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg></div>
+                <div class="desc"><div class="t">Fairway hit</div><div class="s">no stroke &middot; tee shot found the fairway</div></div>
+                <div class="check">&#10003;</div>
+              </div>
+              <div class="p-foot two" style="margin-top:0">
+                <div>&#8617; BACK</div>
+                <div>&#9679; CONFIRM</div>
+              </div>
+            </div>
+          </div>
+          <figcaption>
+            <b>The sheet &mdash; par 4, score-zone field focused</b>
+            Three rows. Hazard and OB are unchanged actions. Fairway Hit carries a checkbox
+            showing the hole's current state; <code>Confirm</code> toggles it. The side rocker
+            moves the highlight, as it always has. Footer is <strong>two cells</strong> &mdash;
+            no empty pill where Prev / Next used to be.
+          </figcaption>
+        </figure>
+
+        <!-- C: the 2-row sheet -->
+        <figure>
+          <div class="panel">
+            <div class="p-status"><span>SANYANG GOLF CLUB</span><span>87%</span></div>
+            <div class="p-hole">
+              <div><div class="lab">Hole</div><div class="big">8</div></div>
+              <div class="h-r">PAR <b>3</b><br>168 YDS &middot; SI 15</div>
+            </div>
+            <div class="p-field">
+              <div class="cue"></div><div class="name">Putts</div>
+              <div class="marks"></div><div class="val">2</div>
+            </div>
+            <div class="p-field">
+              <div class="cue"></div><div class="name">Inside 100</div>
+              <div class="marks"></div><div class="val">2</div>
+            </div>
+            <div class="p-field focus">
+              <div class="cue">&#9656;</div><div class="name">To Score<br>Zone</div>
+              <div class="marks"></div><div class="val">1</div>
+            </div>
+
+            <div class="p-scrim"></div>
+            <div class="p-sheet">
+              <div class="title"><span>Mark</span><span class="on-field">On: To Score Zone</span></div>
+              <div class="p-opt sel">
+                <div class="tag">H</div>
+                <div class="desc"><div class="t">Hazard</div><div class="s">+1 stroke &middot; water or penalty area</div></div>
+              </div>
+              <div class="p-opt">
+                <div class="tag">OB</div>
+                <div class="desc"><div class="t">Out of bounds</div><div class="s">+2 strokes &middot; local rule E-5</div></div>
+              </div>
+              <div class="p-foot two" style="margin-top:0">
+                <div>&#8617; BACK</div>
+                <div>&#9679; CONFIRM</div>
+              </div>
+            </div>
+          </div>
+          <figcaption>
+            <b>The sheet &mdash; Inside 100, or a par-3 score-zone shot</b>
+            Identical to today, plus the footer fix and the new title. Two rows, two footer
+            cells. This is the shape every Inside-100 mark and every par-3 tee shot keeps.
+          </figcaption>
+        </figure>
+
+        <!-- D: Putts focused, Mark suppressed -->
+        <figure>
+          <div class="panel">
+            <div class="p-status"><span>SANYANG GOLF CLUB</span><span>87%</span></div>
+            <div class="p-hole">
+              <div><div class="lab">Hole</div><div class="big">7</div></div>
+              <div class="h-r">PAR <b>4</b><br>425 YDS &middot; SI 3</div>
+            </div>
+            <div class="p-field focus">
+              <div class="cue">&#9656;</div><div class="name">Putts</div>
+              <div class="marks"></div><div class="val">2</div>
+            </div>
+            <div class="p-field">
+              <div class="cue"></div><div class="name">Inside 100</div>
+              <div class="marks"></div><div class="val">2</div>
+            </div>
+            <div class="p-field">
+              <div class="cue"></div><div class="name">To Score<br>Zone</div>
+              <div class="marks"></div><div class="val">2</div>
+            </div>
+            <div class="p-totals">
+              <div><div class="k">Thru</div><div class="v">7</div></div>
+              <div><div class="k">Hole</div><div class="v">E</div></div>
+              <div><div class="k">Total</div><div class="v">28</div></div>
+            </div>
+            <div class="p-strip">
+              <table>
+                <thead><tr><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th><th>9</th></tr></thead>
+                <tbody><tr>
+                  <td>4</td><td>5</td><td>3</td><td>4</td><td>5</td><td>3</td>
+                  <td class="now">4</td><td class="none">&middot;</td><td class="none">&middot;</td>
+                </tr></tbody>
+              </table>
+            </div>
+            <div class="p-foot">
+              <div>&#8617; MENU</div>
+              <div></div>
+              <div>&#9666; PREV</div>
+              <div>&#9656; NEXT</div>
+            </div>
+          </div>
+          <figcaption>
+            <b>Putts focused &mdash; nothing to mark</b>
+            Footer cell 2 is blank and the Mark press is a no-op. Power still cycles the field,
+            the rocker still counts, so the screen is never stuck (§12.6).
+          </figcaption>
+        </figure>
+
+      </div>
+
+      <h4>The marker, read against the others</h4>
+      <div class="legend">
+        <span><svg class="fwico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg> fairway hit &mdash; 0 strokes</span>
+        <span><span class="chip">H</span> hazard &mdash; +1</span>
+        <span><span class="chip">OB</span> out of bounds &mdash; +2</span>
+      </div>
+
+      <h3>The icon &mdash; circle-check</h3>
+      <p>
+        All stock Lucide, so any of these generates straight into the golf icon manifest with no
+        new upstream dependency. Rendered here at 32 and 16&nbsp;px.
+      </p>
+      <div class="icopick">
+        <figure>
+          <div class="swatches">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+          </div>
+          <figcaption class="rec">Circle-check<br><small>chosen &middot; mirrors the checkbox</small></figcaption>
+        </figure>
+        <figure>
+          <div class="swatches">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22v-7"/></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22v-7"/></svg>
+          </div>
+          <figcaption>Flag<br><small>the golf symbol</small></figcaption>
+        </figure>
+        <figure>
+          <div class="swatches">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 22V2l10 5-10 5"/></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 22V2l10 5-10 5"/></svg>
+          </div>
+          <figcaption>Pennant<br><small>flag-triangle-right</small></figcaption>
+        </figure>
+        <figure>
+          <div class="swatches">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+          </div>
+          <figcaption>Target<br><small>&ldquo;on target&rdquo;</small></figcaption>
+        </figure>
+      </div>
+      <div class="callout">
+        <h4>Why circle-check</h4>
+        <p>
+          It reads as &ldquo;yes / done&rdquo; with no caption, its silhouette holds up at
+          16&nbsp;px of black pixels, and it closes a loop with the picker: you tick the checkbox,
+          the same check shows up on the field. Flag is the fallback if it looks too plain on the
+          real panel.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section class="doc">
+    <div class="rail"><span class="idx">§ 4</span><span class="label">Where it shows</span></div>
+    <div class="body">
+      <h2>On the field row, and nowhere that counts strokes</h2>
+      <div class="scroller">
+        <table>
+          <thead><tr><th>Place</th><th>Shows it?</th><th>Why</th></tr></thead>
+          <tbody>
+            <tr><td>Marks beside the To Score Zone number</td><td>Yes</td><td>The check icon, left of any <code>H</code> / <code>OB</code> letters on that field.</td></tr>
+            <tr><td><code>PENALTY +N</code> band under the totals</td><td>No</td><td>That band exists to surface penalty <em>strokes</em>. A fairway hit adds none, so a fairway-only hole shows no band at all &mdash; as it does now.</td></tr>
+            <tr><td>Nine-strip score superscript</td><td>No</td><td>The superscript flags a hole whose number is inflated by a penalty. A fairway hit doesn't inflate it.</td></tr>
+            <tr><td>Trends</td><td>Yes</td><td>New figure: <strong>fairways in regulation</strong>, as a percentage, gated on rounds that recorded fairway data &mdash; the same shape as the penalty mix (§12.8).</td></tr>
+            <tr><td>Phone report (round export)</td><td>Yes</td><td>Per-hole fairway flag and a round total (JSON / CSV / summary), behind a <code>fairwaysRecorded</code> gate mirroring <code>penaltiesRecorded</code>.</td></tr>
+            <tr><td>Scorecard table / history rows</td><td>Not in this pass</td><td>Room is tight and it isn't asked for. The data is persisted, so it can be surfaced later without a re-migration.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout">
+        <h4>The flag and a hazard can share the field</h4>
+        <p>
+          A par 5 tee shot can find the fairway and a later shot on that same field can find
+          water. The row then reads check&nbsp;+&nbsp;<code>H</code>: check first (it's the good
+          news and it's the tee shot), then the penalty letters in the order they happened.
+          <kbd>Down</kbd> still peels penalty markers off that field per §12.4; it does not touch
+          the fairway bit &mdash; the checkbox is the only thing that clears that (§8).
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section class="doc">
+    <div class="rail"><span class="idx">§ 5</span><span class="label">Storage &amp; rules</span></div>
+    <div class="body">
+      <h2>A dedicated per-hole flag, not a fourth penalty kind</h2>
+      <p>
+        The first instinct was to add <code>kind = 2</code> to the penalty nibble. That doesn't
+        work: bit 3 of the nibble is the <strong>corrupt-event sentinel</strong>
+        (<code>0x08</code>) &mdash; both the packer's reserved bit and the JSON reader's
+        &ldquo;unreadable&rdquo; marker. A fairway kind that set it would be indistinguishable
+        from a damaged penalty, and an older build reading the round would show a phantom
+        penalty and inflate the count. So Fairway Hit gets its own storage.
+      </p>
+      <pre>struct GolfPlayerScore {
+  uint8_t putts[18];
+  uint8_t in100[18];
+  uint8_t out100[18];
+  uint8_t penaltyCount[18];
+  uint8_t penaltyEvents[18][4];
+  uint8_t fairwayHit[3];        // NEW -- bit N = hole N tee shot found the fairway
+};</pre>
+      <p>
+        +3 bytes per player, +12 to <code>GolfRound</code> (906 &rarr; ~918). Packed as a
+        bitmask for the same reason the penalty nibbles are &mdash; it is repeated per player
+        and serialized on every flush. All three <code>static_assert</code>s move with it.
+      </p>
+      <h4>The interaction is a toggle</h4>
+      <ul>
+        <li>The Fairway Hit row shows a checkbox reflecting <code>fairwayHit</code> for the
+          current hole.</li>
+        <li><kbd>Confirm</kbd> flips that one bit &mdash; sets it if clear, clears it if set.
+          Seeding (§13.1) runs first, exactly as every mutation path must.</li>
+        <li>No counter moves. <code>strokes</code>, <code>penaltyStrokes</code>, <code>THRU</code>,
+          <code>HOLE</code>, <code>TOTAL</code> are all untouched by definition &mdash; the bit
+          isn't in any of their formulas.</li>
+        <li>The checkbox is the only way to clear it &mdash; <kbd>Down</kbd> stays strictly about
+          strokes and penalty markers.</li>
+      </ul>
+      <h4>Icon asset</h4>
+      <p>
+        One Lucide icon (<code>circle-check</code>), generated into <code>golfTileIcons.h</code>
+        at <strong>16 and 24&nbsp;px</strong> &mdash; 16 for the field marker, 24 for the sheet's
+        tag column. Add one line to <code>golfTileIcons.manifest</code> and regenerate; the fork
+        touches no upstream icon file (§25.4). The <code>freeink::Icon</code> struct carries an
+        <code>opticalCenterY</code>, so aligning it to the field number is one call, no magic
+        offset.
+      </p>
+      <h4>Round file &mdash; v4 &rarr; v5</h4>
+      <p>
+        The round file and <code>state.json</code> are already at <code>"v": 4</code>. Bump to
+        <code>5</code>. Each player object gains <code>"fairways"</code>: an 18-element
+        <code>0</code>/<code>1</code> array, written zero-filled for disabled slots like the
+        other per-hole arrays. v4, v3 and v2 files still <strong>read</strong> &mdash; a v4 round
+        simply has no fairway data and every hole loads as not-hit. v1 stays rejected.
+      </p>
+      <h4>index.csv &mdash; four new columns</h4>
+      <pre>...,hazards,obs,fairways,fairwayHoles,gir,girHoles,file</pre>
+      <ul>
+        <li><code>fairways</code> / <code>fairwayHoles</code> &mdash; FIR numerator and denominator
+          (holes with the bit set / entered par&nbsp;4-5 holes).</li>
+        <li><code>gir</code> / <code>girHoles</code> &mdash; GIR numerator and denominator
+          (entered holes that met regulation / entered holes with a known par). Both are
+          <em>derived</em> at archive time from data already in the round &mdash; see §6.</li>
+      </ul>
+      <p>
+        The header changes, so the §12.7 guarded migration applies: write <code>index.csv.new</code>
+        with the v5 header and every existing row widened with four empty fields, verify the row
+        count, then the two renames. An empty field means <em>not recorded</em> &mdash; the round
+        predates the feature &mdash; and trends must exclude it, never read it as zero. A full
+        index <em>rebuild</em> (the recovery path already opens every round file) backfills
+        <code>gir</code>/<code>girHoles</code> for old rounds, since GIR needs no stored input.
+      </p>
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section class="doc">
+    <div class="rail"><span class="idx">§ 6</span><span class="label">The two &ldquo;in regulation&rdquo; figures</span></div>
+    <div class="body">
+      <h2>Fairways in regulation, and greens in regulation</h2>
+      <p>
+        A fairway hit is worth capturing on its own, but the reason golfers track it is the pair
+        it forms with <strong>greens in regulation</strong>. GIR needs no new input &mdash; the
+        three counters plus par already contain it &mdash; so it comes along for free.
+      </p>
+
+      <h4>Green in regulation &mdash; the rule</h4>
+      <p>
+        You reach the green &ldquo;in regulation&rdquo; when the strokes taken to get there are
+        at least two under par: 1 on a par 3, 2 on a par 4, 3 on a par 5.
+      </p>
+      <pre>strokesToGreen = holeScore - putts          // holeScore = in100 + out100 + penaltyStrokes
+GIR            = strokesToGreen &lt;= par - 2   // hole entered, par 3-5 known</pre>
+      <p>
+        <code>putts</code> is the count of strokes on the green, so subtracting it from the hole
+        score leaves exactly the strokes it took to arrive &mdash; tee shot, recoveries, penalty
+        drops and all. A chip-in counts (0 putts, score already <code>&le; par-2</code>); a
+        missed green that scrambles to par does not. Par-free holes have no GIR.
+      </p>
+      <div class="scroller">
+        <table>
+          <caption>Worked from the mock's hole 7 &mdash; par 4</caption>
+          <thead><tr><th>Line</th><th>Putts</th><th>Inside 100</th><th>To Score Zone</th><th>To green</th><th>GIR?</th></tr></thead>
+          <tbody>
+            <tr><td>Green in 2, two-putt par</td><td class="num">2</td><td class="num">3</td><td class="num">1</td><td class="num">4 &minus; 2 = 2</td><td>Yes (&le; 2)</td></tr>
+            <tr><td>Missed green, chip, one-putt par</td><td class="num">1</td><td class="num">3</td><td class="num">1</td><td class="num">4 &minus; 1 = 3</td><td>No</td></tr>
+            <tr><td>Hazard off tee, on in 4, two-putt double</td><td class="num">2</td><td class="num">3</td><td class="num">2 <span class="mono">+1</span></td><td class="num">6 &minus; 2 = 4</td><td>No</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4>Fairway in regulation</h4>
+      <p>
+        FIR is just the fairway-hit bit, counted over the par&nbsp;4-5 holes played. It is only
+        offered on those holes (or every hole on a par-free course, which is then excluded from
+        the percentage). Nothing derived &mdash; it is the one thing the golfer actually enters.
+      </p>
+
+      <h4>In trends</h4>
+      <pre>girPercentTenths = 1000 x sum(gir)      / sum(girHoles)
+firPercentTenths = 1000 x sum(fairways) / sum(fairwayHoles)
+  both folded over index rows where the denominator was recorded and &gt; 0
+  both gated on &gt;= 2 such rounds, mirroring enoughMixRounds()</pre>
+      <p>
+        Shown as two more percentages next to the existing long / short / putting / penalty mix.
+        <code>GolfTrendStats</code> gains <code>girPercentTenths</code>, <code>firPercentTenths</code>
+        and a <code>regulationRounds</code> count for the gate.
+      </p>
+
+      <h4>In the phone report</h4>
+      <ul>
+        <li><strong>Per hole</strong> (JSON / CSV / HTML): <code>fairway</code> (<code>true</code>/
+          <code>false</code>/<code>null</code> when not applicable) and <code>gir</code>
+          (<code>true</code>/<code>false</code>/<code>null</code> when par-free).</li>
+        <li><strong>Round summary</strong>: <code>fairways_hit</code> / <code>fairway_holes</code> /
+          <code>fir_pct</code>, and <code>greens_in_reg</code> / <code>gir_holes</code> /
+          <code>gir_pct</code>.</li>
+        <li>FIR fields sit behind a <code>fairwaysRecorded</code> gate (they need the stored bit).
+          GIR is emitted for <em>any</em> round with par data, including old ones &mdash; it is
+          computed, not stored.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 7 -->
+  <section class="doc">
+    <div class="rail"><span class="idx">§ 7</span><span class="label">Footer cleanup</span></div>
+    <div class="body">
+      <h2>The sheet footer becomes two cells for real</h2>
+      <p>
+        §13.3 already says the picker footer is two cells: <code>BACK</code> and
+        <code>CONFIRM</code>. The code passes empty labels for cells 3 and 4, but the theme still
+        paints the right-hand hint group as an <strong>empty rounded pill</strong> &mdash; the
+        &ldquo;prev and next button which is not enabled.&rdquo; This removes it: a two-cell
+        footer mode that draws only the left group, so the sheet ends at <code>CONFIRM</code>
+        with nothing dead to its right.
+      </p>
+      <div class="scroller">
+        <table>
+          <thead><tr><th>Footer</th><th>Before</th><th>After</th></tr></thead>
+          <tbody>
+            <tr><td>Scoring, cell 2 (Confirm) &mdash; Inside 100 / Score Zone focused</td><td class="num">PENALTY</td><td class="num">MARK</td></tr>
+            <tr><td>Scoring, cell 2 &mdash; Putts focused</td><td class="num">PENALTY</td><td><em>blank</em></td></tr>
+            <tr><td>Scoring, cells 1 / 3 / 4</td><td class="num">MENU / PREV / NEXT</td><td class="num">MENU / PREV / NEXT</td></tr>
+            <tr><td>Mark sheet footer</td><td>BACK · CONFIRM · <em>empty pill</em></td><td>BACK · CONFIRM</td></tr>
+            <tr><td>Sheet title</td><td class="num">ADD PENALTY</td><td class="num">MARK</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        The side rocker keeps moving the sheet's highlight between rows, unlabelled &mdash; §13.2
+        and §13.3's rule is that a footer cell is a promise about a <em>front</em> button, and
+        Up / Down are &ldquo;found by feel.&rdquo; The highlight bar is the affordance.
+      </p>
+    </div>
+  </section>
+
+  <!-- 8 -->
+  <section class="doc">
+    <div class="rail"><span class="idx">§ 8</span><span class="label">Decisions</span></div>
+    <div class="body">
+      <h2>All settled &mdash; this is the build brief</h2>
+      <div class="scroller">
+        <table>
+          <thead><tr><th>Question</th><th>Decision</th></tr></thead>
+          <tbody>
+            <tr><td>Button &amp; title name</td><td><strong>Mark</strong></td></tr>
+            <tr><td>Fairway row interaction</td><td><strong>Checkbox toggle</strong> &mdash; Confirm flips the hole's bit; the checkbox is the only way to clear it</td></tr>
+            <tr><td>Marker</td><td><strong>Circle-check icon</strong> (Lucide), 16 &amp; 24 px &mdash; flag is the fallback</td></tr>
+            <tr><td>Fairway Hit offered on</td><td>Par 4 / 5 score-zone field; <strong>every</strong> score-zone hole on a par-free course</td></tr>
+            <tr><td>Par 3 (par-rated)</td><td>No Fairway Hit row</td></tr>
+            <tr><td>Putts field</td><td>Mark sheet <strong>does not open</strong>; Hazard/OB entry removed there; footer cell 2 blank</td></tr>
+            <tr><td>Green in regulation</td><td><strong>Derived</strong>, no new input: <code>holeScore &minus; putts &le; par &minus; 2</code></td></tr>
+            <tr><td>Reach</td><td>Scoring screen + <strong>trends</strong> (FIR % and GIR %) + <strong>phone report</strong> (per-hole + round totals); scorecard/history rows deferred</td></tr>
+            <tr><td>Format</td><td>Round file <strong>v4 &rarr; v5</strong>; <code>index.csv</code> gains <code>fairways</code>, <code>fairwayHoles</code>, <code>gir</code>, <code>girHoles</code>; migrated per §12.7, GIR backfilled on a full rebuild</td></tr>
+            <tr><td>Storage model</td><td>Dedicated <code>fairwayHit[3]</code> bitmask &mdash; the penalty nibble's spare bit is the corrupt sentinel, can't be reused</td></tr>
+            <tr><td>Par-free rounds &amp; the percentages</td><td>Excluded from FIR % and GIR % in trends (no reliable denominator); raw counts still in that round's report</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout">
+        <h4>Nothing left open</h4>
+        <p>
+          On sign-off this becomes <strong>CONTRACTS-V2 §31</strong> and a worker brief covering:
+          the <code>fairwayHit</code> field + v5 round/state format + v5 <code>index.csv</code>
+          migration; the derived GIR helper in <code>GolfStats</code>; the Mark sheet
+          (rename, Putts suppression, the third checkbox row, two-cell footer); the
+          <code>circle-check</code> icon asset; <code>GolfTrendStats</code> + trends UI for FIR/GIR;
+          and <code>GolfRoundExport</code> per-hole and summary fields. Host tests for the GIR
+          math, the nibble/bit interplay, and the CSV migration.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <footer class="end wrap">
+    <p>
+      Design mock for the Fairway Hit feature. Extends CONTRACTS-V2 §12 (penalty tracking) and
+      §13 (footer rules). On sign-off this becomes CONTRACTS-V2 §31 and a worker brief.
+    </p>
+    <p>Device frames are 480 &times; 800 at 1:1, 1-bit black on white, matching the panel.</p>
+  </footer>
+
+</div>

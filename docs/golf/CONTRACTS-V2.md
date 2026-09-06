@@ -1848,3 +1848,180 @@ whose subtitle comes from `golfResolveAllTeesFrom()` instead of a single file's
 `resolveTee()`. **`GolfSetupActivity`'s new-round course picker is deliberately unchanged**
 — it still lists one row per file, since starting a round needs one concrete tee's
 selection, not a merged view.
+
+
+## 31. Fairway hit, and the two "in regulation" figures (v5)
+
+*Added 2026-09-06. Design and UI mock approved by the owner
+(`docs/golf/design/fairway-hit.html`).*
+
+The hole-by-hole screen records one more thing about the tee shot on a two-shot-or-longer
+hole: **did it find the fairway.** From that plus data the round already stores, the device
+derives **greens in regulation**, and both figures — fairways in regulation and greens in
+regulation — reach the trends screen and the phone report.
+
+### 31.1 What a fairway hit is
+
+A per-hole boolean on the current player: the tee shot on this hole came to rest in the
+fairway. It is **not** a stroke, **not** a penalty, and it is in none of the score, `THRU`,
+`HOLE`, `TOTAL` or `PENALTY +N` formulas. It is the one genuinely new datum the golfer
+enters; everything else in this section is computed from it and from what was already there.
+
+### 31.2 The "Mark" sheet replaces the "Penalty" sheet
+
+The Confirm-opens-a-sheet flow from §12.1 / §12.6 is unchanged in mechanism. What changes:
+
+* The footer cell and the sheet title are **`Mark`**, not `Penalty` / `ADD PENALTY`
+  (`STR_GOLF_PENALTY` stays as the `PENALTY +N` band's word; the button and title get their
+  own strings). The sheet now records a good outcome, so "penalty" is the wrong noun.
+* **The sheet does not open while `Putts` is the focused field.** You cannot hit a hazard or
+  go OB with a putt. Footer cell 2 is blank there and the open gesture is a no-op — Power
+  still cycles the field and the rocker still counts, so §12.6's "never stuck" guarantee
+  holds. `golfAppendPenalty` also rejects `field == Putts` outright now; the read and
+  `Down`-remove paths for any pre-existing `Putts` markers stay, only entry is closed.
+* On `Inside 100`, and on `To Score Zone` for a par 3, the sheet is exactly as before —
+  **Hazard**, **OB**.
+* On `To Score Zone` for a **par 4 or par 5**, a third row appears: **Fairway hit**. On a
+  **par-free course** (no usable par data, `golfHasPar()` false) the third row appears on
+  **every** `To Score Zone` hole — the device can't tell a par 3 from a par 5 and trusts the
+  golfer not to tick it on a one-shotter.
+* The Fairway hit row is a **checkbox**, not an add action. It shows the hole's current
+  state and `Confirm` toggles the bit. Hazard and OB stay counters (you can take two). The
+  checkbox is the **only** way to clear the bit — `Down` on the score-zone field stays
+  strictly about strokes and penalty markers (§12.4).
+* **The sheet footer is two cells, for real.** §13.3 already specified two cells, but the
+  theme still paints an empty rounded pill where cells 3–4 would be. A two-cell footer mode
+  (drawing only the left hint group) removes it. The side rocker still moves the sheet's
+  highlight, unlabelled — §13.2/§13.3's rule is that a footer cell is a promise about a
+  *front* button.
+
+### 31.3 The marker is an icon
+
+Beside the `To Score Zone` number, a fairway hit shows as **Lucide `circle-check`**
+(`src/components/icons/golfTileIcons.manifest`, generated at 16 px for the field and 24 px
+for the sheet's tag column). Not a letter: an `F` among `H` and `OB` reads as a grade or a
+*false*. The icon draws left of any `H` / `OB` letters on that field — good news first, and
+it is the tee shot. Nowhere else: not in the `PENALTY +N` band (that surfaces penalty
+strokes, of which a fairway hit adds none), and not as a nine-strip superscript (that flags
+a score inflated by a penalty).
+
+### 31.4 Green in regulation is derived, not entered
+
+A green is reached in regulation when the strokes to get there are at most `par - 2` — 1 on
+a par 3, 2 on a par 4, 3 on a par 5.
+
+```
+strokesToGreen = golfHoleScore(round, score, hole) - score.putts[hole]
+GIR            = hole entered && par 3..5 known && strokesToGreen <= par - 2
+```
+
+`golfHoleScore` is `in100 + out100 + penaltyStrokes`; `putts` is the count of strokes on
+the green (a subset of `in100`, per §12.2). Subtracting it leaves exactly the strokes it
+took to arrive — tee shot, recoveries and penalty drops included. A chip-in counts (0
+putts, score already `<= par - 2`); a missed green scrambled to par does not. A par-free
+hole has no GIR.
+
+New helpers in `GolfStats` (host-testable, pure): `golfGreenInRegulation(round, score,
+hole)`, `golfGreensInRegulation(round, score)` (count over entered par-3..5 holes),
+`golfGreensEligible(round, score)` (denominator: entered holes with a known par),
+`golfFairwaysHit(round, score)` (count of set bits over entered holes),
+`golfFairwaysEligible(round, score)` (entered par-4/5 holes; on a par-free course, 0 — see
+31.7).
+
+### 31.5 Storage: a dedicated bit, not a fourth penalty kind
+
+`GolfPlayerScore` gains `uint8_t fairwayHit[3]` — bit `hole` set means the tee shot found
+the fairway. Packed for the same reason the penalty nibbles are (repeated per player,
+serialized every flush). It is **not** a fourth `GolfPenaltyKind`: the penalty nibble's one
+spare bit (`0x08`) is the corrupt-event sentinel in both `golfUnpackPenaltyEvent` and
+`golfReadJsonPenalties`, and a kind that set it would be indistinguishable from a damaged
+penalty to an older build.
+
+`sizeof(GolfPlayerScore)` goes 144 → 147, `GolfPlayer` 206 → 209, `GolfRound` 906 → 918
+(approx; the `static_assert`s move with the real numbers). Accessors:
+`golfFairwayHit(score, hole)`, `golfSetFairwayHit(score, hole, bool)`. Seeding (§13.1) still
+runs before the toggle, exactly as every mutation path must — a hole whose only recorded
+event is a fairway hit is legal (unlike a penalty, §12.1, it adds no shot), and seeding
+stores it at its par preview.
+
+### 31.6 File format v5
+
+*The round file / `state.json` are at `"v": 4` and `index.csv` at its current
+`playerSlot`/`playerName` header (`golfIndexHeaderVersion` calls it `V4`). Both go to **5**
+together.*
+
+**Round file and `state.json`: `"v": 5`.** Each player object gains `"fairways"`: an
+18-element `0`/`1` array, written zero-filled for disabled slots like the other per-hole
+arrays. `golfDecodeRoundJson` accepts 2, 3, 4 and 5, and reads the `fairways` array on the
+v5 path only; a v2/v3/v4 round reads with every `fairwayHit` bit clear and upgrades on next
+write. v1 stays rejected. `golfCheckRound` / the player column-length struct gain a
+`fairways` length the same way `penalties` has one.
+
+**`index.csv`: v5 header**, gaining four columns before `file`:
+
+```
+date,course,holes,playerSlot,playerName,strokes,par,putts,in100,out100,hazards,obs,fairways,fairwayHoles,gir,girHoles,file
+```
+
+* `fairways` / `fairwayHoles` — FIR numerator and denominator for that player's round.
+* `gir` / `girHoles` — GIR numerator and denominator.
+
+Empty in any of the four means **not recorded** (the round predates this feature); trends
+must exclude such a row from that figure, never read the blank as zero — the same rule
+§12.7 set for `hazards`/`obs`. As with penalties, a `fairways`/`fairwayHoles` pair must be
+both-empty or both-present; likewise `gir`/`girHoles`.
+
+**Migration** follows §12.7 exactly: detect the old header, write `index.csv.new` with the
+v5 header and every existing row widened with four empty fields, verify the row count, then
+the two renames. `GolfIndexVersion` gains `V5`, and `GOLF_INDEX_HEADER` becomes the v5
+string; the migrator's `requireV4` flag and every signature naming it become `requireV5`
+(it is a "must already be the current shape" flag, not a literal 4). `GolfIndexRow` gains
+the four `uint16_t` fields; re-check `sizeof(GolfIndexRow) <= 160`.
+
+**Backfill on rebuild.** `RoundArchive`'s full index rebuild already opens every round
+file, so it computes and writes `gir`/`girHoles` for *all* rebuilt rows — GIR needs no
+stored input. `fairways`/`fairwayHoles` are written from the round only when that round is
+v5+ (has the array); a rebuilt v4 round leaves them blank. The one-line migration does not
+open round files, so it leaves all four blank; a subsequent rebuild fills the GIR pair.
+
+### 31.7 Trends and the phone report
+
+**Trends.** `GolfTrendStats` gains `firPercentTenths`, `girPercentTenths` and a
+`regulationRounds` count:
+
+```
+girPercentTenths = 1000 * sum(gir)      / sum(girHoles)
+firPercentTenths = 1000 * sum(fairways) / sum(fairwayHoles)
+  folded over index rows where that denominator was recorded and > 0
+  each shown only when regulationRounds >= 2   (mirrors enoughMixRounds())
+```
+
+They render as two more percentages beside the existing long / short / putting / penalty
+mix. **Par-free rounds contribute to neither** — `fairwayHoles`/`girHoles` are 0 or blank
+for them, so the fold skips them by the "denominator > 0" rule with no special-casing.
+§12.8's denominator discipline is why the denominators are stored per row rather than
+recomputed from `holes`.
+
+**Phone report** (`GolfRoundExport`). Per hole: `fairway` and `gir`, each
+`true`/`false`/`null` (`null` = not applicable: `fairway` on a par 3, `gir` on a par-free
+hole). Round summary: `fairways_hit` / `fairway_holes` / `fir_pct` and `greens_in_reg` /
+`gir_holes` / `gir_pct`. The FIR fields sit behind a `fairwaysRecorded` gate on
+`GolfExportData` (mirroring `penaltiesRecorded`); GIR is emitted for **any** round with par
+data, old ones included, because it is computed. New `GolfExportLabel` enum entries and
+writer lines in all four formats (text / CSV / JSON / HTML).
+
+### 31.8 Build order
+
+Four tasks, reviewed and committed in sequence:
+
+1. **`fairwayHit` storage + round/`state.json` v5 + the `GolfStats` GIR/FIR helpers.** Host
+   tests: the GIR arithmetic (the three worked cases in the mock plus par-3 / par-5 /
+   chip-in / penalty / par-free edges), the bitmask accessors, v5 round JSON round-trips,
+   v2/v3/v4 read-compat.
+2. **`index.csv` v5** — the four columns, `GolfIndexRow`, format/parse, `golfMakeIndexRow`,
+   the `V4`→`V5` migrator rename, `GolfHistory` reads, rebuild backfill. Host tests: the
+   migration transaction, mixed-version tolerance, backfill.
+3. **The Mark sheet** — rename, `Putts` suppression, the checkbox row, the two-cell footer,
+   the `circle-check` icon asset and its draw on the score-zone field.
+4. **Trends + phone report** — `GolfTrendStats` fields and fold, the trends UI rows,
+   `GolfRoundExport` per-hole and summary fields.
