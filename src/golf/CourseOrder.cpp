@@ -113,4 +113,14 @@ bool golfResolveAllTeesFrom(const GolfCourseFile* files, const GolfCourse* cours
   return found;
 }
 
+const char* golfDefaultTeeForSet(const GolfCourseTeeSet& teeSet) {
+  for (uint8_t i = 0; i < teeSet.teeCount; ++i) {
+    if (strcmp(teeSet.tees[i].name, "Blue") == 0) return teeSet.tees[i].name;
+  }
+  for (uint8_t i = 0; i < teeSet.teeCount; ++i) {
+    if (strcmp(teeSet.tees[i].name, "White") == 0) return teeSet.tees[i].name;
+  }
+  return teeSet.teeCount > 0 ? teeSet.tees[0].name : "";
+}
+
 #endif

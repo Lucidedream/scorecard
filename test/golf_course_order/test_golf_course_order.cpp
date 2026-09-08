@@ -2,6 +2,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <initializer_list>
 #include <string>
 #include <vector>
 
@@ -89,6 +90,16 @@ const GolfCourseTee* findTee(const GolfCourseTeeSet& set, const char* name) {
     if (std::strcmp(set.tees[i].name, name) == 0) return &set.tees[i];
   }
   return nullptr;
+}
+
+// A tee set built straight from a list of names, no SD/resolution involved.
+GolfCourseTeeSet teeSetOf(std::initializer_list<const char*> names) {
+  GolfCourseTeeSet set{};
+  for (const char* name : names) {
+    std::snprintf(set.tees[set.teeCount].name, sizeof(set.tees[set.teeCount].name), "%s", name);
+    ++set.teeCount;
+  }
+  return set;
 }
 
 }  // namespace
@@ -346,4 +357,25 @@ TEST(GolfResolveAllTees, NoMatchingFileReturnsFalse) {
   GolfCourseTeeSet result{};
   EXPECT_FALSE(resolveAllTees(entries, "Nonexistent Course", result));
   EXPECT_EQ(result.teeCount, 0);
+}
+
+// CONTRACTS-V2 §32.7: the tee a fresh round pre-selects for player 1.
+TEST(GolfDefaultTeeForSet, PrefersBlueOverEverythingElse) {
+  EXPECT_STREQ(golfDefaultTeeForSet(teeSetOf({"Black", "Blue", "White", "Red"})), "Blue");
+}
+
+TEST(GolfDefaultTeeForSet, FallsBackToWhiteWhenNoBlue) {
+  EXPECT_STREQ(golfDefaultTeeForSet(teeSetOf({"Black", "White", "Red"})), "White");
+}
+
+TEST(GolfDefaultTeeForSet, FallsBackToFirstTeeWhenNeitherBlueNorWhite) {
+  EXPECT_STREQ(golfDefaultTeeForSet(teeSetOf({"Black", "Red"})), "Black");
+}
+
+TEST(GolfDefaultTeeForSet, SingleBlueTeeSet) { EXPECT_STREQ(golfDefaultTeeForSet(teeSetOf({"Blue"})), "Blue"); }
+
+TEST(GolfDefaultTeeForSet, EmptySetYieldsEmptyString) { EXPECT_STREQ(golfDefaultTeeForSet(GolfCourseTeeSet{}), ""); }
+
+TEST(GolfDefaultTeeForSet, FindsBlueEvenWhenNotFirst) {
+  EXPECT_STREQ(golfDefaultTeeForSet(teeSetOf({"Black", "White", "Blue", "Red"})), "Blue");
 }

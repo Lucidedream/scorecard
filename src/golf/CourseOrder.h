@@ -37,4 +37,9 @@ uint8_t golfSortAndDedupCourses(GolfCourseFile* files, GolfCourse* courses, uint
 bool golfResolveAllTeesFrom(const GolfCourseFile* files, const GolfCourse* courses, uint8_t count,
                             const char* courseName, GolfCourseTeeSet& result);
 
+// CONTRACTS-V2 §32.7: the tee a fresh round pre-selects for player 1. "Blue" when the set has
+// a tee named "Blue", else "White" when present, else the first tee's name, else "" for an
+// empty set. Case-sensitive name match; does not gate on hasYards.
+const char* golfDefaultTeeForSet(const GolfCourseTeeSet& teeSet);
+
 #endif

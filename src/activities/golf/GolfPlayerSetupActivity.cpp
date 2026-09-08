@@ -14,6 +14,7 @@
 #include "GolfUiLayout.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
+#include "golf/CourseOrder.h"
 #include "golf/GolfRoundStore.h"
 #include "golf/GolfRules.h"
 
@@ -35,7 +36,7 @@ void GolfPlayerSetupActivity::onEnter() {
   if (!CourseStore::resolveAllTees(course.courseName, teeSet)) {
     LOG_ERR("GOLF", "Player setup: no tees resolved for %s", course.courseName);
   }
-  if (teeSet.teeCount > 0) golfSetTeeString(defaultTee, teeSet.tees[0].name);
+  if (teeSet.teeCount > 0) golfSetTeeString(defaultTee, golfDefaultTeeForSet(teeSet));
   golfSetPlayerCount(draft, playerCount, 1, defaultTee);
   editingPlayer = 0;
   saveFailed = false;
