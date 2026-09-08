@@ -2116,6 +2116,19 @@ current course file set still loads for review; only *starting* or *resuming* sc
 needs a resolvable tee, and `CourseStore::resolveTee` failing there is handled as it is
 today (`LOG_ERR` + fall back to the course default).
 
+### 32.7 The pre-selected default tee (added 2026-09-08)
+
+When `GolfPlayerSetupActivity` opens a new round, the tee it starts every enabled player
+on is chosen from the resolved `GolfCourseTeeSet`, not just `tees[0]`: **`"Blue"` if the
+set contains a tee named `"Blue"`, otherwise `"White"` if present, otherwise
+`teeSet.tees[0].name`** (case-sensitive name match; an empty set yields `""`). A pure
+`golfDefaultTeeForSet(const GolfCourseTeeSet&)` in `CourseOrder` holds this rule so it is
+host-tested. This is a *starting* value only — each player's tee row is still freely
+changeable in setup, and players 2..4 simply inherit player 1's starting tee as before.
+`CourseStore::defaultTee` (the single-file pre-resolve used before `resolveAllTees` runs)
+is left as-is: one file cannot see its sibling tee files, so the `GolfCourseTeeSet`
+override in `onEnter` is the authority.
+
 
 ## 33. Greenside-bunker mark and the Career Stats screen (v6)
 
