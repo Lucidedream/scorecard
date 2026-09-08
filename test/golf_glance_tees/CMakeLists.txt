@@ -1,0 +1,7 @@
+add_executable(golf_glance_tees_tests
+  test_golf_glance_tees.cpp
+)
+target_link_libraries(golf_glance_tees_tests PRIVATE GTest::gtest_main crosspoint_test_common)
+target_include_directories(golf_glance_tees_tests PRIVATE ${REPO_ROOT}/src/golf)
+target_compile_definitions(golf_glance_tees_tests PRIVATE CROSSPOINT_GOLF=1)
+gtest_discover_tests(golf_glance_tees_tests)

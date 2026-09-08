@@ -5,16 +5,19 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <Memory.h>
 
 #include <cstdio>
 
 #include "GolfCourseMapImage.h"
+#include "GolfCourseTeeInfoActivity.h"
 #include "GolfLargeNumber.h"
 #include "GolfNavigation.h"
 #include "GolfReviewFormat.h"
 #include "GolfUiLayout.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "golf/GolfGlanceTees.h"
 
 namespace {
 
@@ -66,15 +69,29 @@ void GolfCourseMapBrowserActivity::loop() {
     changeHole(-1);
     return;
   }
-  if (mappedInput.wasReleased(MappedInputManager::Button::PageForward)) changeHole(1);
+  if (mappedInput.wasReleased(MappedInputManager::Button::PageForward)) {
+    changeHole(1);
+    return;
+  }
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) openTeeInfo();
+}
+
+void GolfCourseMapBrowserActivity::openTeeInfo() {
+  auto page = makeUniqueNoThrow<GolfCourseTeeInfoActivity>(renderer, mappedInput, courseName);
+  if (!page) {
+    LOG_ERR("GOLF", "OOM: tee info");
+    return;
+  }
+  startActivityForResult(std::move(page), nullptr);
 }
 
 bool GolfCourseMapBrowserActivity::formatTeeYardageLine(const uint8_t hole, char* output, const size_t size) const {
   output[0] = '\0';
+  const GolfCourseTee* picked[2];
+  const uint8_t pickedCount = pickGlanceTees(teeSet, picked);
   bool any = false;
-  for (uint8_t i = 0; i < teeSet.teeCount; ++i) {
-    const GolfCourseTee& tee = teeSet.tees[i];
-    if (!tee.hasYards) continue;
+  for (uint8_t i = 0; i < pickedCount; ++i) {
+    const GolfCourseTee& tee = *picked[i];
     char segment[40];
     if (snprintf(segment, sizeof(segment), tr(STR_GOLF_TEE_YARDS_FORMAT), golfTeeDisplayLabel(tee.name),
                  static_cast<unsigned>(tee.yards[hole]), tr(STR_GOLF_YARDS_UNIT)) < 0) {
@@ -130,7 +147,8 @@ void GolfCourseMapBrowserActivity::renderMessage(const freeink::ui::Rect body, c
 }
 
 void GolfCourseMapBrowserActivity::drawFooter() const {
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", tr(STR_GOLF_BUTTON_PREVIOUS), tr(STR_GOLF_BUTTON_NEXT));
+  const auto labels =
+      mappedInput.mapLabels(tr(STR_BACK), tr(STR_GOLF_TEE), tr(STR_GOLF_BUTTON_PREVIOUS), tr(STR_GOLF_BUTTON_NEXT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 

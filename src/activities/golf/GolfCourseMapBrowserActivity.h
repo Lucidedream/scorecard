@@ -34,6 +34,7 @@ class GolfCourseMapBrowserActivity final : public Activity {
   uint8_t currentHole = 0;
 
   void changeHole(int delta);
+  void openTeeInfo();
   void renderHole();
   void drawHoleBand(freeink::ui::Rect rect) const;
   bool formatTeeYardageLine(uint8_t hole, char* output, size_t size) const;
