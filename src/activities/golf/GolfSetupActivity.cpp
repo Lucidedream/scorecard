@@ -22,31 +22,20 @@ void GolfSetupActivity::onEnter() {
 void GolfSetupActivity::loadCourses() {
   const GolfCourseListResult result = CourseStore::enumerate(files, GOLF_MAX_COURSES);
   overflow = result.overflow;
-  courseCount = 0;
+  loadedCount = 0;
   for (uint8_t i = 0; i < result.count; ++i) {
     GolfCourse course{};
     if (CourseStore::load(files[i], course)) {
-      files[courseCount] = files[i];
-      courses[courseCount++] = course;
+      files[loadedCount] = files[i];
+      courses[loadedCount++] = course;
     }
   }
-  for (uint8_t i = 1; i < courseCount; ++i) {
-    const GolfCourse value = courses[i];
-    const GolfCourseFile valueFile = files[i];
-    uint8_t position = i;
-    while (position > 0 && golfCourseSortsBefore(valueFile, value, files[position - 1], courses[position - 1])) {
-      courses[position] = courses[position - 1];
-      files[position] = files[position - 1];
-      --position;
-    }
-    courses[position] = value;
-    files[position] = valueFile;
-  }
+  courseCount = golfSortAndDedupCourses(files, courses, loadedCount, primaryIndex);
   noCourses = courseCount == 0;
   uint8_t row = 0;
   for (; row < courseCount; ++row) {
     rows[row] = {};
-    rows[row].label = courses[row].courseName;
+    rows[row].label = courses[primaryIndex[row]].courseName;
     formatCourseRow(row);
     rows[row].subtitle = courseDetails[row];
     rows[row].value = parLabels[row];
@@ -61,9 +50,9 @@ void GolfSetupActivity::loadCourses() {
 
 void GolfSetupActivity::formatCourseRow(const uint8_t row) {
   if (row >= courseCount) return;
-  const GolfCourse& course = courses[row];
+  const GolfCourse& course = courses[primaryIndex[row]];
   GolfCourseTeeSet teeSet{};
-  golfResolveAllTeesFrom(files, courses, courseCount, course.courseName, teeSet);
+  golfResolveAllTeesFrom(files, courses, loadedCount, course.courseName, teeSet);
   char tees[24]{};
   golfFormatTeeList(teeSet, tees, sizeof(tees));
   snprintf(courseDetails[row], sizeof(courseDetails[row]), tr(STR_GOLF_COURSE_ROW_FORMAT), course.holeCount, tees);
@@ -90,7 +79,7 @@ void GolfSetupActivity::onBackButton() { openGolfHome(activityManager, renderer,
 void GolfSetupActivity::activateIndex(const int index) {
   app.clearTapFlash();
   if (index < 0 || index >= courseCount) return;
-  openGolfPlayerSetup(activityManager, renderer, mappedInput, files[index], courses[index]);
+  openGolfPlayerSetup(activityManager, renderer, mappedInput, files[primaryIndex[index]], courses[primaryIndex[index]]);
 }
 
 void GolfSetupActivity::buildScreen(UiScreen& screen) {

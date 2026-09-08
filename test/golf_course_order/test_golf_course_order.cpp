@@ -173,6 +173,60 @@ TEST(GolfCourseOrder, SdOverrideOfAMiddleBuiltInKeepsThatPosition) {
                                                              "Template course", "Zzz Country Club"}));
 }
 
+// Runs the shared load body (CONTRACTS-V2 §34.4) behind both the new-round course picker
+// and the read-only course browser: sort + collapse adjacent same-name runs.
+struct DedupedList {
+  std::vector<GolfCourseFile> files;
+  std::vector<GolfCourse> courses;
+  uint8_t primaryIndex[GOLF_MAX_COURSES]{};
+  uint8_t rowCount = 0;
+
+  std::vector<std::string> rowNames() const {
+    std::vector<std::string> names;
+    for (uint8_t row = 0; row < rowCount; ++row) names.emplace_back(courses[primaryIndex[row]].courseName);
+    return names;
+  }
+};
+
+DedupedList sortAndDedup(const std::vector<Entry>& entries) {
+  DedupedList out;
+  for (const Entry& entry : entries) {
+    out.files.push_back(entry.file);
+    out.courses.push_back(entry.course);
+  }
+  out.rowCount = golfSortAndDedupCourses(out.files.data(), out.courses.data(), static_cast<uint8_t>(out.files.size()),
+                                         out.primaryIndex);
+  return out;
+}
+
+TEST(GolfCourseOrder, SanyangFourTeeFilesCollapseToOneRowKeyedOnFirstFile) {
+  // Four Sanyang tee files (Black/Blue/White/Red, all "Sanyang Golf Club") plus two
+  // unrelated SD courses collapse to three deduped rows.
+  const std::vector<Entry> entries{
+      sdTeeEntry("sanyang-black.json", "Sanyang Golf Club", "Black"),
+      sdTeeEntry("sanyang-blue.json", "Sanyang Golf Club", "Blue"),
+      sdTeeEntry("sanyang-white.json", "Sanyang Golf Club", "White"),
+      sdTeeEntry("sanyang-red.json", "Sanyang Golf Club", "Red"),
+      sdEntry("moganshan.json", "MoganShan Golf Club"),
+      sdEntry("pebble.json", "Pebble Beach Golf Links"),
+  };
+
+  const DedupedList result = sortAndDedup(entries);
+
+  ASSERT_EQ(result.rowCount, 3);
+  EXPECT_EQ(result.rowNames(),
+            (std::vector<std::string>{"MoganShan Golf Club", "Pebble Beach Golf Links", "Sanyang Golf Club"}));
+  // The Sanyang row's primary is the first Sanyang file in enumerate order (Black); its
+  // par/si/holeCount are what a started round or map browse inherits.
+  EXPECT_STREQ(result.files[result.primaryIndex[2]].filename, "sanyang-black.json");
+  // Every Sanyang tee file is still present in the scratch arrays for tee resolution.
+  int sanyangEntries = 0;
+  for (const GolfCourse& course : result.courses) {
+    if (std::strcmp(course.courseName, "Sanyang Golf Club") == 0) ++sanyangEntries;
+  }
+  EXPECT_EQ(sanyangEntries, 4);
+}
+
 TEST(GolfResolveAllTees, TwoSdTeeFilesForSameCourseNameResolveBoth) {
   constexpr uint16_t blueYards[18] = {380, 410, 190, 505, 340, 160, 420, 390, 530,
                                       400, 175, 460, 350, 415, 200, 380, 145, 500};

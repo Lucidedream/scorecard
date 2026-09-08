@@ -7,7 +7,6 @@
 #include <Memory.h>
 
 #include <cstdio>
-#include <cstring>
 
 #include "GolfCourseMapBrowserActivity.h"
 #include "GolfReviewFormat.h"
@@ -33,28 +32,7 @@ void GolfCourseMapListActivity::loadCourses() {
       courses[loadedCount++] = course;
     }
   }
-  for (uint8_t i = 1; i < loadedCount; ++i) {
-    const GolfCourse value = courses[i];
-    const GolfCourseFile valueFile = files[i];
-    uint8_t position = i;
-    while (position > 0 && golfCourseSortsBefore(valueFile, value, files[position - 1], courses[position - 1])) {
-      courses[position] = courses[position - 1];
-      files[position] = files[position - 1];
-      --position;
-    }
-    courses[position] = value;
-    files[position] = valueFile;
-  }
-
-  // Course names sharing a comparator equivalence class land contiguously after the sort
-  // above; collapse each run into a single row keyed by its first (primary) entry.
-  courseCount = 0;
-  for (uint8_t i = 0; i < loadedCount; ++i) {
-    if (courseCount > 0 && strcmp(courses[i].courseName, courses[primaryIndex[courseCount - 1]].courseName) == 0) {
-      continue;
-    }
-    primaryIndex[courseCount++] = i;
-  }
+  courseCount = golfSortAndDedupCourses(files, courses, loadedCount, primaryIndex);
 
   noCourses = courseCount == 0;
   uint8_t row = 0;

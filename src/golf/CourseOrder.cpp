@@ -25,6 +25,33 @@ bool golfCourseSortsBefore(const GolfCourseFile& lhsFile, const GolfCourse& lhs,
   return golfCompareCourseNames(lhs.courseName, rhs.courseName) < 0;
 }
 
+uint8_t golfSortAndDedupCourses(GolfCourseFile* files, GolfCourse* courses, const uint8_t count,
+                                uint8_t* primaryIndex) {
+  for (uint8_t i = 1; i < count; ++i) {
+    const GolfCourse value = courses[i];
+    const GolfCourseFile valueFile = files[i];
+    uint8_t position = i;
+    while (position > 0 && golfCourseSortsBefore(valueFile, value, files[position - 1], courses[position - 1])) {
+      courses[position] = courses[position - 1];
+      files[position] = files[position - 1];
+      --position;
+    }
+    courses[position] = value;
+    files[position] = valueFile;
+  }
+
+  // Course names sharing a comparator equivalence class land contiguously after the sort
+  // above; collapse each run into a single row keyed by its first (primary) entry.
+  uint8_t courseCount = 0;
+  for (uint8_t i = 0; i < count; ++i) {
+    if (courseCount > 0 && strcmp(courses[i].courseName, courses[primaryIndex[courseCount - 1]].courseName) == 0) {
+      continue;
+    }
+    primaryIndex[courseCount++] = i;
+  }
+  return courseCount;
+}
+
 namespace {
 
 // Appends one tee to the set: skips empty names, names already present, and anything past

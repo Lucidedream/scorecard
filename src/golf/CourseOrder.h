@@ -18,6 +18,15 @@ int golfCompareCourseNames(const char* left, const char* right);
 bool golfCourseSortsBefore(const GolfCourseFile& lhsFile, const GolfCourse& lhs, const GolfCourseFile& rhsFile,
                            const GolfCourse& rhs);
 
+// CONTRACTS-V2 §34.4: the shared load body behind the new-round course picker
+// (GolfSetupActivity) and the read-only course browser (GolfCourseMapListActivity). Given
+// `count` already-enumerated-and-loaded (file, course) pairs, stable-insertion-sorts them
+// in place by golfCourseSortsBefore(), then collapses each adjacent run of byte-identical
+// courseName into one row: primaryIndex[0..return) receives each run's first (primary)
+// index into the reordered arrays. Returns the deduped row count. `primaryIndex` must have
+// room for `count` entries; `count` must not exceed GOLF_MAX_COURSES.
+uint8_t golfSortAndDedupCourses(GolfCourseFile* files, GolfCourse* courses, uint8_t count, uint8_t* primaryIndex);
+
 // The pure merge behind CourseStore::resolveAllTees(), factored out so it can be exercised
 // with in-memory fixtures (no SD/HalStorage dependency): gathers every tee available for
 // `courseName` across `count` already-loaded (file, course) pairs, e.g. the output of
