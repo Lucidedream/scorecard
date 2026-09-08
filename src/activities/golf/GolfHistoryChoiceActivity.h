@@ -6,10 +6,10 @@
 #include "activities/UiListActivity.h"
 #include "golf/GolfHistory.h"
 
-// Player-scoped chooser between the two History destinations (CONTRACTS-V2
-// §29): "Trends" and "Rounds" open the unchanged GolfTrendsActivity /
-// GolfHistoryActivity for the same (slot, playerName) the player picker
-// already resolved.
+// Player-scoped chooser between the three History destinations (CONTRACTS-V2
+// §29, §33.4): "Trends" / "Stats" / "Rounds" open GolfTrendsActivity,
+// GolfCareerStatsActivity and GolfHistoryActivity respectively for the same
+// (slot, playerName) the player picker already resolved.
 class GolfHistoryChoiceActivity final : public UiListActivity {
  public:
   GolfHistoryChoiceActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, uint8_t playerSlot,
@@ -18,7 +18,7 @@ class GolfHistoryChoiceActivity final : public UiListActivity {
   void onEnter() override;
 
  private:
-  static constexpr uint8_t ROW_COUNT = 2;
+  static constexpr uint8_t ROW_COUNT = 3;
 
   const uint8_t playerSlot;
   char playerName[GolfPlayer::NAME_CAPACITY]{};

@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstring>
 
+#include "GolfCareerStatsActivity.h"
 #include "GolfHistoryActivity.h"
 #include "GolfTrendsActivity.h"
 #include "GolfUiLayout.h"
@@ -25,7 +26,8 @@ GolfHistoryChoiceActivity::GolfHistoryChoiceActivity(GfxRenderer& renderer, Mapp
 void GolfHistoryChoiceActivity::onEnter() {
   golfFormatPlayerLabel(playerSlot, playerName, tr(STR_GOLF_PLAYER_LABEL_FORMAT), playerLabel, sizeof(playerLabel));
   rows[0].label = tr(STR_GOLF_TRENDS);
-  rows[1].label = tr(STR_GOLF_ROUNDS);
+  rows[1].label = tr(STR_GOLF_STATS);
+  rows[2].label = tr(STR_GOLF_ROUNDS);
   for (uint8_t i = 0; i < ROW_COUNT; ++i) rows[i].actionValue = i;
   UiListActivity::onEnter();
 }
@@ -44,6 +46,15 @@ void GolfHistoryChoiceActivity::activateIndex(const int index) {
     return;
   }
   if (index == 1) {
+    auto stats = makeUniqueNoThrow<GolfCareerStatsActivity>(renderer, mappedInput, playerSlot, playerName);
+    if (!stats) {
+      LOG_ERR("GOLF", "OOM: career stats activity");
+      return;
+    }
+    startActivityForResult(std::move(stats), nullptr);
+    return;
+  }
+  if (index == 2) {
     auto history = makeUniqueNoThrow<GolfHistoryActivity>(renderer, mappedInput, playerSlot, playerName);
     if (!history) {
       LOG_ERR("GOLF", "OOM: history activity");

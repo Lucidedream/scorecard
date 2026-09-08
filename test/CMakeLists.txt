@@ -55,6 +55,7 @@ add_subdirectory(css_parser)
 # --- golf (fork) ---
 add_subdirectory(golf_rules)
 add_subdirectory(golf_stats)
+add_subdirectory(golf_career_stats)
 add_subdirectory(golf_validate)
 add_subdirectory(golf_paths)
 add_subdirectory(golf_csv)
