@@ -141,14 +141,14 @@ footer.end p+p{margin-top:.8rem}
 <div class="wrap">
 
   <header class="masthead">
-    <div class="eyebrow">Scorecard · Design mock · draft for review</div>
+    <div class="eyebrow">Scorecard · Design mock · decisions settled → CONTRACTS-V2 §33</div>
     <h1>Career Stats</h1>
     <p class="standfirst">
       Trends answers &ldquo;which way is my game moving.&rdquo; Stats answers
-      &ldquo;what <em>is</em> my game&rdquo; &mdash; a handicap index, a score-shape
-      breakdown, scoring by par type, scrambling, and the personal records worth
-      chasing. One more row on the History chooser, folded from rounds you've
-      already played.
+      &ldquo;what <em>is</em> my game&rdquo; &mdash; a score-shape breakdown, scoring by
+      par type, scrambling and sand saves, and the personal records worth chasing. One
+      more row on the History chooser, read from rounds you've already played. Handicap
+      index comes in a later pass, once the course files carry rating and slope.
     </p>
     <div class="meta-strip">
       <div><span class="k">Lives at</span><span class="v">History &rarr; player &rarr; Stats</span></div>
@@ -324,8 +324,8 @@ footer.end p+p{margin-top:.8rem}
             <div class="p-sub">Career &middot; 24 rounds</div>
 
             <div class="p-hero">
-              <div><div class="lab">Handicap index</div><div class="big">11.4</div></div>
-              <div class="note">from 8 of your<br>last 20 rounds<br><span style="opacity:.6">avg 84.6 &middot; +12.6</span></div>
+              <div><div class="lab">Scoring average</div><div class="big">84.6</div></div>
+              <div class="note">+12.6 to par<br>over 24 rounds<br><span style="opacity:.6">handicap: later</span></div>
             </div>
 
             <div class="p-sec">Score shape</div>
@@ -345,6 +345,7 @@ footer.end p+p{margin-top:.8rem}
 
             <div class="p-sec">Around the green</div>
             <div class="p-row"><span class="rk">Scrambling</span><span class="rv">31%</span><span class="rp">96 / 312</span></div>
+            <div class="p-row"><span class="rk">Sand saves</span><span class="rv">28%</span><span class="rp">12 / 43</span></div>
             <div class="p-row"><span class="rk">Putts per GIR</span><span class="rv">1.83</span><span class="rp"></span></div>
             <div class="p-row"><span class="rk">3-putt</span><span class="rv">6%</span><span class="rp">26</span></div>
 
@@ -376,20 +377,23 @@ footer.end p+p{margin-top:.8rem}
   <section class="doc">
     <div class="rail"><span class="idx">§ 6</span><span class="label">Decisions</span></div>
     <div class="body">
-      <h2>Four calls before this becomes a build brief</h2>
-      <ol>
-        <li><strong>Data source.</strong> A (open round files, ~2 s load), B (career cache),
-          or C (index.csv v6). Recommendation: <strong>A</strong>, with the handicap
-          <code>differential</code> as the one precomputed index column.</li>
-        <li><strong>Handicap now or later.</strong> Ship it in v1 (needs
-          <code>rating</code>/<code>slope</code> added to every tee file), or ship §2's
-          items 2&ndash;5 first and fold handicap in once the course data carries ratings.</li>
-        <li><strong>v1 section list.</strong> All five of §2, or a subset? Score shape +
-          by-par + records is the minimum that feels worthwhile.</li>
-        <li><strong>Sand saves.</strong> Add a bunker marker to the Mark sheet (one more
-          tag, fairway-hit-sized) so scrambling can split greenside-bunker from everything
-          else &mdash; or leave it for later.</li>
-      </ol>
+      <h2>Settled &mdash; this is the build brief</h2>
+      <div class="scroller">
+        <table>
+          <thead><tr><th>Question</th><th>Decision</th></tr></thead>
+          <tbody>
+            <tr><td>Data source</td><td><strong>A</strong> &mdash; open the round files on entry, ~2&nbsp;s read, no format change for stats</td></tr>
+            <tr><td>Handicap</td><td><strong>Later</strong> &mdash; hero slot shows scoring average until <code>rating</code>/<code>slope</code> land on the tee files</td></tr>
+            <tr><td>v1 sections</td><td><strong>All five</strong> &mdash; hero, score shape, by par, around the green, records</td></tr>
+            <tr><td>Sand saves</td><td><strong>Yes</strong> &mdash; a Greenside-bunker checkbox on the Mark sheet's Inside-100 field (one per-hole bit, rides the v6 bump)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        The greenside-bunker bit and the free-form tee model (CONTRACTS-V2 §32) share one
+        <strong>round/state file v6</strong> bump &mdash; <code>index.csv</code> is untouched
+        by both. Full spec: CONTRACTS-V2 §32 and §33.
+      </p>
     </div>
   </section>
 

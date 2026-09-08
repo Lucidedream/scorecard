@@ -2027,3 +2027,193 @@ Four tasks, reviewed and committed in sequence:
    the `circle-check` icon asset and its draw on the score-zone field.
 4. **Trends + phone report** — `GolfTrendStats` fields and fold, the trends UI rows,
    `GolfRoundExport` per-hole and summary fields.
+
+
+## 32. Tees are free-form names, not a two-value enum (v6)
+
+*Added 2026-09-08. Owner chose the general model over a fixed four-colour enum after all
+four Sanyang tees (Black / Blue / White / Red) were transcribed from baigolf.com course
+533.*
+
+`TeeSelection { NotPlay, Blue, White }` cannot hold the three-to-five tees a real course
+carries. Replace it with a **short free-form string** on the player.
+
+### 32.1 The data
+
+`GolfPlayer` gains `char tee[GOLF_TEE_CAPACITY]` (`GOLF_TEE_CAPACITY = 12`) in place of the
+`TeeSelection tee` byte. An **empty string is the "did not play" sentinel** — the role
+`TeeSelection::NotPlay` had. `golfPlayerIsEnabled(player)` becomes `player.tee[0] != '\0'`.
+
+`sizeof(GolfPlayer)` and `sizeof(GolfRound)` grow by the added bytes (11 per player after
+alignment, ~44 to the round); the `static_assert`s move to the real numbers. The tee
+string is single-line, non-comma, valid UTF-8, 1..11 bytes — validated exactly like a
+player name, just shorter.
+
+`TeeSelection`, `golfTeeSelectionToken`, `golfParseTeeSelection`, `golfLegacyTeeSelection`
+are removed. `golfInitializeLegacyRound` writes the legacy tee string directly (`"White"`
+or `"Blue"`).
+
+### 32.2 Course files and resolution
+
+A course file's `"tees"` field is already a free-form string (`"Blue"`, `"White"`, now
+`"Black"`, `"Red"`, or anything). No course-file change.
+
+`CourseStore::resolveTee(file, course, teeName, resolved)` takes a `const char*` tee name
+and matches it case-sensitively against the file's `tees` string.
+`CourseStore::defaultTee` returns the **first** tee name of the course's file set in the
+existing sort order (was: Blue, then White).
+
+`GolfCourseTeeSet` (§30.2) drops `blue`/`white`/`hasBlue`/`hasWhite` for a **list**:
+`GolfCourseTee tees[GOLF_MAX_TEES]` (`GOLF_MAX_TEES = 6`) each `{ char name[12];
+GolfTeeResolution resolution; }`, plus `uint8_t teeCount`. `resolveAllTees` /
+`golfResolveAllTeesFrom` fill the list from every course file sharing the name, in file
+order, deduping by tee name.
+
+`CourseBuiltIns.h`: the built-in Sanyang keeps **Blue** (primary array) and **White**
+(`SANYANG_WHITE_YARDS`); Black and Red are SD-file-only. `golfResolveBuiltInTeeYardages`
+keys on the tee string. `golfResolveTeeCourse` matches `course.tees` / the built-in tee
+strings directly — no enum mapping.
+
+### 32.3 The pickers become dynamic
+
+* **`GolfSetupActivity`** (new-round course list) — the course-row subtitle lists the
+  course's tee names joined with `STR_GOLF_TEE_PAIR_FORMAT` / a new join for 3+
+  (`"A · B · C"`), from `golfResolveAllTeesFrom`.
+* **`GolfPlayerSetupActivity`** — the per-player tee sub-list (`teeRows`) is built from the
+  selected course's tees, one row per tee, not the fixed Blue/White pair. `openTeeChoice`
+  pre-selects the row matching `draft.players[player].tee`. `selectTee` copies the name
+  string. The solo-player fast path and the multiplayer roster both use this list.
+  `GOLF_MAX_TEES` bounds the row array.
+* **`GolfCourseMapBrowserActivity`** (§30.1) — the yardage line already iterates "every tee
+  that has yardage"; it now iterates the `GolfCourseTeeSet` list instead of the blue/white
+  pair, so Black and Red show for Sanyang.
+
+### 32.4 Everywhere the tee is displayed or exported
+
+`GolfStatisticsActivity::teeLabel`, `GolfHoleReviewActivity`, `GolfHistoryRoundMenuActivity`,
+`GolfCourseMapListActivity`, `GolfRoundExport` (the tee token, already a string) all read
+`player.tee` as the string directly. `STR_GOLF_BLUE` / `STR_GOLF_WHITE` stay as UI strings
+for the built-in course's tees but are no longer special — an SD course's `"Championship"`
+tee just prints `Championship`.
+
+### 32.5 File format v6
+
+Round file and `state.json` bump to `"v": 6`. The player object's `"tee"` field is
+**unchanged in shape** — it was already the string `"Blue"` / `"White"`. What changes is
+that new files may carry any tee name, so an older build must not read them: a v2..v5 file
+still loads (its `"tee"` string copies straight in; a legacy `"tees"` doc-level field maps
+as before), a v6 file is rejected by pre-v6 firmware. `golfDecodeRoundJson` /
+`golfCheckRound` accept 2..6. **`index.csv` does not store the tee and does not change** —
+no index migration, no `GolfIndexVersion` bump.
+
+`RoundArchive::writeCompletedRound` writes `"v":6` and the tee string per player.
+
+### 32.6 Read-compat
+
+Every archived v2..v5 round and any resumable v5 `state.json` loads unchanged — the tee
+was always serialised as a string. A round whose stored tee name matches no tee in the
+current course file set still loads for review; only *starting* or *resuming* scoring
+needs a resolvable tee, and `CourseStore::resolveTee` failing there is handled as it is
+today (`LOG_ERR` + fall back to the course default).
+
+
+## 33. Greenside-bunker mark and the Career Stats screen (v6)
+
+*Added 2026-09-08. Owner: Career Stats screen with all five sections, sand-save tracking
+included, per-hole data read from the round files (no `index.csv` change), handicap
+deferred to a later pass.*
+
+### 33.1 The greenside-bunker bit
+
+Sand-save percentage needs one datum the three buckets don't capture: **was the ball in a
+greenside bunker on the way to the hole.** `GolfPlayerScore` gains
+`uint8_t greensideBunker[3]` — a per-hole bitmask exactly like `fairwayHit` (§31.5), same
+accessor shape: `golfGreensideBunker(score, hole)`, `golfSetGreensideBunker(score, hole,
+bool)`.
+
+It rides the **v6** bump from §32 — one format change carries both the free-form tee and
+this bit. `golfDecodeRoundJson` reads a `"bunkers"` 0/1 array per player on the v6 path
+(absent ⇒ all clear); `golfCheckRound` length-checks it on v6; `playerPayloadIsZero`
+rejects a set bit on a disabled slot; `golfAddJsonPlayers` /
+`RoundArchive::writeCompletedRound` write it zero-filled for disabled slots.
+
+### 33.2 The Mark sheet gains a "Greenside bunker" row
+
+On the **Inside 100** field (a greenside bunker is a short-game shot), the Mark sheet
+shows a third row, **Greenside bunker**, a checkbox toggling `greensideBunker` for the
+hole — same interaction as the Fairway hit row (§31.2): seed, flip the bit, close, no
+counter, no cap. The row shows on Inside 100 for any hole (bunkers exist on every par).
+Its tag-column icon is Lucide `mountain` (a bunker/hazard shape) at 24 px; a 16 px
+`mountain` marks a recorded bunker beside the Inside-100 number, left of any H / OB.
+
+The Mark sheet's rows are now field-dependent:
+
+| Focused field | Rows |
+| --- | --- |
+| Putts | *(sheet does not open — §31.2)* |
+| Inside 100 | Hazard · OB · **Greenside bunker** |
+| To Score Zone, par 3 | Hazard · OB |
+| To Score Zone, par 4/5 (or par-free) | Hazard · OB · Fairway hit |
+
+Row count is 2 or 3; the wrap and Power-confirm behaviour from §31 / the mark-sheet polish
+pass are unchanged.
+
+### 33.3 Sand save, and the derived career tallies
+
+`GolfStats` gains pure helpers, all per (round, score):
+
+```
+golfSandSaves(round, score)        // greensideBunker set AND hole made par or better
+golfSandSaveChances(round, score)  // greensideBunker set, on an entered hole
+golfScrambles(round, score)        // GIR missed (golfGreenInRegulation false, par known)
+                                   //   AND hole made par or better, on an entered hole
+golfScrambleChances(round, score)  // GIR missed on an entered par-3..5 hole
+golfScoreVsPar(round, score, hole) // hole score - par, for the distribution tally
+```
+
+Sand save uses "par or better" rather than textbook up-and-down — simpler, and it answers
+the question a golfer actually asks ("did the bunker cost me a shot"). Scrambling is the
+same shape without the bunker condition.
+
+### 33.4 The Career Stats screen
+
+`GolfCareerStatsActivity(slot, playerName)` — a **third row on
+`GolfHistoryChoiceActivity`** (§29): `Trends` / `Stats` / `Rounds`. Back returns to the
+chooser.
+
+**Data source: it opens the round files.** On `onEnter` it streams every archived round
+for that player slot (the same file iteration `RoundArchive`'s rebuild uses), decodes each,
+and tallies. A "Reading N rounds…" frame shows while it works; the tally is cached in the
+activity for its lifetime. This is deliberately *not* an `index.csv` fold — the per-hole
+data isn't there, and a career-stats screen is opened rarely enough that a ~1–3 s read is
+acceptable. If it ever drags, a per-player `/golf/rounds/career-<slot>.bin` cache slots in
+underneath with nothing user-facing changing.
+
+**Five sections**, drawn as a scrolling sectioned list under the fixed golf header (§16.1)
+and a two-cell footer (`BACK` / `MORE`):
+
+1. **Hero** — scoring average and average-to-par over 18-hole rounds (the handicap number
+   takes this slot in a later pass once `rating`/`slope` are in the course files).
+2. **Score shape** — eagle-or-better / birdie / par / bogey / double / triple-plus:
+   career count, percentage, and a bar. Uses `golfScoreVsPar` per hole.
+3. **By par** — average score and average-to-par on par 3s, 4s, 5s.
+4. **Around the green** — scrambling % (`golfScrambles` / `golfScrambleChances`), sand-save
+   % (`golfSandSaves` / `golfSandSaveChances`), putts per GIR, 3-putt %.
+5. **Records** — lowest round (with course), lowest nine, fewest putts, most pars in a
+   round, longest bogey-free run of holes.
+
+A section with no data (no par 5s played, no bunkers recorded) shows `—` in its rows
+rather than disappearing, so the layout is stable. Rows past the fold reached with the
+side rocker, wrapping, like every golf list.
+
+### 33.5 Build order
+
+1. **v6 foundation** — free-form `GolfPlayer.tee` (§32.1), `greensideBunker` bit (§33.1),
+   round/`state.json`/archive v6, `GolfStats` helpers (§33.3). No `index.csv`, no UI. Host
+   tests: tee-string round-trips and v2..v5 read-compat, bunker bit, the five stat helpers.
+2. **Tee consumers** (§32.2–32.4) — resolution, `GolfCourseTeeSet` list, the dynamic
+   pickers, course-map browser, all display/export sites.
+3. **Greenside-bunker Mark row** (§33.2) — the sheet row, the `mountain` icon at 16/24 px,
+   the field-dependent row set.
+4. **Career Stats screen** (§33.4) — the activity, the chooser row, the round-file scan,
+   the five sections.
