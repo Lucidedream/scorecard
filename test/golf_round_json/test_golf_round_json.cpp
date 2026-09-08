@@ -32,12 +32,13 @@ void serializeRound(const GolfRound& round, const int version, JsonDocument& doc
     const bool disabled = !golfPlayerIsEnabled(player);
     JsonObject encoded = players.add<JsonObject>();
     encoded["name"] = player.name;
-    encoded["tee"] = golfTeeSelectionToken(player.tee);
+    encoded["tee"] = player.tee;
     golfAddJsonHoleArray(encoded, "yards", player.yards, round.holeCount, disabled);
     golfAddJsonHoleArray(encoded, "putts", player.score.putts, round.holeCount, disabled);
     golfAddJsonHoleArray(encoded, "in100", player.score.in100, round.holeCount, disabled);
     golfAddJsonHoleArray(encoded, "out100", player.score.out100, round.holeCount, disabled);
     if (version >= 5) golfAddJsonFairways(encoded, player.score, round.holeCount, disabled);
+    if (version >= 6) golfAddJsonBunkers(encoded, player.score, round.holeCount, disabled);
     golfAddJsonPenalties(encoded, player.score, round.holeCount, disabled);
   }
 }
@@ -50,7 +51,7 @@ GolfRound makeFixtureRound() {
   round.dateYmd = 0;
   std::snprintf(round.courseName, sizeof(round.courseName), "Test Course");
   for (uint8_t hole = 0; hole < round.holeCount; ++hole) round.par[hole] = 4;
-  round.players[0].tee = TeeSelection::Blue;
+  golfSetTee(round.players[0], "Blue");
 
   GolfPlayerScore& score = round.players[0].score;
   for (uint8_t hole = 0; hole < 3; ++hole) {
@@ -61,6 +62,8 @@ GolfRound makeFixtureRound() {
   golfSetFairwayHit(score, 0, true);
   golfSetFairwayHit(score, 2, true);
   golfSetFairwayHit(score, 9, true);
+  golfSetGreensideBunker(score, 1, true);
+  golfSetGreensideBunker(score, 2, true);
   return round;
 }
 
@@ -170,6 +173,119 @@ TEST(GolfRoundJson, V1RemainsRejected) {
 
   GolfRound decoded{};
   EXPECT_EQ(decode(doc, false, decoded), GolfRoundDecodeStatus::RejectedVersion);
+}
+
+TEST(GolfRoundJson, V6RoundFileRoundTripsFreeFormTeeAndBunkerBits) {
+  GolfRound original = makeFixtureRound();
+  golfSetTee(original.players[0], "Back 9");
+  JsonDocument doc;
+  serializeRound(original, 6, doc);
+
+  GolfRound decoded{};
+  ASSERT_EQ(decode(doc, false, decoded), GolfRoundDecodeStatus::Ok);
+  EXPECT_STREQ(decoded.players[0].tee, "Back 9");
+  for (uint8_t hole = 0; hole < GolfRound::MAX_HOLES; ++hole) {
+    EXPECT_EQ(golfGreensideBunker(decoded.players[0].score, hole), golfGreensideBunker(original.players[0].score, hole))
+        << "hole " << int{hole};
+    EXPECT_EQ(golfFairwayHit(decoded.players[0].score, hole), golfFairwayHit(original.players[0].score, hole));
+  }
+  EXPECT_TRUE(golfGreensideBunker(decoded.players[0].score, 1));
+  EXPECT_TRUE(golfGreensideBunker(decoded.players[0].score, 2));
+  EXPECT_FALSE(golfGreensideBunker(decoded.players[0].score, 0));
+}
+
+TEST(GolfRoundJson, V6StateRoundTripsBunkerBitsAndCursor) {
+  GolfRound original = makeFixtureRound();
+  original.currentHole = 3;
+  original.currentPlayer = 0;
+  JsonDocument doc;
+  serializeRound(original, 6, doc);
+
+  GolfRound decoded{};
+  ASSERT_EQ(decode(doc, true, decoded), GolfRoundDecodeStatus::Ok);
+  EXPECT_EQ(decoded.currentHole, 3);
+  EXPECT_TRUE(golfGreensideBunker(decoded.players[0].score, 2));
+}
+
+TEST(GolfRoundJson, V5FileLoadsWithBunkerBitsClearThenReserializesAsV6) {
+  const GolfRound source = makeFixtureRound();
+  JsonDocument v5doc;
+  serializeRound(source, 5, v5doc);
+  ASSERT_FALSE(v5doc["players"][0]["bunkers"].is<JsonArrayConst>());
+
+  GolfRound decoded{};
+  ASSERT_EQ(decode(v5doc, false, decoded), GolfRoundDecodeStatus::Ok);
+  EXPECT_STREQ(decoded.players[0].tee, "Blue");
+  for (uint8_t hole = 0; hole < GolfRound::MAX_HOLES; ++hole) {
+    EXPECT_FALSE(golfGreensideBunker(decoded.players[0].score, hole));
+  }
+
+  JsonDocument v6doc;
+  serializeRound(decoded, 6, v6doc);
+  EXPECT_EQ(v6doc["v"].as<int>(), 6);
+  ASSERT_TRUE(v6doc["players"][0]["bunkers"].is<JsonArray>());
+  EXPECT_EQ(v6doc["players"][0]["bunkers"].as<JsonArrayConst>().size(), 18u);
+  EXPECT_EQ(v6doc["players"][3]["bunkers"].as<JsonArrayConst>().size(), 18u);  // disabled slot zero-filled
+
+  GolfRound reDecoded{};
+  EXPECT_EQ(decode(v6doc, false, reDecoded), GolfRoundDecodeStatus::Ok);
+}
+
+TEST(GolfRoundJson, V6RejectsWrongLengthBunkerArray) {
+  const GolfRound original = makeFixtureRound();
+  JsonDocument doc;
+  serializeRound(original, 6, doc);
+  doc["players"][0]["bunkers"].as<JsonArray>().add(0);  // 19 entries
+
+  GolfRound decoded{};
+  EXPECT_EQ(decode(doc, false, decoded), GolfRoundDecodeStatus::RejectedArrayLength);
+}
+
+TEST(GolfRoundJson, V6RejectsOutOfRangeBunkerValue) {
+  const GolfRound original = makeFixtureRound();
+  JsonDocument doc;
+  serializeRound(original, 6, doc);
+  doc["players"][0]["bunkers"][1] = 2;
+
+  GolfRound decoded{};
+  EXPECT_EQ(decode(doc, false, decoded), GolfRoundDecodeStatus::RejectedMetadata);
+}
+
+TEST(GolfRoundJson, V6RejectsBunkerBitOnDisabledSlot) {
+  const GolfRound original = makeFixtureRound();
+  JsonDocument doc;
+  serializeRound(original, 6, doc);
+  doc["players"][3]["bunkers"][0] = 1;  // player 3 did not play
+
+  GolfRound decoded{};
+  EXPECT_EQ(decode(doc, false, decoded), GolfRoundDecodeStatus::RejectedDisabledPlayerData);
+}
+
+TEST(GolfRoundJson, V6RejectsMalformedTee) {
+  const GolfRound original = makeFixtureRound();
+
+  JsonDocument tooLong;
+  serializeRound(original, 6, tooLong);
+  tooLong["players"][0]["tee"] = "TwelveCharsX";  // 12 chars, no room for NUL
+  GolfRound a{};
+  EXPECT_EQ(decode(tooLong, false, a), GolfRoundDecodeStatus::RejectedMetadata);
+
+  JsonDocument comma;
+  serializeRound(original, 6, comma);
+  comma["players"][0]["tee"] = "Front,Back";
+  GolfRound b{};
+  EXPECT_EQ(decode(comma, false, b), GolfRoundDecodeStatus::RejectedMetadata);
+}
+
+TEST(GolfRoundJson, V6TeeCopiesStraightInFromV5Fixture) {
+  GolfRound source = makeFixtureRound();
+  golfSetTee(source.players[0], "White");
+  JsonDocument v5doc;
+  serializeRound(source, 5, v5doc);
+
+  GolfRound decoded{};
+  ASSERT_EQ(decode(v5doc, false, decoded), GolfRoundDecodeStatus::Ok);
+  EXPECT_STREQ(decoded.players[0].tee, "White");
 }
 
 }  // namespace

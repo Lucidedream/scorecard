@@ -38,14 +38,16 @@ bool golfResolveAllTeesFrom(const GolfCourseFile* files, const GolfCourse* cours
       result.primary = courses[index];
       found = true;
     }
+    // TODO(task 2): dynamic tees -- gather every tee name across the file set,
+    // not just Blue/White (CONTRACTS-V2 §32.2).
     GolfTeeResolution resolved{};
-    if (!result.hasBlue && CourseStore::resolveTee(files[index], courses[index], TeeSelection::Blue, resolved)) {
+    if (!result.hasBlue && CourseStore::resolveTee(files[index], courses[index], "Blue", resolved)) {
       result.blue.hasYards = resolved.hasYards;
       if (resolved.hasYards) memcpy(result.blue.yards, resolved.yards, sizeof(result.blue.yards));
       result.hasBlue = true;
     }
     resolved = {};
-    if (!result.hasWhite && CourseStore::resolveTee(files[index], courses[index], TeeSelection::White, resolved)) {
+    if (!result.hasWhite && CourseStore::resolveTee(files[index], courses[index], "White", resolved)) {
       result.white.hasYards = resolved.hasYards;
       if (resolved.hasYards) memcpy(result.white.yards, resolved.yards, sizeof(result.white.yards));
       result.hasWhite = true;

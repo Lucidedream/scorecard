@@ -12,7 +12,7 @@ int main(int argc, char** argv) {
   strcpy(data.round.courseName, "=Golf, \"山\" <&>");
   auto& player = data.round.players[0];
   strcpy(player.name, "Noah");
-  player.tee = TeeSelection::White;
+  golfSetTee(player, "White");
   for (auto& par : data.round.par) par = 4;
   player.score.in100[0] = 3;
   player.score.putts[0] = 2;

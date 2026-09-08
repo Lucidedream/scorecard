@@ -182,4 +182,19 @@ uint16_t golfFairwayHitsForRound(const GolfPlayerScore& score, const uint8_t hol
   return total;
 }
 
+bool golfGreensideBunker(const GolfPlayerScore& score, const uint8_t hole) {
+  if (!validHole(hole)) return false;
+  return (score.greensideBunker[hole / 8] & (1 << (hole % 8))) != 0;
+}
+
+void golfSetGreensideBunker(GolfPlayerScore& score, const uint8_t hole, const bool bunkered) {
+  if (!validHole(hole)) return;
+  const uint8_t mask = static_cast<uint8_t>(1 << (hole % 8));
+  if (bunkered) {
+    score.greensideBunker[hole / 8] |= mask;
+  } else {
+    score.greensideBunker[hole / 8] &= static_cast<uint8_t>(~mask);
+  }
+}
+
 #endif

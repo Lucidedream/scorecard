@@ -22,7 +22,7 @@ GolfRoundColumnLengths v4Lengths(const uint16_t count) {
   lengths.si = count;
   lengths.players = GolfRound::MAX_PLAYERS;
   for (GolfPlayerColumnLengths& player : lengths.player) {
-    player = {count, count, count, count, count, 0};
+    player = {count, count, count, count, count, 0, 0};
   }
   return lengths;
 }
@@ -30,6 +30,12 @@ GolfRoundColumnLengths v4Lengths(const uint16_t count) {
 GolfRoundColumnLengths v5Lengths(const uint16_t count) {
   GolfRoundColumnLengths lengths = v4Lengths(count);
   for (GolfPlayerColumnLengths& player : lengths.player) player.fairways = count;
+  return lengths;
+}
+
+GolfRoundColumnLengths v6Lengths(const uint16_t count) {
+  GolfRoundColumnLengths lengths = v5Lengths(count);
+  for (GolfPlayerColumnLengths& player : lengths.player) player.bunkers = count;
   return lengths;
 }
 
@@ -46,7 +52,7 @@ class GolfRoundDecodeTest : public ::testing::Test {
   void prepareV4() {
     round = {};
     initializeGolfPlayerDefaults(round);
-    round.players[0].tee = TeeSelection::Blue;
+    golfSetTee(round.players[0], "Blue");
     for (uint8_t hole = 0; hole < GolfRound::MAX_HOLES; ++hole) round.par[hole] = 4;
   }
 };
@@ -58,19 +64,23 @@ TEST_F(GolfRoundDecodeTest, RejectsVersionOneAndMissingVersion) {
 }
 
 TEST_F(GolfRoundDecodeTest, LegacyTeeMappingUsesExactTokensAndBlueFallback) {
-  EXPECT_EQ(golfLegacyTeeSelection("White"), TeeSelection::White);
-  EXPECT_EQ(golfLegacyTeeSelection("Blue"), TeeSelection::Blue);
-  EXPECT_EQ(golfLegacyTeeSelection("white"), TeeSelection::Blue);
-  EXPECT_EQ(golfLegacyTeeSelection("Championship"), TeeSelection::Blue);
-  EXPECT_EQ(golfLegacyTeeSelection(nullptr), TeeSelection::Blue);
+  EXPECT_STREQ(golfLegacyTeeSelection("White"), "White");
+  EXPECT_STREQ(golfLegacyTeeSelection("Blue"), "Blue");
+  EXPECT_STREQ(golfLegacyTeeSelection("white"), "Blue");
+  EXPECT_STREQ(golfLegacyTeeSelection("Championship"), "Blue");
+  EXPECT_STREQ(golfLegacyTeeSelection(nullptr), "Blue");
+}
 
-  TeeSelection parsed = TeeSelection::NotPlay;
-  EXPECT_TRUE(golfParseTeeSelection("NotPlay", parsed));
-  EXPECT_EQ(parsed, TeeSelection::NotPlay);
-  EXPECT_TRUE(golfParseTeeSelection("White", parsed));
-  EXPECT_EQ(parsed, TeeSelection::White);
-  EXPECT_FALSE(golfParseTeeSelection("white", parsed));
-  EXPECT_STREQ(golfTeeSelectionToken(TeeSelection::Blue), "Blue");
+TEST_F(GolfRoundDecodeTest, TeeStringValidatorMatchesTheNamePredicateShape) {
+  EXPECT_TRUE(golfTeeStringValid("Blue"));
+  EXPECT_TRUE(golfTeeStringValid("Back Tees11"));  // 11 chars, fits with NUL
+  EXPECT_TRUE(golfTeeStringValid("山"));
+  EXPECT_FALSE(golfTeeStringValid(""));
+  EXPECT_FALSE(golfTeeStringValid(nullptr));
+  EXPECT_FALSE(golfTeeStringValid("TwelveChars!"));  // 12 chars, no room for NUL
+  EXPECT_FALSE(golfTeeStringValid("Back,Nine"));     // comma
+  EXPECT_FALSE(golfTeeStringValid("Back\nNine"));    // newline
+  EXPECT_FALSE(golfTeeStringValid("Bad\xff"));       // invalid UTF-8
 }
 
 TEST_F(GolfRoundDecodeTest, VersionTwoMigratesIntoNoahSlotWithZeroPenalties) {
@@ -81,9 +91,9 @@ TEST_F(GolfRoundDecodeTest, VersionTwoMigratesIntoNoahSlotWithZeroPenalties) {
 
   EXPECT_EQ(golfCheckRound(round, 2, 18, 0, 0, legacyLengths(18), validation), GolfRoundDecodeStatus::Ok);
   EXPECT_STREQ(round.players[0].name, "Noah");
-  EXPECT_EQ(round.players[0].tee, TeeSelection::White);
+  EXPECT_STREQ(round.players[0].tee, "White");
   for (uint8_t slot = 1; slot < GolfRound::MAX_PLAYERS; ++slot) {
-    EXPECT_EQ(round.players[slot].tee, TeeSelection::NotPlay);
+    EXPECT_STREQ(round.players[slot].tee, "");
   }
   for (uint8_t hole = 0; hole < GolfRound::MAX_HOLES; ++hole) {
     EXPECT_EQ(round.players[0].score.penaltyCount[hole], 0);
@@ -102,7 +112,7 @@ TEST_F(GolfRoundDecodeTest, VersionThreeRequiresOnePenaltyArrayPerHole) {
 
 TEST_F(GolfRoundDecodeTest, V4AcceptsExactlyFourOrderedPlayers) {
   prepareV4();
-  round.players[2].tee = TeeSelection::White;
+  golfSetTee(round.players[2], "White");
   round.players[2].score.in100[4] = 2;
   round.players[2].score.out100[4] = 3;
   round.currentPlayer = 2;
@@ -125,10 +135,10 @@ TEST_F(GolfRoundDecodeTest, V4RejectsPlayerCountAndAnyPerPlayerLengthMismatch) {
 
 TEST_F(GolfRoundDecodeTest, V4RepairsRoundWithNoEnabledPlayers) {
   prepareV4();
-  round.players[0].tee = TeeSelection::NotPlay;
+  golfSetTee(round.players[0], "");
   EXPECT_EQ(golfCheckRound(round, 4, 18, 0, 0, v4Lengths(18), validation), GolfRoundDecodeStatus::Ok);
   EXPECT_TRUE(validation.firstPlayerEnabled);
-  EXPECT_EQ(round.players[0].tee, TeeSelection::Blue);
+  EXPECT_STREQ(round.players[0].tee, "Blue");
 }
 
 TEST_F(GolfRoundDecodeTest, V4RejectsNonZeroPayloadForDisabledPlayer) {
@@ -167,6 +177,38 @@ TEST_F(GolfRoundDecodeTest, V5RejectsFairwayBitOnDisabledSlot) {
             GolfRoundDecodeStatus::RejectedDisabledPlayerData);
 }
 
+TEST_F(GolfRoundDecodeTest, V6AcceptsBunkerArraysAndValidatesTheirLength) {
+  prepareV4();
+  round.players[0].score.in100[3] = 2;
+  round.players[0].score.out100[3] = 3;
+  golfSetGreensideBunker(round.players[0].score, 3, true);
+  EXPECT_EQ(golfCheckRound(round, 6, 18, 0, 0, v6Lengths(18), validation), GolfRoundDecodeStatus::Ok);
+
+  GolfRoundColumnLengths shortBunkers = v6Lengths(18);
+  shortBunkers.player[1].bunkers = 17;
+  EXPECT_EQ(golfCheckRound(round, 6, 18, 0, 0, shortBunkers, validation), GolfRoundDecodeStatus::RejectedArrayLength);
+}
+
+TEST_F(GolfRoundDecodeTest, V5IgnoresBunkerArrayLengthAndKeepsBitsClear) {
+  prepareV4();
+  EXPECT_EQ(golfCheckRound(round, 5, 18, 0, 0, v5Lengths(18), validation), GolfRoundDecodeStatus::Ok);
+  for (uint8_t hole = 0; hole < GolfRound::MAX_HOLES; ++hole) {
+    EXPECT_FALSE(golfGreensideBunker(round.players[0].score, hole));
+  }
+}
+
+TEST_F(GolfRoundDecodeTest, V6RejectsBunkerBitOnDisabledSlot) {
+  prepareV4();
+  golfSetGreensideBunker(round.players[3].score, 0, true);
+  EXPECT_EQ(golfCheckRound(round, 6, 18, 0, 0, v6Lengths(18), validation),
+            GolfRoundDecodeStatus::RejectedDisabledPlayerData);
+}
+
+TEST_F(GolfRoundDecodeTest, RejectsVersionSeven) {
+  prepareV4();
+  EXPECT_EQ(golfCheckRound(round, 7, 18, 0, 0, v6Lengths(18), validation), GolfRoundDecodeStatus::RejectedVersion);
+}
+
 TEST_F(GolfRoundDecodeTest, V4ValidatesSharedStrokeIndexSnapshot) {
   prepareV4();
   round.hasSi = true;
@@ -183,8 +225,8 @@ TEST_F(GolfRoundDecodeTest, V4ValidatesSharedStrokeIndexSnapshot) {
 
 TEST_F(GolfRoundDecodeTest, V4RepairsDisabledCurrentPlayerToFirstEnabled) {
   prepareV4();
-  round.players[0].tee = TeeSelection::NotPlay;
-  round.players[2].tee = TeeSelection::White;
+  golfSetTee(round.players[0], "");
+  golfSetTee(round.players[2], "White");
   EXPECT_EQ(golfCheckRound(round, 4, 18, 3, 0, v4Lengths(18), validation), GolfRoundDecodeStatus::Ok);
   EXPECT_TRUE(validation.currentPlayerReset);
   EXPECT_EQ(round.currentPlayer, 2);
@@ -201,7 +243,7 @@ TEST_F(GolfRoundDecodeTest, RejectsUnsupportedHoleCountAndArrayMismatch) {
 
 TEST_F(GolfRoundDecodeTest, RepairsAndReportsOnlyOwningPlayer) {
   prepareV4();
-  round.players[1].tee = TeeSelection::White;
+  golfSetTee(round.players[1], "White");
   round.players[1].score.putts[3] = 5;
   round.players[1].score.in100[3] = 2;
   round.players[1].score.out100[3] = 1;

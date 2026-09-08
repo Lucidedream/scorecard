@@ -137,8 +137,8 @@ TEST_F(GolfRulesTest, CourseApplyLeavesMissingStrokeIndexZeroed) {
 }
 
 TEST_F(GolfRulesTest, EnabledPlayerTraversalPreservesStableSlots) {
-  round.players[1].tee = TeeSelection::Blue;
-  round.players[3].tee = TeeSelection::White;
+  golfSetTee(round.players[1], "Blue");
+  golfSetTee(round.players[3], "White");
   EXPECT_EQ(golfFirstEnabledPlayer(round), 1);
   EXPECT_EQ(golfNextEnabledPlayer(round, 1), 3);
   EXPECT_EQ(golfNextEnabledPlayer(round, 3), 1);
@@ -147,8 +147,8 @@ TEST_F(GolfRulesTest, EnabledPlayerTraversalPreservesStableSlots) {
 }
 
 TEST_F(GolfRulesTest, SparseTwoPlayerTraversalIsSymmetric) {
-  round.players[1].tee = TeeSelection::Blue;
-  round.players[3].tee = TeeSelection::White;
+  golfSetTee(round.players[1], "Blue");
+  golfSetTee(round.players[3], "White");
   round.currentPlayer = 1;
   round.currentHole = 4;
 
@@ -167,7 +167,7 @@ TEST_F(GolfRulesTest, SparseTwoPlayerTraversalIsSymmetric) {
 }
 
 TEST_F(GolfRulesTest, OnePlayerTraversalWrapsInBothDirections) {
-  round.players[2].tee = TeeSelection::Blue;
+  golfSetTee(round.players[2], "Blue");
   round.currentPlayer = 2;
   round.currentHole = 17;
 
@@ -180,7 +180,7 @@ TEST_F(GolfRulesTest, OnePlayerTraversalWrapsInBothDirections) {
 }
 
 TEST_F(GolfRulesTest, FourPlayerTraversalIsSymmetricAtPlayerBoundary) {
-  for (GolfPlayer& player : round.players) player.tee = TeeSelection::Blue;
+  for (GolfPlayer& player : round.players) golfSetTee(player, "Blue");
   round.currentPlayer = 0;
   round.currentHole = 8;
 
@@ -199,8 +199,8 @@ TEST_F(GolfRulesTest, FourPlayerTraversalIsSymmetricAtPlayerBoundary) {
 }
 
 TEST_F(GolfRulesTest, MultiplayerFinalHoleWrapIsSymmetric) {
-  round.players[0].tee = TeeSelection::Blue;
-  round.players[2].tee = TeeSelection::White;
+  golfSetTee(round.players[0], "Blue");
+  golfSetTee(round.players[2], "White");
   round.currentPlayer = 2;
   round.currentHole = 17;
 
@@ -213,8 +213,8 @@ TEST_F(GolfRulesTest, MultiplayerFinalHoleWrapIsSymmetric) {
 }
 
 TEST_F(GolfRulesTest, FinalCommitRequiresLastEnabledPlayerOnLastHole) {
-  round.players[0].tee = TeeSelection::Blue;
-  round.players[2].tee = TeeSelection::White;
+  golfSetTee(round.players[0], "Blue");
+  golfSetTee(round.players[2], "White");
   round.currentHole = 17;
 
   round.currentPlayer = 0;
@@ -226,7 +226,7 @@ TEST_F(GolfRulesTest, FinalCommitRequiresLastEnabledPlayerOnLastHole) {
 }
 
 TEST_F(GolfRulesTest, FinalCommitRejectsInvalidRoundState) {
-  round.players[1].tee = TeeSelection::Blue;
+  golfSetTee(round.players[1], "Blue");
   round.currentPlayer = 1;
   round.currentHole = 17;
   EXPECT_TRUE(golfIsFinalCommit(round));
@@ -237,7 +237,7 @@ TEST_F(GolfRulesTest, FinalCommitRejectsInvalidRoundState) {
   round.currentPlayer = GolfRound::NO_PLAYER;
   EXPECT_FALSE(golfIsFinalCommit(round));
   round.currentPlayer = 1;
-  round.players[1].tee = TeeSelection::NotPlay;
+  golfSetTee(round.players[1], "");
   EXPECT_FALSE(golfIsFinalCommit(round));
 }
 

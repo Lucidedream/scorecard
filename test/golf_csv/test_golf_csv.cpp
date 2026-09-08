@@ -82,8 +82,8 @@ class GolfCsvRoundTest : public ::testing::Test {
     initializeGolfPlayerDefaults(round);
     strcpy(round.courseName, "Course");
     round.holeCount = 18;
-    round.players[0].tee = TeeSelection::Blue;
-    round.players[2].tee = TeeSelection::White;
+    golfSetTee(round.players[0], "Blue");
+    golfSetTee(round.players[2], "White");
     for (uint8_t hole = 0; hole < round.holeCount; ++hole) round.par[hole] = 4;
   }
 };

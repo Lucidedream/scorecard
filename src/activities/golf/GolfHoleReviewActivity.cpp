@@ -17,14 +17,6 @@
 #include "golf/GolfPenalty.h"
 #include "golf/GolfStats.h"
 
-namespace {
-
-const char* teeLabel(const TeeSelection tee) {
-  return tee == TeeSelection::White ? tr(STR_GOLF_WHITE) : tr(STR_GOLF_BLUE);
-}
-
-}  // namespace
-
 void GolfHoleReviewActivity::onEnter() {
   Activity::onEnter();
   if (playerSlot >= GolfRound::MAX_PLAYERS || !golfPlayerIsEnabled(round.players[playerSlot])) {
@@ -83,10 +75,10 @@ void GolfHoleReviewActivity::drawHoleBand(const freeink::ui::Rect rect) const {
   const int right = rect.x + rect.width - padding;
   if (rect.height < lineHeight * 4 + 4) {
     if (round.par[currentHole] != 0) {
-      snprintf(line, sizeof(line), tr(STR_GOLF_TEE_PAR_FORMAT), teeLabel(player.tee), tr(STR_GOLF_PAR),
+      snprintf(line, sizeof(line), tr(STR_GOLF_TEE_PAR_FORMAT), player.tee, tr(STR_GOLF_PAR),
                static_cast<unsigned>(round.par[currentHole]));
     } else {
-      snprintf(line, sizeof(line), "%s", teeLabel(player.tee));
+      snprintf(line, sizeof(line), "%s", player.tee);
     }
     renderer.drawText(UI_10_FONT_ID, right - renderer.getTextWidth(UI_10_FONT_ID, line), rect.y + 4, line, true,
                       EpdFontFamily::BOLD);
@@ -108,7 +100,7 @@ void GolfHoleReviewActivity::drawHoleBand(const freeink::ui::Rect rect) const {
   } else {
     const int lineStep = golfui::clampValue((rect.height - 4) / 4, lineHeight, lineHeight + 6);
     int y = rect.y + 2;
-    snprintf(line, sizeof(line), "%s", teeLabel(player.tee));
+    snprintf(line, sizeof(line), "%s", player.tee);
     renderer.drawText(UI_10_FONT_ID, right - renderer.getTextWidth(UI_10_FONT_ID, line), y, line, true,
                       EpdFontFamily::BOLD);
     y += lineStep;

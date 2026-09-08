@@ -13,7 +13,7 @@ class GolfValidateTest : public ::testing::Test {
   void SetUp() override {
     initializeGolfPlayerDefaults(round);
     round.holeCount = 18;
-    round.players[0].tee = TeeSelection::Blue;
+    golfSetTee(round.players[0], "Blue");
     round.currentPlayer = 0;
   }
 
@@ -58,31 +58,31 @@ TEST_F(GolfValidateTest, RejectsUnsupportedHoleCountWithoutScoreMutation) {
 }
 
 TEST_F(GolfValidateTest, RepairsRoundWithNoEnabledPlayers) {
-  round.players[0].tee = TeeSelection::NotPlay;
+  golfSetTee(round.players[0], "");
   const GolfValidationResult result = validateGolfRound(round);
   EXPECT_TRUE(result.valid);
   EXPECT_TRUE(result.repaired());
   EXPECT_TRUE(result.firstPlayerEnabled);
-  EXPECT_EQ(round.players[0].tee, TeeSelection::Blue);
+  EXPECT_STREQ(round.players[0].tee, "Blue");
   for (uint8_t slot = 1; slot < GolfRound::MAX_PLAYERS; ++slot) {
-    EXPECT_EQ(round.players[slot].tee, TeeSelection::NotPlay);
+    EXPECT_STREQ(round.players[slot].tee, "");
   }
 }
 
 TEST_F(GolfValidateTest, DoesNotRepairOtherwiseInvalidRound) {
   round.holeCount = 12;
-  round.players[0].tee = TeeSelection::NotPlay;
+  golfSetTee(round.players[0], "");
 
   const GolfValidationResult result = validateGolfRound(round);
 
   EXPECT_FALSE(result.valid);
   EXPECT_FALSE(result.firstPlayerEnabled);
-  EXPECT_EQ(round.players[0].tee, TeeSelection::NotPlay);
+  EXPECT_STREQ(round.players[0].tee, "");
 }
 
 TEST_F(GolfValidateTest, DoesNotAlterAlreadyEnabledPlayers) {
-  round.players[0].tee = TeeSelection::White;
-  round.players[2].tee = TeeSelection::Blue;
+  golfSetTee(round.players[0], "White");
+  golfSetTee(round.players[2], "Blue");
   GolfPlayer playersBefore[GolfRound::MAX_PLAYERS]{};
   memcpy(playersBefore, round.players, sizeof(playersBefore));
 
@@ -93,8 +93,8 @@ TEST_F(GolfValidateTest, DoesNotAlterAlreadyEnabledPlayers) {
   EXPECT_EQ(memcmp(round.players, playersBefore, sizeof(playersBefore)), 0);
 }
 
-TEST_F(GolfValidateTest, RejectsUnknownTeeValue) {
-  round.players[0].tee = static_cast<TeeSelection>(3);
+TEST_F(GolfValidateTest, RejectsUnterminatedTeeName) {
+  memset(round.players[0].tee, 'x', sizeof(round.players[0].tee));
   const GolfValidationResult result = validateGolfRound(round);
   EXPECT_FALSE(result.valid);
 }
@@ -108,8 +108,8 @@ TEST_F(GolfValidateTest, ResetsOutOfRangeCurrentHole) {
 }
 
 TEST_F(GolfValidateTest, ResetsDisabledCurrentPlayerToFirstEnabledSlot) {
-  round.players[0].tee = TeeSelection::NotPlay;
-  round.players[2].tee = TeeSelection::White;
+  golfSetTee(round.players[0], "");
+  golfSetTee(round.players[2], "White");
   round.currentPlayer = 0;
   const GolfValidationResult result = validateGolfRound(round);
   EXPECT_TRUE(result.valid);

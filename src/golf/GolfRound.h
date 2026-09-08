@@ -1,13 +1,17 @@
 #pragma once
 
 #include <cstdint>
+#include <cstring>
 #include <type_traits>
 
 inline constexpr uint8_t GOLF_MAX_HOLES = 18;
 inline constexpr uint8_t GOLF_MAX_PLAYERS = 4;
 inline constexpr uint8_t GOLF_MAX_PENALTIES_PER_HOLE = 8;
 
-enum class TeeSelection : uint8_t { NotPlay = 0, Blue = 1, White = 2 };
+// Free-form tee name (CONTRACTS-V2 §32.1): a single-line, non-comma, valid-UTF-8
+// string of 1..GOLF_TEE_CAPACITY-1 bytes. An empty string is the "did not play"
+// sentinel.
+inline constexpr uint8_t GOLF_TEE_CAPACITY = 12;
 
 struct GolfPlayerScore {
   uint8_t putts[GOLF_MAX_HOLES];
@@ -18,16 +22,31 @@ struct GolfPlayerScore {
   // Bit `hole` (fairwayHit[hole / 8] & (1 << (hole % 8))) set means the tee shot
   // found the fairway on that hole. Not a stroke and not a penalty.
   uint8_t fairwayHit[3];
+  // Same per-hole bit shape as fairwayHit: set means the ball lay in a greenside
+  // bunker on the way to the hole. Feeds sand-save stats (CONTRACTS-V2 §33.1).
+  uint8_t greensideBunker[3];
 };
 
 struct GolfPlayer {
   static constexpr uint8_t NAME_CAPACITY = 24;
 
   char name[NAME_CAPACITY];
-  TeeSelection tee;
+  char tee[GOLF_TEE_CAPACITY];
   uint16_t yards[GOLF_MAX_HOLES];
   GolfPlayerScore score;
 };
+
+// Bounded copy of a tee name into a GOLF_TEE_CAPACITY buffer, always
+// NUL-terminated and with the unused tail zeroed. A null or empty source yields
+// the "did not play" sentinel.
+inline void golfSetTeeString(char* dest, const char* tee) {
+  memset(dest, 0, GOLF_TEE_CAPACITY);
+  if (tee == nullptr) return;
+  const size_t length = strlen(tee);
+  memcpy(dest, tee, length < GOLF_TEE_CAPACITY ? length : GOLF_TEE_CAPACITY - 1);
+}
+
+inline void golfSetTee(GolfPlayer& player, const char* tee) { golfSetTeeString(player.tee, tee); }
 
 struct GolfRound {
   static constexpr uint8_t MAX_HOLES = GOLF_MAX_HOLES;
@@ -55,15 +74,15 @@ inline void initializeGolfPlayerDefaults(GolfRound& round) {
     for (uint8_t byte = 0; byte < GolfPlayer::NAME_CAPACITY; ++byte) {
       round.players[player].name[byte] = GOLF_DEFAULT_PLAYER_NAMES[player][byte];
     }
+    round.players[player].tee[0] = '\0';
   }
 }
 
-constexpr bool golfPlayerIsEnabled(const GolfPlayer& player) { return player.tee != TeeSelection::NotPlay; }
+constexpr bool golfPlayerIsEnabled(const GolfPlayer& player) { return player.tee[0] != '\0'; }
 
-static_assert(sizeof(TeeSelection) == 1);
-static_assert(sizeof(GolfPlayerScore) == 147);
-static_assert(sizeof(GolfPlayer) == 210);
-static_assert(sizeof(GolfRound) == 922);
+static_assert(sizeof(GolfPlayerScore) == 150);
+static_assert(sizeof(GolfPlayer) == 222);
+static_assert(sizeof(GolfRound) == 970);
 static_assert(std::is_standard_layout_v<GolfPlayerScore>);
 static_assert(std::is_trivially_copyable_v<GolfPlayerScore>);
 static_assert(std::is_standard_layout_v<GolfPlayer>);

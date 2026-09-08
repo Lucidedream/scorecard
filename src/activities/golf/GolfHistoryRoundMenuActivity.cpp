@@ -20,14 +20,6 @@
 
 namespace fui = freeink::ui;
 
-namespace {
-
-const char* teeLabel(const TeeSelection tee) {
-  return tee == TeeSelection::White ? tr(STR_GOLF_WHITE) : tr(STR_GOLF_BLUE);
-}
-
-}  // namespace
-
 GolfHistoryRoundMenuActivity::GolfHistoryRoundMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                            const GolfRound& archivedRound, const char* filename,
                                                            const uint8_t selectedPlayerSlot)
@@ -55,7 +47,7 @@ void GolfHistoryRoundMenuActivity::onEnter() {
                         tr(STR_GOLF_TO_PAR_NEGATIVE_FORMAT), tr(STR_GOLF_ROUND_STATUS_FORMAT), status, sizeof(status));
   golfFormatPlayerLabel(playerSlot, player.name, tr(STR_GOLF_PLAYER_LABEL_FORMAT), infoLine1, sizeof(infoLine1));
   snprintf(infoLine2, sizeof(infoLine2), tr(STR_GOLF_ROUND_INFO_HOLES_FORMAT), static_cast<unsigned>(round.holeCount),
-           teeLabel(player.tee));
+           player.tee);
   UiListActivity::onEnter();
 }
 

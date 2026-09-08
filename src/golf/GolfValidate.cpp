@@ -2,6 +2,8 @@
 
 #if defined(CROSSPOINT_GOLF)
 
+#include <cstring>
+
 #include "GolfPenalty.h"
 #include "GolfRules.h"
 
@@ -30,9 +32,10 @@ uint8_t fieldShotCount(const GolfPlayerScore& score, const uint8_t hole, const G
   return 0;
 }
 
-bool validTee(const TeeSelection tee) {
-  return tee == TeeSelection::NotPlay || tee == TeeSelection::Blue || tee == TeeSelection::White;
-}
+// The tee name is NUL-terminated within its buffer. An empty string is the
+// "did not play" sentinel; deep tee-name validation happens at decode
+// (golfTeeStringValid), mirroring how player names are checked there, not here.
+bool validTee(const char* tee) { return memchr(tee, '\0', GOLF_TEE_CAPACITY) != nullptr; }
 
 }  // namespace
 
@@ -93,7 +96,7 @@ GolfValidationResult validateGolfRound(GolfRound& round) {
   if (!result.valid) return result;
 
   if (enabledPlayers == 0) {
-    round.players[0].tee = TeeSelection::Blue;
+    golfSetTee(round.players[0], "Blue");
     result.firstPlayerEnabled = true;
   }
 

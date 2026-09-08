@@ -43,7 +43,7 @@ class GolfExportTest : public testing::Test {
     data.round.holeCount = 18;
     strcpy(data.round.courseName, "Gowin");
     strcpy(data.round.players[0].name, "Noah");
-    data.round.players[0].tee = TeeSelection::White;
+    golfSetTee(data.round.players[0], "White");
     data.round.dateYmd = (26 << 9) | (9 << 5) | 5;
     for (auto& par : data.round.par) par = 4;
     auto& score = data.round.players[0].score;
@@ -85,7 +85,7 @@ TEST_F(GolfExportTest, JsonUsesFirmwareSemanticsAndPreservesEvents) {
 TEST_F(GolfExportTest, EverySlotExportsOnlySelectedPlayer) {
   for (uint8_t slot = 0; slot < 4; ++slot) {
     data.playerSlot = slot;
-    data.round.players[slot].tee = TeeSelection::Blue;
+    golfSetTee(data.round.players[slot], "Blue");
     strcpy(data.round.players[slot].name, "Selected");
     const auto json = render(GolfExportFormat::Json);
     EXPECT_NE(json.find("\"player\":\"Selected\""), std::string::npos);

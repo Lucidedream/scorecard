@@ -80,7 +80,7 @@ void GolfRoundStore::toJson(JsonDocument& doc) const {
   }
 
   char date[GOLF_DATE_BUFFER_SIZE];
-  doc["v"] = 5;
+  doc["v"] = 6;
   if (golfFormatDate(round.dateYmd, date, sizeof(date))) {
     doc["date"] = date;
   } else {

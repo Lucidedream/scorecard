@@ -61,9 +61,11 @@ void GolfSetupActivity::loadCourses() {
 void GolfSetupActivity::formatCourseRow(const uint8_t row) {
   if (row >= courseCount) return;
   const GolfCourse& course = courses[row];
+  // TODO(task 2): dynamic tees -- list every tee name the course file set carries
+  // (CONTRACTS-V2 §32.3), not just the Blue/White pair.
   GolfTeeResolution resolved{};
-  const bool hasBlue = CourseStore::resolveTee(files[row], course, TeeSelection::Blue, resolved);
-  const bool hasWhite = CourseStore::resolveTee(files[row], course, TeeSelection::White, resolved);
+  const bool hasBlue = CourseStore::resolveTee(files[row], course, "Blue", resolved);
+  const bool hasWhite = CourseStore::resolveTee(files[row], course, "White", resolved);
   char tees[24]{};
   if (hasBlue && hasWhite) {
     snprintf(tees, sizeof(tees), tr(STR_GOLF_TEE_PAIR_FORMAT), tr(STR_GOLF_BLUE), tr(STR_GOLF_WHITE));

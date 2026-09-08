@@ -27,7 +27,7 @@ GolfPlayerSetupActivity::GolfPlayerSetupActivity(GfxRenderer& renderer, MappedIn
     : UiListActivity("GolfPlayerSetup", renderer, mappedInput), courseFile(selectedCourseFile), course(selectedCourse) {
   CourseStore::applyGolfCourse(course, draft, 0);
   CourseStore::initializeGolfPlayerSelection(courseFile, course, draft);
-  defaultTee = draft.players[0].tee;
+  golfSetTeeString(defaultTee, draft.players[0].tee);
 }
 
 void GolfPlayerSetupActivity::onEnter() {
@@ -54,16 +54,13 @@ const char* GolfPlayerSetupActivity::headerTitle() const {
   return phase == Phase::Players ? tr(STR_GOLF_PLAYER_SETUP) : teeChoicePlayerLabel;
 }
 
-const char* GolfPlayerSetupActivity::teeLabel(const TeeSelection tee) {
-  switch (tee) {
-    case TeeSelection::Blue:
-      return tr(STR_GOLF_BLUE);
-    case TeeSelection::White:
-      return tr(STR_GOLF_WHITE);
-    case TeeSelection::NotPlay:
-    default:
-      return tr(STR_GOLF_NOT_PLAY);
-  }
+const char* GolfPlayerSetupActivity::teeLabel(const char* tee) {
+  if (tee == nullptr || tee[0] == '\0') return tr(STR_GOLF_NOT_PLAY);
+  // The built-in course's Blue/White tees keep their translated labels; any other
+  // (SD-course) tee name prints verbatim (CONTRACTS-V2 §32.4).
+  if (strcmp(tee, "Blue") == 0) return tr(STR_GOLF_BLUE);
+  if (strcmp(tee, "White") == 0) return tr(STR_GOLF_WHITE);
+  return tee;
 }
 
 void GolfPlayerSetupActivity::refreshPlayerRows() {
@@ -87,16 +84,18 @@ void GolfPlayerSetupActivity::initializeTeeRows() {
   teeRows[0].actionValue = 0;
   teeRows[0].enabled = true;
 
+  // TODO(task 2): dynamic tees -- build one row per tee in the selected course's
+  // file set instead of the fixed Blue/White pair (CONTRACTS-V2 §32.3).
   GolfTeeResolution resolved{};
   teeRows[1] = {};
   teeRows[1].label = tr(STR_GOLF_BLUE);
   teeRows[1].actionValue = 1;
-  teeRows[1].enabled = CourseStore::resolveTee(courseFile, course, TeeSelection::Blue, resolved);
+  teeRows[1].enabled = CourseStore::resolveTee(courseFile, course, "Blue", resolved);
 
   teeRows[2] = {};
   teeRows[2].label = tr(STR_GOLF_WHITE);
   teeRows[2].actionValue = 2;
-  teeRows[2].enabled = CourseStore::resolveTee(courseFile, course, TeeSelection::White, resolved);
+  teeRows[2].enabled = CourseStore::resolveTee(courseFile, course, "White", resolved);
 }
 
 bool GolfPlayerSetupActivity::rowIsEnabled(const int index) const {
@@ -147,10 +146,10 @@ void GolfPlayerSetupActivity::activateIndex(const int index) {
         editPlayerName(editingPlayer);
         break;
       case 1:
-        selectTee(TeeSelection::Blue);
+        selectTee("Blue");
         break;
       case 2:
-        selectTee(TeeSelection::White);
+        selectTee("White");
         break;
       default:
         break;
@@ -203,17 +202,24 @@ void GolfPlayerSetupActivity::openTeeChoice(const uint8_t player) {
     golfFormatPlayerLabel(player, draft.players[player].name, tr(STR_GOLF_PLAYER_LABEL_FORMAT), teeChoicePlayerLabel,
                           sizeof(teeChoicePlayerLabel));
     closeRouting();
-    const int selected = static_cast<int>(draft.players[player].tee);
+    // TODO(task 2): dynamic tees -- match the row to draft.players[player].tee by
+    // name once teeRows is built from the course tee list (CONTRACTS-V2 §32.3).
+    int selected = 0;
+    if (strcmp(draft.players[player].tee, "Blue") == 0) {
+      selected = 1;
+    } else if (strcmp(draft.players[player].tee, "White") == 0) {
+      selected = 2;
+    }
     nav.reset(rowIsEnabled(selected) ? selected : nextFocusableIndex(selected, 1));
   }
   requestUpdate();
 }
 
-void GolfPlayerSetupActivity::selectTee(const TeeSelection tee) {
-  if (tee == TeeSelection::NotPlay) return;
+void GolfPlayerSetupActivity::selectTee(const char* tee) {
+  if (tee == nullptr || tee[0] == '\0') return;
   {
     RenderLock lock(*this);
-    draft.players[editingPlayer].tee = tee;
+    golfSetTee(draft.players[editingPlayer], tee);
     phase = Phase::Players;
     saveFailed = false;
     teeResolutionFailed = false;
@@ -322,8 +328,7 @@ void GolfPlayerSetupActivity::completeRound() {
       const GolfPlayer& player = draft.players[slot];
       if (!golfPlayerIsEnabled(player)) continue;
       if (!CourseStore::resolveTee(courseFile, course, player.tee, resolved[slot])) {
-        LOG_ERR("GOLF", "Unavailable tee %u for player slot %u", static_cast<unsigned>(player.tee),
-                static_cast<unsigned>(slot));
+        LOG_ERR("GOLF", "Unavailable tee %s for player slot %u", player.tee, static_cast<unsigned>(slot));
         teeResolutionFailed = true;
         saveFailed = false;
         teesValid = false;

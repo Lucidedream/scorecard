@@ -53,8 +53,8 @@ GolfRound completedSinglePlayerRound(const char* course) {
   round.holeCount = 18;
   round.currentHole = round.holeCount;
   round.currentPlayer = GolfRound::NO_PLAYER;
-  round.players[0].tee = TeeSelection::Blue;
-  for (uint8_t slot = 1; slot < GolfRound::MAX_PLAYERS; ++slot) round.players[slot].tee = TeeSelection::NotPlay;
+  golfSetTee(round.players[0], "Blue");
+  for (uint8_t slot = 1; slot < GolfRound::MAX_PLAYERS; ++slot) golfSetTee(round.players[slot], "");
   for (uint8_t hole = 0; hole < round.holeCount; ++hole) {
     round.par[hole] = 4;
     round.players[0].score.putts[hole] = 2;

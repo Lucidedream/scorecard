@@ -27,6 +27,8 @@ struct GolfPlayerColumnLengths {
   uint16_t penalties;
   // Wire length of the v5 "fairways" array; 0 for a v2/v3/v4 record (not checked).
   uint16_t fairways;
+  // Wire length of the v6 "bunkers" array; 0 for a pre-v6 record (not checked).
+  uint16_t bunkers;
 };
 
 struct GolfRoundColumnLengths {
@@ -37,11 +39,14 @@ struct GolfRoundColumnLengths {
   bool expectLegacyYards;
 };
 
-// Canonical v4 tokens are language-independent and case-sensitive. The legacy
-// mapper intentionally falls back to Blue for every non-exact old label.
-const char* golfTeeSelectionToken(TeeSelection tee);
-bool golfParseTeeSelection(const char* token, TeeSelection& tee);
-TeeSelection golfLegacyTeeSelection(const char* legacyTee);
+// True when `s` is a well-formed free-form tee name (CONTRACTS-V2 §32.1):
+// 1..GOLF_TEE_CAPACITY-1 bytes, no ',' '\r' '\n', valid UTF-8. The empty string
+// (the "did not play" sentinel) is not "valid" here -- callers test it directly.
+bool golfTeeStringValid(const char* s);
+
+// Maps a pre-v4 doc-level "tees" label to a tee name string. Intentionally falls
+// back to "Blue" for every non-"White" old label.
+const char* golfLegacyTeeSelection(const char* legacyTee);
 void golfInitializeLegacyRound(GolfRound& round, const char* legacyTee);
 
 GolfRoundDecodeStatus golfCheckRound(GolfRound& out, int version, int holes, int currentHole, int currentPlayer,

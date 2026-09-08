@@ -17,15 +17,14 @@ constexpr uint8_t golfStepPlayerCount(const uint8_t count, const int direction) 
 
 constexpr GolfPlayerSetupNext golfPlayerSetupNext(const uint8_t) { return GolfPlayerSetupNext::ReviewRoster; }
 
-inline void golfApplyPlayerCount(GolfRound& round, const uint8_t count, const TeeSelection defaultTee) {
+inline void golfApplyPlayerCount(GolfRound& round, const uint8_t count, const char* defaultTee) {
   const uint8_t enabledCount = golfClampPlayerCount(count);
   for (uint8_t slot = 0; slot < GolfRound::MAX_PLAYERS; ++slot) {
-    round.players[slot].tee = slot < enabledCount ? defaultTee : TeeSelection::NotPlay;
+    golfSetTee(round.players[slot], slot < enabledCount ? defaultTee : "");
   }
 }
 
-inline void golfSetPlayerCount(GolfRound& round, uint8_t& playerCount, const uint8_t count,
-                               const TeeSelection defaultTee) {
+inline void golfSetPlayerCount(GolfRound& round, uint8_t& playerCount, const uint8_t count, const char* defaultTee) {
   playerCount = golfClampPlayerCount(count);
   golfApplyPlayerCount(round, playerCount, defaultTee);
 }

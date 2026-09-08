@@ -16,6 +16,8 @@ bool isEntered(const GolfPlayerScore& score, const uint8_t hole) {
 
 bool parIsGirEligible(const uint8_t par) { return par >= 3 && par <= 5; }
 
+bool parIsKnown(const uint8_t par) { return par >= 3 && par <= 6; }
+
 }  // namespace
 
 uint8_t golfLongGame(const GolfRound& round, const GolfPlayerScore& score, const uint8_t hole) {
@@ -203,6 +205,56 @@ uint8_t golfFairwaysEligible(const GolfRound& round, const GolfPlayerScore& scor
   uint8_t total = 0;
   for (uint8_t hole = 0; hole < holesInRound(round); ++hole) {
     if (isEntered(score, hole) && (round.par[hole] == 4 || round.par[hole] == 5)) ++total;
+  }
+  return total;
+}
+
+namespace {
+
+bool madeParOrBetter(const GolfRound& round, const GolfPlayerScore& score, const uint8_t hole) {
+  return parIsKnown(round.par[hole]) && golfHoleScore(round, score, hole) <= round.par[hole];
+}
+
+}  // namespace
+
+int16_t golfScoreVsPar(const GolfRound& round, const GolfPlayerScore& score, const uint8_t hole) {
+  if (hole >= holesInRound(round) || !isEntered(score, hole) || !parIsKnown(round.par[hole])) return 0;
+  return static_cast<int16_t>(static_cast<int16_t>(golfHoleScore(round, score, hole)) - round.par[hole]);
+}
+
+uint8_t golfScrambleChances(const GolfRound& round, const GolfPlayerScore& score) {
+  uint8_t total = 0;
+  for (uint8_t hole = 0; hole < holesInRound(round); ++hole) {
+    if (isEntered(score, hole) && parIsGirEligible(round.par[hole]) && !golfGreenInRegulation(round, score, hole)) {
+      ++total;
+    }
+  }
+  return total;
+}
+
+uint8_t golfScrambles(const GolfRound& round, const GolfPlayerScore& score) {
+  uint8_t total = 0;
+  for (uint8_t hole = 0; hole < holesInRound(round); ++hole) {
+    if (isEntered(score, hole) && parIsGirEligible(round.par[hole]) && !golfGreenInRegulation(round, score, hole) &&
+        madeParOrBetter(round, score, hole)) {
+      ++total;
+    }
+  }
+  return total;
+}
+
+uint8_t golfSandSaveChances(const GolfRound& round, const GolfPlayerScore& score) {
+  uint8_t total = 0;
+  for (uint8_t hole = 0; hole < holesInRound(round); ++hole) {
+    if (isEntered(score, hole) && golfGreensideBunker(score, hole)) ++total;
+  }
+  return total;
+}
+
+uint8_t golfSandSaves(const GolfRound& round, const GolfPlayerScore& score) {
+  uint8_t total = 0;
+  for (uint8_t hole = 0; hole < holesInRound(round); ++hole) {
+    if (isEntered(score, hole) && golfGreensideBunker(score, hole) && madeParOrBetter(round, score, hole)) ++total;
   }
   return total;
 }

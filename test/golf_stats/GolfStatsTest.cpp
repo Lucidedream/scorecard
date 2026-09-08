@@ -15,7 +15,7 @@ class GolfStatsTest : public ::testing::Test {
   void SetUp() override {
     initializeGolfPlayerDefaults(round);
     round.holeCount = 18;
-    round.players[0].tee = TeeSelection::Blue;
+    golfSetTee(round.players[0], "Blue");
     for (uint8_t hole = 0; hole < round.holeCount; ++hole) round.par[hole] = 4;
   }
 
@@ -158,7 +158,7 @@ TEST_F(GolfStatsTest, StatsUseOnlyTheExplicitPlayer) {
   score(0).putts[0] = 1;
   score(0).in100[0] = 2;
   score(0).out100[0] = 2;
-  round.players[1].tee = TeeSelection::White;
+  golfSetTee(round.players[1], "White");
   score(1).putts[0] = 3;
   score(1).in100[0] = 4;
   score(1).out100[0] = 4;
@@ -330,6 +330,100 @@ TEST_F(GolfStatsTest, FairwaysEligibleIsZeroOnParFreeRound) {
   golfSetFairwayHit(score(), 0, true);
   EXPECT_EQ(golfFairwaysEligible(round, score()), 0);
   EXPECT_EQ(golfFairwaysHit(round, score()), 1);  // the bit is still counted
+}
+
+// --- Greenside-bunker bit accessors (CONTRACTS-V2 §33.1) ---
+
+TEST_F(GolfStatsTest, GreensideBunkerAccessorsSetClearAreIdempotentAndBounded) {
+  EXPECT_FALSE(golfGreensideBunker(score(), 0));
+  golfSetGreensideBunker(score(), 0, true);
+  golfSetGreensideBunker(score(), 0, true);  // idempotent
+  EXPECT_TRUE(golfGreensideBunker(score(), 0));
+  golfSetGreensideBunker(score(), 18, true);  // out of range -> no-op
+  EXPECT_FALSE(golfGreensideBunker(score(), 18));
+  golfSetGreensideBunker(score(), 0, false);
+  golfSetGreensideBunker(score(), 0, false);  // idempotent clear
+  EXPECT_FALSE(golfGreensideBunker(score(), 0));
+}
+
+TEST_F(GolfStatsTest, GreensideBunkerBitsAreIndependentAcrossAByteBoundary) {
+  golfSetGreensideBunker(score(), 7, true);
+  golfSetGreensideBunker(score(), 8, true);
+  EXPECT_TRUE(golfGreensideBunker(score(), 7));
+  EXPECT_TRUE(golfGreensideBunker(score(), 8));
+  EXPECT_FALSE(golfGreensideBunker(score(), 6));
+  EXPECT_FALSE(golfGreensideBunker(score(), 9));
+  golfSetGreensideBunker(score(), 7, false);
+  EXPECT_FALSE(golfGreensideBunker(score(), 7));
+  EXPECT_TRUE(golfGreensideBunker(score(), 8));
+}
+
+// --- Score vs par, scrambling, sand saves (CONTRACTS-V2 §33.3) ---
+
+TEST_F(GolfStatsTest, ScoreVsParIsSignedDeltaOrZeroWhenUnavailable) {
+  // hole 0: birdie (holeScore 3, par 4)
+  score().in100[0] = 2;
+  score().out100[0] = 1;
+  score().putts[0] = 2;
+  // hole 1: par
+  score().in100[1] = 3;
+  score().out100[1] = 1;
+  score().putts[1] = 2;
+  // hole 2: bogey
+  score().in100[2] = 3;
+  score().out100[2] = 2;
+  score().putts[2] = 2;
+  // hole 4: entered but par unknown
+  round.par[4] = 7;
+  score().in100[4] = 3;
+  score().out100[4] = 1;
+
+  EXPECT_EQ(golfScoreVsPar(round, score(), 0), -1);
+  EXPECT_EQ(golfScoreVsPar(round, score(), 1), 0);
+  EXPECT_EQ(golfScoreVsPar(round, score(), 2), 1);
+  EXPECT_EQ(golfScoreVsPar(round, score(), 3), 0);  // not entered
+  EXPECT_EQ(golfScoreVsPar(round, score(), 4), 0);  // par < 3 || par > 6
+}
+
+TEST_F(GolfStatsTest, ScrambleChancesAndMadeCountGirMissesSavedForPar) {
+  // hole 0: GIR missed (putts 1 -> toGreen 3 > 2), made par -> chance + scramble
+  score().in100[0] = 3;
+  score().out100[0] = 1;
+  score().putts[0] = 1;
+  // hole 1: GIR missed, bogey -> chance only
+  score().in100[1] = 3;
+  score().out100[1] = 2;
+  score().putts[1] = 1;
+  // hole 2: GIR made -> neither
+  score().in100[2] = 3;
+  score().out100[2] = 1;
+  score().putts[2] = 2;
+  // hole 3: par 6 (not GIR-eligible) -> not a scramble chance even if "missed"
+  round.par[3] = 6;
+  score().in100[3] = 4;
+  score().out100[3] = 2;
+  score().putts[3] = 2;
+
+  EXPECT_EQ(golfScrambleChances(round, score()), 2);
+  EXPECT_EQ(golfScrambles(round, score()), 1);
+}
+
+TEST_F(GolfStatsTest, SandSaveChancesAndMadeCountEnteredBunkerHoles) {
+  // hole 0: bunker, made par -> chance + save
+  score().in100[0] = 3;
+  score().out100[0] = 1;
+  score().putts[0] = 2;
+  golfSetGreensideBunker(score(), 0, true);
+  // hole 1: bunker, bogey -> chance only
+  score().in100[1] = 3;
+  score().out100[1] = 2;
+  score().putts[1] = 2;
+  golfSetGreensideBunker(score(), 1, true);
+  // hole 5: bunker bit set but hole not entered -> no chance
+  golfSetGreensideBunker(score(), 5, true);
+
+  EXPECT_EQ(golfSandSaveChances(round, score()), 2);
+  EXPECT_EQ(golfSandSaves(round, score()), 1);
 }
 
 }  // namespace

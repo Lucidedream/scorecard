@@ -30,7 +30,7 @@ class GolfPlayerSetupActivity final : public UiListActivity {
   Phase phase = Phase::Count;
   uint8_t playerCount = 1;
   uint8_t editingPlayer = 0;
-  TeeSelection defaultTee = TeeSelection::NotPlay;
+  char defaultTee[GOLF_TEE_CAPACITY] = {};
   bool saveFailed = false;
   bool teeResolutionFailed = false;
   char teeChoicePlayerLabel[GOLF_PLAYER_LABEL_CAPACITY]{};
@@ -53,11 +53,11 @@ class GolfPlayerSetupActivity final : public UiListActivity {
   void stepPlayerCount(int direction);
   void showPlayers();
   void openTeeChoice(uint8_t player);
-  void selectTee(TeeSelection tee);
+  void selectTee(const char* tee);
   void editPlayerName(uint8_t player);
   bool applyPlayerName(uint8_t player, std::string_view name);
   void returnToPlayers();
   void completeRound();
 
-  static const char* teeLabel(TeeSelection tee);
+  static const char* teeLabel(const char* tee);
 };

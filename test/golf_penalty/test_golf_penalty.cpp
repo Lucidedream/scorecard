@@ -32,6 +32,33 @@ TEST_F(GolfPenaltyTest, NibbleRoundTripsEveryFieldAndKind) {
   EXPECT_FALSE(golfUnpackPenaltyEvent(0x08, invalid));
 }
 
+TEST_F(GolfPenaltyTest, GreensideBunkerBitSetClearIdempotentAndBounded) {
+  GolfPlayerScore& score = scores[0];
+  EXPECT_FALSE(golfGreensideBunker(score, 4));
+  golfSetGreensideBunker(score, 4, true);
+  golfSetGreensideBunker(score, 4, true);  // idempotent set
+  EXPECT_TRUE(golfGreensideBunker(score, 4));
+
+  golfSetGreensideBunker(score, 18, true);  // hole >= 18 -> no-op
+  EXPECT_FALSE(golfGreensideBunker(score, 18));
+
+  golfSetGreensideBunker(score, 4, false);
+  golfSetGreensideBunker(score, 4, false);  // idempotent clear
+  EXPECT_FALSE(golfGreensideBunker(score, 4));
+}
+
+TEST_F(GolfPenaltyTest, GreensideBunkerBitsAreIndependentAcrossAByteBoundary) {
+  GolfPlayerScore& score = scores[0];
+  golfSetGreensideBunker(score, 7, true);
+  golfSetGreensideBunker(score, 8, true);
+  EXPECT_TRUE(golfGreensideBunker(score, 7));
+  EXPECT_TRUE(golfGreensideBunker(score, 8));
+  EXPECT_FALSE(golfGreensideBunker(score, 6));
+  EXPECT_FALSE(golfGreensideBunker(score, 9));
+  // fairwayHit and greensideBunker are separate bitmasks over the same holes.
+  EXPECT_FALSE(golfFairwayHit(score, 7));
+}
+
 TEST_F(GolfPenaltyTest, AppendThenRemoveRestoresExactPlayerScore) {
   for (const GolfField field : {GolfField::In100, GolfField::Out100}) {
     GolfPlayerScore& score = scores[static_cast<uint8_t>(field)];

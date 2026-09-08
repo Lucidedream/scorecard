@@ -17,8 +17,8 @@ GolfRound makeRound() {
   GolfRound round{};
   initializeGolfPlayerDefaults(round);
   round.holeCount = 18;
-  round.players[0].tee = TeeSelection::Blue;
-  round.players[1].tee = TeeSelection::White;
+  golfSetTee(round.players[0], "Blue");
+  golfSetTee(round.players[1], "White");
   for (uint8_t hole = 0; hole < round.holeCount; ++hole) round.par[hole] = 4;
   return round;
 }
@@ -37,8 +37,8 @@ TEST(GolfHomeEntryDecision, LiveCommitMarkerWinsOverOldUnmarkedStateAfterMarkerW
   constexpr bool liveArchiveMarker = indexCommitSucceeded;
   constexpr bool cleanupSucceeded = false;
 
-  constexpr GolfHomeEntryDecision decision = golfDecideHomeEntry(
-      liveArchiveMarker, cleanupSucceeded, oldUnmarkedStateRemains, false, 18);
+  constexpr GolfHomeEntryDecision decision =
+      golfDecideHomeEntry(liveArchiveMarker, cleanupSucceeded, oldUnmarkedStateRemains, false, 18);
   EXPECT_FALSE(decision.loadState);
   EXPECT_TRUE(decision.cleanupOnly);
   EXPECT_FALSE(decision.showResume);
@@ -86,8 +86,8 @@ TEST(GolfReviewFormat, StatusUsesTheExplicitPlayerScore) {
   round.players[1].score.out100[0] = 4;
 
   char status[20]{};
-  golfFormatRoundStatus(round, round.players[1].score, EVEN_TEXT, POSITIVE_TO_PAR_FORMAT,
-                        NEGATIVE_TO_PAR_FORMAT, ROUND_STATUS_FORMAT, status, sizeof(status));
+  golfFormatRoundStatus(round, round.players[1].score, EVEN_TEXT, POSITIVE_TO_PAR_FORMAT, NEGATIVE_TO_PAR_FORMAT,
+                        ROUND_STATUS_FORMAT, status, sizeof(status));
 
   EXPECT_STREQ(status, "6 (+2)");
 }
@@ -99,8 +99,8 @@ TEST(GolfReviewFormat, ParFreeStatusSuppressesToPar) {
   round.players[0].score.out100[0] = 3;
 
   char status[20]{};
-  golfFormatRoundStatus(round, round.players[0].score, EVEN_TEXT, POSITIVE_TO_PAR_FORMAT,
-                        NEGATIVE_TO_PAR_FORMAT, ROUND_STATUS_FORMAT, status, sizeof(status));
+  golfFormatRoundStatus(round, round.players[0].score, EVEN_TEXT, POSITIVE_TO_PAR_FORMAT, NEGATIVE_TO_PAR_FORMAT,
+                        ROUND_STATUS_FORMAT, status, sizeof(status));
 
   EXPECT_STREQ(status, "5");
 }

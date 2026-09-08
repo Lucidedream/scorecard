@@ -41,3 +41,9 @@ uint16_t golfPenaltyStrokesForRound(const GolfPlayerScore& score, uint8_t holeCo
 bool golfFairwayHit(const GolfPlayerScore& score, uint8_t hole);
 void golfSetFairwayHit(GolfPlayerScore& score, uint8_t hole, bool hit);
 uint16_t golfFairwayHitsForRound(const GolfPlayerScore& score, uint8_t holeCount);
+
+// Greenside-bunker bit (CONTRACTS-V2 §33.1): the same plain per-hole bit
+// accessors as the fairway pair -- no seeding, no counters, no par. Set means
+// the ball lay in a greenside bunker on the way to the hole.
+bool golfGreensideBunker(const GolfPlayerScore& score, uint8_t hole);
+void golfSetGreensideBunker(GolfPlayerScore& score, uint8_t hole, bool bunkered);

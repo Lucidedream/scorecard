@@ -13,7 +13,7 @@ class GolfConfirmTest : public ::testing::Test {
   void SetUp() override {
     initializeGolfPlayerDefaults(round);
     round.holeCount = 18;
-    round.players[0].tee = TeeSelection::Blue;
+    golfSetTee(round.players[0], "Blue");
     round.currentPlayer = 0;
     for (uint8_t hole = 0; hole < GolfRound::MAX_HOLES; ++hole) round.par[hole] = 4;
   }
@@ -57,7 +57,7 @@ TEST_F(GolfConfirmTest, Out100UnloggedWithoutValuesAdvancesAndStaysUnlogged) {
 
 TEST_F(GolfConfirmTest, BlankAdvanceMovesToNextPlayerWithoutEnteringScore) {
   round.par[0] = 0;
-  round.players[1].tee = TeeSelection::White;
+  golfSetTee(round.players[1], "White");
   ASSERT_EQ(press(GolfField::Out100), GolfConfirmAction::AdvanceWithoutCommit);
   ASSERT_TRUE(advanceGolfTurn(round));
   EXPECT_EQ(round.currentHole, 0);
@@ -77,7 +77,7 @@ TEST_F(GolfConfirmTest, CommittedValuesEqualParReconstruction) {
 }
 
 TEST_F(GolfConfirmTest, LastEnabledPlayerAdvanceWrapsHole18ToHole1) {
-  round.players[3].tee = TeeSelection::White;
+  golfSetTee(round.players[3], "White");
   round.currentPlayer = 3;
   round.currentHole = 17;
   ASSERT_EQ(press(GolfField::Out100, 3, 17), GolfConfirmAction::CommitAndAdvance);

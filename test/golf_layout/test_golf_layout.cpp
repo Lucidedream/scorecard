@@ -191,9 +191,9 @@ TEST(GolfPlayerSetupPolicy, EveryPlayerCountReviewsRoster) {
     EXPECT_EQ(golfPlayerSetupNext(count), GolfPlayerSetupNext::ReviewRoster);
   }
 
-  golfApplyPlayerCount(round, 3, TeeSelection::Blue);
+  golfApplyPlayerCount(round, 3, "Blue");
   for (uint8_t slot = 0; slot < GOLF_MAX_PLAYERS; ++slot) {
-    EXPECT_EQ(round.players[slot].tee, slot < 3 ? TeeSelection::Blue : TeeSelection::NotPlay);
+    EXPECT_STREQ(round.players[slot].tee, slot < 3 ? "Blue" : "");
   }
   EXPECT_STREQ(round.players[0].name, "Noah");
   EXPECT_STREQ(round.players[1].name, "Player 2");
@@ -205,12 +205,12 @@ TEST(GolfPlayerSetupPolicy, DefaultSoloSetupReviewsRosterWithPlayerOneEnabled) {
   GolfRound round{};
   initializeGolfPlayerDefaults(round);
   uint8_t playerCount = 1;
-  golfSetPlayerCount(round, playerCount, 1, TeeSelection::Blue);
+  golfSetPlayerCount(round, playerCount, 1, "Blue");
 
   ASSERT_EQ(golfPlayerSetupNext(playerCount), GolfPlayerSetupNext::ReviewRoster);
-  EXPECT_EQ(round.players[0].tee, TeeSelection::Blue);
+  EXPECT_STREQ(round.players[0].tee, "Blue");
   for (uint8_t slot = 1; slot < GOLF_MAX_PLAYERS; ++slot) {
-    EXPECT_EQ(round.players[slot].tee, TeeSelection::NotPlay);
+    EXPECT_STREQ(round.players[slot].tee, "");
   }
 }
 
@@ -218,13 +218,13 @@ TEST(GolfPlayerSetupPolicy, SteppingAwayAndBackLeavesExactlyOneEnabledPlayer) {
   GolfRound round{};
   initializeGolfPlayerDefaults(round);
   uint8_t playerCount = 1;
-  golfSetPlayerCount(round, playerCount, 1, TeeSelection::Blue);
-  golfSetPlayerCount(round, playerCount, golfStepPlayerCount(playerCount, 1), TeeSelection::Blue);
-  golfSetPlayerCount(round, playerCount, golfStepPlayerCount(playerCount, -1), TeeSelection::Blue);
+  golfSetPlayerCount(round, playerCount, 1, "Blue");
+  golfSetPlayerCount(round, playerCount, golfStepPlayerCount(playerCount, 1), "Blue");
+  golfSetPlayerCount(round, playerCount, golfStepPlayerCount(playerCount, -1), "Blue");
 
   EXPECT_EQ(playerCount, 1);
   for (uint8_t slot = 0; slot < GOLF_MAX_PLAYERS; ++slot) {
-    EXPECT_EQ(round.players[slot].tee, slot == 0 ? TeeSelection::Blue : TeeSelection::NotPlay);
+    EXPECT_STREQ(round.players[slot].tee, slot == 0 ? "Blue" : "");
   }
 }
 
@@ -233,11 +233,11 @@ TEST(GolfPlayerSetupPolicy, CountsEnableExactlyThatManyPlayers) {
     GolfRound round{};
     initializeGolfPlayerDefaults(round);
     uint8_t playerCount = 1;
-    golfSetPlayerCount(round, playerCount, count, TeeSelection::Blue);
+    golfSetPlayerCount(round, playerCount, count, "Blue");
 
     EXPECT_EQ(playerCount, count);
     for (uint8_t slot = 0; slot < GOLF_MAX_PLAYERS; ++slot) {
-      EXPECT_EQ(round.players[slot].tee, slot < count ? TeeSelection::Blue : TeeSelection::NotPlay);
+      EXPECT_STREQ(round.players[slot].tee, slot < count ? "Blue" : "");
     }
   }
 }

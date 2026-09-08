@@ -19,6 +19,32 @@ bool playerPayloadIsZero(const GolfPlayer& player, const uint8_t holes) {
   for (uint8_t byte = 0; byte < sizeof(player.score.fairwayHit); ++byte) {
     if (player.score.fairwayHit[byte] != 0) return false;
   }
+  for (uint8_t byte = 0; byte < sizeof(player.score.greensideBunker); ++byte) {
+    if (player.score.greensideBunker[byte] != 0) return false;
+  }
+  return true;
+}
+
+// UTF-8 shape check matching the player-name predicate (singleLineUtf8): a bare
+// scan for structurally valid sequences, no normalisation.
+bool teeUtf8Valid(const char* value) {
+  const auto* current = reinterpret_cast<const uint8_t*>(value);
+  while (*current != 0) {
+    if (*current < 0x80) {
+      ++current;
+    } else if (*current >= 0xc2 && *current <= 0xdf && (current[1] & 0xc0) == 0x80) {
+      current += 2;
+    } else if (*current >= 0xe0 && *current <= 0xef && (current[1] & 0xc0) == 0x80 && (current[2] & 0xc0) == 0x80 &&
+               !(*current == 0xe0 && current[1] < 0xa0) && !(*current == 0xed && current[1] >= 0xa0)) {
+      current += 3;
+    } else if (*current >= 0xf0 && *current <= 0xf4 && (current[1] & 0xc0) == 0x80 && (current[2] & 0xc0) == 0x80 &&
+               (current[3] & 0xc0) == 0x80 && !(*current == 0xf0 && current[1] < 0x90) &&
+               !(*current == 0xf4 && current[1] >= 0x90)) {
+      current += 4;
+    } else {
+      return false;
+    }
+  }
   return true;
 }
 
@@ -40,51 +66,29 @@ bool sharedSiIsCanonical(const GolfRound& round, const uint8_t holes) {
 
 }  // namespace
 
-const char* golfTeeSelectionToken(const TeeSelection tee) {
-  switch (tee) {
-    case TeeSelection::NotPlay:
-      return "NotPlay";
-    case TeeSelection::Blue:
-      return "Blue";
-    case TeeSelection::White:
-      return "White";
-  }
-  return nullptr;
+bool golfTeeStringValid(const char* s) {
+  if (s == nullptr || s[0] == '\0') return false;
+  if (strlen(s) >= GOLF_TEE_CAPACITY) return false;
+  if (strpbrk(s, ",\r\n") != nullptr) return false;
+  return teeUtf8Valid(s);
 }
 
-bool golfParseTeeSelection(const char* token, TeeSelection& tee) {
-  if (token == nullptr) return false;
-  if (strcmp(token, "NotPlay") == 0) {
-    tee = TeeSelection::NotPlay;
-    return true;
-  }
-  if (strcmp(token, "Blue") == 0) {
-    tee = TeeSelection::Blue;
-    return true;
-  }
-  if (strcmp(token, "White") == 0) {
-    tee = TeeSelection::White;
-    return true;
-  }
-  return false;
-}
-
-TeeSelection golfLegacyTeeSelection(const char* legacyTee) {
-  if (legacyTee != nullptr && strcmp(legacyTee, "White") == 0) return TeeSelection::White;
-  return TeeSelection::Blue;
+const char* golfLegacyTeeSelection(const char* legacyTee) {
+  if (legacyTee != nullptr && strcmp(legacyTee, "White") == 0) return "White";
+  return "Blue";
 }
 
 void golfInitializeLegacyRound(GolfRound& round, const char* legacyTee) {
   round = {};
   initializeGolfPlayerDefaults(round);
-  round.players[0].tee = golfLegacyTeeSelection(legacyTee);
+  golfSetTee(round.players[0], golfLegacyTeeSelection(legacyTee));
   round.currentPlayer = 0;
 }
 
 GolfRoundDecodeStatus golfCheckRound(GolfRound& out, const int version, const int holes, const int currentHole,
                                      const int currentPlayer, const GolfRoundColumnLengths& lengths,
                                      GolfValidationResult& validation) {
-  if (version != 2 && version != 3 && version != 4 && version != 5) {
+  if (version < 2 || version > 6) {
     return GolfRoundDecodeStatus::RejectedVersion;
   }
   if (holes != 9 && holes != 18) return GolfRoundDecodeStatus::RejectedHoleCount;
@@ -101,6 +105,7 @@ GolfRoundDecodeStatus golfCheckRound(GolfRound& out, const int version, const in
         return GolfRoundDecodeStatus::RejectedArrayLength;
       }
       if (version >= 5 && player.fairways != holeCount) return GolfRoundDecodeStatus::RejectedArrayLength;
+      if (version >= 6 && player.bunkers != holeCount) return GolfRoundDecodeStatus::RejectedArrayLength;
       if (!golfPlayerIsEnabled(out.players[slot]) && !playerPayloadIsZero(out.players[slot], holeCount)) {
         return GolfRoundDecodeStatus::RejectedDisabledPlayerData;
       }

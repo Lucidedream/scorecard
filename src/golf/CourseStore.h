@@ -51,21 +51,23 @@ class CourseStore {
   // files; if they don't, this trusts the primary rather than reconciling). Returns false
   // when no file matches courseName at all.
   static bool resolveAllTees(const char* courseName, GolfCourseTeeSet& result);
-  static bool resolveTee(const GolfCourseFile& file, const GolfCourse& course, TeeSelection tee,
+  // TODO(task 2): dynamic tees -- resolve against the course file set's actual
+  // tee list rather than the fixed Blue/White pair (CONTRACTS-V2 §32.2).
+  static bool resolveTee(const GolfCourseFile& file, const GolfCourse& course, const char* tee,
                          GolfTeeResolution& resolved) {
     // An override's builtInIndex is ordering metadata, not permission to borrow
     // flash-resident alternate tee rows from the course it replaced.
     return golfResolveTeeCourse(course, file.builtInIndex, file.filename[0] == '\0', tee, resolved);
   }
-  static TeeSelection defaultTee(const GolfCourseFile& file, const GolfCourse& course) {
+  static const char* defaultTee(const GolfCourseFile& file, const GolfCourse& course) {
     GolfTeeResolution resolved{};
-    if (resolveTee(file, course, TeeSelection::Blue, resolved)) return TeeSelection::Blue;
-    if (resolveTee(file, course, TeeSelection::White, resolved)) return TeeSelection::White;
-    return TeeSelection::NotPlay;
+    if (resolveTee(file, course, "Blue", resolved)) return "Blue";
+    if (resolveTee(file, course, "White", resolved)) return "White";
+    return "";
   }
   static bool initializeGolfPlayerSelection(const GolfCourseFile& file, const GolfCourse& course, GolfRound& round) {
-    for (GolfPlayer& player : round.players) player.tee = TeeSelection::NotPlay;
-    round.players[0].tee = defaultTee(file, course);
+    for (GolfPlayer& player : round.players) player.tee[0] = '\0';
+    golfSetTee(round.players[0], defaultTee(file, course));
     return golfPlayerIsEnabled(round.players[0]);
   }
   static void applyGolfCourse(const GolfCourse& course, GolfRound& round, uint16_t dateYmd) {

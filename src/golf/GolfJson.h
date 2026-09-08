@@ -87,6 +87,14 @@ inline void golfAddJsonFairways(JsonObject parent, const GolfPlayerScore& score,
   }
 }
 
+inline void golfAddJsonBunkers(JsonObject parent, const GolfPlayerScore& score, const uint8_t holeCount,
+                               const bool writeZeros = false) {
+  JsonArray array = parent["bunkers"].to<JsonArray>();
+  for (uint8_t hole = 0; hole < holeCount; ++hole) {
+    array.add(writeZeros ? 0 : (golfGreensideBunker(score, hole) ? 1 : 0));
+  }
+}
+
 inline void golfAddJsonPlayers(JsonDocument& doc, const GolfRound& round) {
   JsonArray players = doc["players"].to<JsonArray>();
   for (uint8_t slot = 0; slot < GolfRound::MAX_PLAYERS; ++slot) {
@@ -94,12 +102,13 @@ inline void golfAddJsonPlayers(JsonDocument& doc, const GolfRound& round) {
     const bool disabled = !golfPlayerIsEnabled(player);
     JsonObject encoded = players.add<JsonObject>();
     encoded["name"] = player.name;
-    encoded["tee"] = golfTeeSelectionToken(player.tee);
+    encoded["tee"] = player.tee;
     golfAddJsonHoleArray(encoded, "yards", player.yards, round.holeCount, disabled);
     golfAddJsonHoleArray(encoded, "putts", player.score.putts, round.holeCount, disabled);
     golfAddJsonHoleArray(encoded, "in100", player.score.in100, round.holeCount, disabled);
     golfAddJsonHoleArray(encoded, "out100", player.score.out100, round.holeCount, disabled);
     golfAddJsonFairways(encoded, player.score, round.holeCount, disabled);
+    golfAddJsonBunkers(encoded, player.score, round.holeCount, disabled);
     golfAddJsonPenalties(encoded, player.score, round.holeCount, disabled);
   }
 }
@@ -188,12 +197,36 @@ inline bool golfReadJsonFairways(const JsonVariantConst value, GolfPlayerScore& 
   return true;
 }
 
+// Reads the v6 "bunkers" array (0/1 per hole) into the greenside-bunker bitmask.
+// Absent key (a pre-v6 record) leaves every bit clear and reports length 0; the
+// v6-only length check in golfCheckRound rejects a wrong-length array.
+inline bool golfReadJsonBunkers(const JsonVariantConst value, GolfPlayerScore& score, uint16_t& count) {
+  const JsonArrayConst array = value.as<JsonArrayConst>();
+  if (array.isNull()) {
+    count = 0;
+    return true;
+  }
+  const size_t size = array.size();
+  count = size > UINT16_MAX ? UINT16_MAX : static_cast<uint16_t>(size);
+  const uint16_t readCount = count < GolfRound::MAX_HOLES ? count : GolfRound::MAX_HOLES;
+  for (uint16_t hole = 0; hole < readCount; ++hole) {
+    const JsonVariantConst element = array[hole];
+    if (!element.is<int>()) return false;
+    const int item = element.as<int>();
+    if (item < 0 || item > 1) return false;
+    golfSetGreensideBunker(score, static_cast<uint8_t>(hole), item != 0);
+  }
+  return true;
+}
+
 inline bool golfReadJsonPlayer(const JsonVariantConst value, GolfPlayer& player, GolfPlayerColumnLengths& lengths) {
   const JsonObjectConst object = value.as<JsonObjectConst>();
   if (object.isNull()) return false;
-  const char* tee = object["tee"].is<const char*>() ? object["tee"].as<const char*>() : nullptr;
+  // The tee is a free-form name; an empty string is the disabled-slot sentinel,
+  // any non-empty value must be a well-formed tee name (CONTRACTS-V2 §32.5).
   if (!golfReadJsonString(object["name"], player.name, sizeof(player.name), true) || player.name[0] == '\0' ||
-      !golfParseTeeSelection(tee, player.tee)) {
+      !golfReadJsonString(object["tee"], player.tee, sizeof(player.tee)) ||
+      (player.tee[0] != '\0' && !golfTeeStringValid(player.tee))) {
     return false;
   }
   return golfReadJsonHoleArray(object["yards"], player.yards, GolfRound::MAX_HOLES, UINT16_MAX, lengths.yards) &&
@@ -201,13 +234,14 @@ inline bool golfReadJsonPlayer(const JsonVariantConst value, GolfPlayer& player,
          golfReadJsonHoleArray(object["in100"], player.score.in100, GolfRound::MAX_HOLES, 99, lengths.in100) &&
          golfReadJsonHoleArray(object["out100"], player.score.out100, GolfRound::MAX_HOLES, 99, lengths.out100) &&
          golfReadJsonPenalties(object["penalties"], player.score, lengths.penalties) &&
-         golfReadJsonFairways(object["fairways"], player.score, lengths.fairways);
+         golfReadJsonFairways(object["fairways"], player.score, lengths.fairways) &&
+         golfReadJsonBunkers(object["bunkers"], player.score, lengths.bunkers);
 }
 
 inline GolfRoundDecodeStatus golfDecodeRoundJson(const JsonVariantConst doc, const bool stateFile, GolfRound& out,
                                                  GolfValidationResult& validation) {
   const int version = doc["v"] | 0;
-  if (version != 2 && version != 3 && version != 4 && version != 5) {
+  if (version < 2 || version > 6) {
     return GolfRoundDecodeStatus::RejectedVersion;
   }
 
@@ -258,7 +292,7 @@ inline GolfRoundDecodeStatus golfDecodeRoundJson(const JsonVariantConst doc, con
     }
   } else {
     const char* legacyTee = doc["tees"].is<const char*>() ? doc["tees"].as<const char*>() : nullptr;
-    out.players[0].tee = golfLegacyTeeSelection(legacyTee);
+    golfSetTee(out.players[0], golfLegacyTeeSelection(legacyTee));
     out.currentPlayer = 0;
     GolfPlayer& player = out.players[0];
     lengths.expectLegacyYards = stateFile;

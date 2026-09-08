@@ -225,12 +225,9 @@ void metadata(Writer& w, const GolfExportData& d, GolfExportTranslate tr, uint8_
       w.field("date", tr(Label::Date), dated ? date : tr(Label::Unavailable), dated);
       break;
     case 4:
-      w.field("tee", tr(Label::Tee),
-              d.detailed
-                  ? (w.format == Format::Json ? (player(d).tee == TeeSelection::White ? "White" : "Blue")
-                                              : tr(player(d).tee == TeeSelection::White ? Label::White : Label::Blue))
-                  : tr(Label::Unavailable),
-              d.detailed);
+      // The tee is a free-form name now (CONTRACTS-V2 §32.4); emit it verbatim in
+      // both JSON and text.
+      w.field("tee", tr(Label::Tee), d.detailed ? player(d).tee : tr(Label::Unavailable), d.detailed);
       break;
     case 5:
       w.field("status", tr(Label::Status),
@@ -457,7 +454,7 @@ bool GolfRoundExport::begin(const GolfExportData& value, const Format outputForm
   if (!memchr(course(value), 0, 40) || !memchr(name(value), 0, GolfPlayer::NAME_CAPACITY)) return false;
   if (value.detailed) {
     const auto& selected = player(value);
-    if (selected.tee != TeeSelection::White && selected.tee != TeeSelection::Blue) return false;
+    if (!memchr(selected.tee, 0, sizeof(selected.tee))) return false;
     for (uint8_t h = 0; h < holes(value); ++h) {
       const auto& score = selected.score;
       if (score.putts[h] > score.in100[h] || score.in100[h] > 99 || score.out100[h] > 99 ||
