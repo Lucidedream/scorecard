@@ -2271,3 +2271,20 @@ player picker.
 If the tile-strip drawing in `GolfHomeActivity::buildScreen` factors cleanly into a
 `golfui` helper both screens call, do that; otherwise a close copy is acceptable — the two
 screens are small.
+
+### 34.4 The new-round course picker dedups by name (supersedes §30.2's last paragraph)
+
+§30.2 kept `GolfSetupActivity`'s course list at one row per file because starting a round
+then meant picking one concrete tee's file. §32 moved tee choice into
+`GolfPlayerSetupActivity` (resolved by course name, all tees offered), so a course split
+across N tee files must now show as **one row**, exactly as `GolfCourseMapListActivity`
+already collapses it (§30.2): after the shared sort, collapse each run of adjacent
+same-`courseName` entries to its first (primary) entry via a `primaryIndex[]`, key every
+row and `activateIndex` off `primaryIndex[row]`, and count deduped rows. The row's subtitle
+is unchanged — it already lists every tee via `golfResolveAllTeesFrom` /
+`golfFormatTeeList`. `openGolfPlayerSetup` gets the primary file/course; player setup
+re-resolves the full tee set from the name regardless.
+
+The load-sort-dedup-and-format-row body is now identical in `GolfSetupActivity` and
+`GolfCourseMapListActivity`; factor it into a `golfui` / `CourseStore` helper if it lands
+cleanly, else keep the second copy.
