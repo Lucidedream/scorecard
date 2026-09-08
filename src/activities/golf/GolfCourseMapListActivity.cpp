@@ -10,6 +10,7 @@
 #include <cstring>
 
 #include "GolfCourseMapBrowserActivity.h"
+#include "GolfReviewFormat.h"
 #include "GolfUiLayout.h"
 #include "components/UITheme.h"
 #include "golf/CourseOrder.h"
@@ -78,14 +79,7 @@ void GolfCourseMapListActivity::formatCourseRow(const uint8_t row) {
   GolfCourseTeeSet teeSet{};
   golfResolveAllTeesFrom(files, courses, loadedCount, course.courseName, teeSet);
   char tees[24]{};
-  if (teeSet.hasBlue && teeSet.hasWhite) {
-    snprintf(tees, sizeof(tees), tr(STR_GOLF_TEE_PAIR_FORMAT), tr(STR_GOLF_BLUE), tr(STR_GOLF_WHITE));
-  } else {
-    snprintf(tees, sizeof(tees), "%s",
-             teeSet.hasBlue    ? tr(STR_GOLF_BLUE)
-             : teeSet.hasWhite ? tr(STR_GOLF_WHITE)
-                               : tr(STR_GOLF_EM_DASH));
-  }
+  golfFormatTeeList(teeSet, tees, sizeof(tees));
   snprintf(courseDetails[row], sizeof(courseDetails[row]), tr(STR_GOLF_COURSE_ROW_FORMAT), course.holeCount, tees);
 
   uint16_t par = 0;

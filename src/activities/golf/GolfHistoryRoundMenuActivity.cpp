@@ -47,7 +47,7 @@ void GolfHistoryRoundMenuActivity::onEnter() {
                         tr(STR_GOLF_TO_PAR_NEGATIVE_FORMAT), tr(STR_GOLF_ROUND_STATUS_FORMAT), status, sizeof(status));
   golfFormatPlayerLabel(playerSlot, player.name, tr(STR_GOLF_PLAYER_LABEL_FORMAT), infoLine1, sizeof(infoLine1));
   snprintf(infoLine2, sizeof(infoLine2), tr(STR_GOLF_ROUND_INFO_HOLES_FORMAT), static_cast<unsigned>(round.holeCount),
-           player.tee);
+           golfTeeDisplayLabel(player.tee));
   UiListActivity::onEnter();
 }
 

@@ -11,6 +11,7 @@
 #include "GolfCourseMapImage.h"
 #include "GolfLargeNumber.h"
 #include "GolfNavigation.h"
+#include "GolfReviewFormat.h"
 #include "GolfUiLayout.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -70,31 +71,26 @@ void GolfCourseMapBrowserActivity::loop() {
 
 bool GolfCourseMapBrowserActivity::formatTeeYardageLine(const uint8_t hole, char* output, const size_t size) const {
   output[0] = '\0';
-  const bool hasBlueYards = teeSet.hasBlue && teeSet.blue.hasYards;
-  const bool hasWhiteYards = teeSet.hasWhite && teeSet.white.hasYards;
-  char blueSeg[32]{};
-  char whiteSeg[32]{};
-  if (hasBlueYards) {
-    snprintf(blueSeg, sizeof(blueSeg), tr(STR_GOLF_TEE_YARDS_FORMAT), tr(STR_GOLF_BLUE),
-             static_cast<unsigned>(teeSet.blue.yards[hole]), tr(STR_GOLF_YARDS_UNIT));
+  bool any = false;
+  for (uint8_t i = 0; i < teeSet.teeCount; ++i) {
+    const GolfCourseTee& tee = teeSet.tees[i];
+    if (!tee.hasYards) continue;
+    char segment[40];
+    if (snprintf(segment, sizeof(segment), tr(STR_GOLF_TEE_YARDS_FORMAT), golfTeeDisplayLabel(tee.name),
+                 static_cast<unsigned>(tee.yards[hole]), tr(STR_GOLF_YARDS_UNIT)) < 0) {
+      continue;
+    }
+    if (!any) {
+      snprintf(output, size, "%s", segment);
+      any = true;
+      continue;
+    }
+    char joined[128];
+    if (snprintf(joined, sizeof(joined), tr(STR_GOLF_TEE_YARDS_JOIN_FORMAT), output, segment) >= 0) {
+      snprintf(output, size, "%s", joined);
+    }
   }
-  if (hasWhiteYards) {
-    snprintf(whiteSeg, sizeof(whiteSeg), tr(STR_GOLF_TEE_YARDS_FORMAT), tr(STR_GOLF_WHITE),
-             static_cast<unsigned>(teeSet.white.yards[hole]), tr(STR_GOLF_YARDS_UNIT));
-  }
-  if (hasBlueYards && hasWhiteYards) {
-    snprintf(output, size, tr(STR_GOLF_TEE_YARDS_JOIN_FORMAT), blueSeg, whiteSeg);
-    return true;
-  }
-  if (hasBlueYards) {
-    snprintf(output, size, "%s", blueSeg);
-    return true;
-  }
-  if (hasWhiteYards) {
-    snprintf(output, size, "%s", whiteSeg);
-    return true;
-  }
-  return false;
+  return any;
 }
 
 void GolfCourseMapBrowserActivity::drawHoleBand(const freeink::ui::Rect rect) const {

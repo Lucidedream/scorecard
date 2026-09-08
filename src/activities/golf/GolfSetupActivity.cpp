@@ -7,6 +7,7 @@
 #include <cstdio>
 
 #include "GolfNavigation.h"
+#include "GolfReviewFormat.h"
 #include "GolfUiLayout.h"
 #include "components/UITheme.h"
 #include "golf/CourseOrder.h"
@@ -61,20 +62,10 @@ void GolfSetupActivity::loadCourses() {
 void GolfSetupActivity::formatCourseRow(const uint8_t row) {
   if (row >= courseCount) return;
   const GolfCourse& course = courses[row];
-  // TODO(task 2): dynamic tees -- list every tee name the course file set carries
-  // (CONTRACTS-V2 §32.3), not just the Blue/White pair.
-  GolfTeeResolution resolved{};
-  const bool hasBlue = CourseStore::resolveTee(files[row], course, "Blue", resolved);
-  const bool hasWhite = CourseStore::resolveTee(files[row], course, "White", resolved);
+  GolfCourseTeeSet teeSet{};
+  golfResolveAllTeesFrom(files, courses, courseCount, course.courseName, teeSet);
   char tees[24]{};
-  if (hasBlue && hasWhite) {
-    snprintf(tees, sizeof(tees), tr(STR_GOLF_TEE_PAIR_FORMAT), tr(STR_GOLF_BLUE), tr(STR_GOLF_WHITE));
-  } else {
-    snprintf(tees, sizeof(tees), "%s",
-             hasBlue    ? tr(STR_GOLF_BLUE)
-             : hasWhite ? tr(STR_GOLF_WHITE)
-                        : tr(STR_GOLF_EM_DASH));
-  }
+  golfFormatTeeList(teeSet, tees, sizeof(tees));
   snprintf(courseDetails[row], sizeof(courseDetails[row]), tr(STR_GOLF_COURSE_ROW_FORMAT), course.holeCount, tees);
 
   uint16_t par = 0;

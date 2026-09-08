@@ -19,13 +19,15 @@ class GolfPlayerSetupActivity final : public UiListActivity {
   enum class Phase : uint8_t { Count, Players, TeeChoice };
 
   static constexpr uint8_t PLAYER_ROW_COUNT = GolfRound::MAX_PLAYERS;
-  static constexpr uint8_t TEE_OPTION_COUNT = 3;
+  // Row 0 edits the player name; rows 1.. are one per resolved course tee.
+  static constexpr uint8_t TEE_ROW_COUNT = 1 + GOLF_MAX_TEES;
 
   GolfCourseFile courseFile{};
   GolfCourse course{};
+  GolfCourseTeeSet teeSet{};
   GolfRound draft{};
   freeink::ui::ListItem playerRows[PLAYER_ROW_COUNT + 1]{};
-  freeink::ui::ListItem teeRows[TEE_OPTION_COUNT]{};
+  freeink::ui::ListItem teeRows[TEE_ROW_COUNT]{};
   freeink::ui::ListProps listProps{};
   Phase phase = Phase::Count;
   uint8_t playerCount = 1;
@@ -59,5 +61,6 @@ class GolfPlayerSetupActivity final : public UiListActivity {
   void returnToPlayers();
   void completeRound();
 
-  static const char* teeLabel(const char* tee);
+  uint8_t teeRowCount() const;
+  const GolfCourseTee* findTee(const char* name) const;
 };

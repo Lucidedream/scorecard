@@ -88,7 +88,7 @@ void GolfStatisticsActivity::render(RenderLock&&) {
   const GolfPlayer& player = selectedPlayer();
   const GolfPlayerScore& score = player.score;
   golfui::drawHeader(renderer, chrome.header, playerLabel, roundStatus);
-  drawSection(layout.rows[0], tr(STR_GOLF_WHERE_SHOTS_WENT), player.tee);
+  drawSection(layout.rows[0], tr(STR_GOLF_WHERE_SHOTS_WENT), golfTeeDisplayLabel(player.tee));
   drawStat(layout.rows[1], tr(STR_GOLF_LONG_GAME), golfLongTotal(round, score), true);
   drawStat(layout.rows[2], tr(STR_GOLF_SHORT_GAME), golfShortTotal(round, score), true);
   drawStat(layout.rows[3], tr(STR_GOLF_PUTTING), golfPuttsTotal(round, score), true);

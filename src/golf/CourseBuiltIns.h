@@ -12,6 +12,11 @@ inline constexpr uint8_t MOGANSHAN_BUILT_IN_INDEX = 1;
 inline constexpr uint16_t SANYANG_WHITE_YARDS[] = {310, 470, 122, 265, 490, 153, 389, 371, 340,
                                                    360, 360, 495, 150, 332, 350, 370, 156, 470};
 
+// Tee names the built-in Sanyang carries in flash, in course-list order: Blue is the
+// course's primary yardage array, White is SANYANG_WHITE_YARDS. Black and Red are
+// SD-file-only (CONTRACTS-V2 §32.2).
+inline constexpr const char* SANYANG_BUILT_IN_TEE_NAMES[] = {"Blue", "White"};
+
 inline constexpr GolfCourse GOLF_BUILT_IN_COURSES[] = {
     // Par and yardages come from the owner's scorecard (Blue 3196/3270/6466, White 2910/3043/5953, par
     // 36/36/72); stroke indexes come from his separate prose course guide.
@@ -64,8 +69,21 @@ static_assert(golfBuiltInSum(GOLF_BUILT_IN_COURSES[MOGANSHAN_BUILT_IN_INDEX].yar
 static_assert(golfBuiltInSum(GOLF_BUILT_IN_COURSES[MOGANSHAN_BUILT_IN_INDEX].yards, 9, 18) == 3132);
 static_assert(golfBuiltInSum(GOLF_BUILT_IN_COURSES[MOGANSHAN_BUILT_IN_INDEX].yards, 0, 18) == 6232);
 
-// TODO(task 2): dynamic tees -- key on every tee name the built-in course set
-// carries, not just the Blue/White pair (CONTRACTS-V2 §32.2).
+// The flash tee names for a built-in course (CONTRACTS-V2 §32.2), so callers can
+// enumerate every tee the built-in carries rather than probing a fixed pair. A course
+// with no flash alternates yields an empty list.
+inline void golfBuiltInTeeNames(const int8_t builtInIndex, const char* const*& names, uint8_t& count) {
+  if (builtInIndex == SANYANG_BUILT_IN_INDEX) {
+    names = SANYANG_BUILT_IN_TEE_NAMES;
+    count = static_cast<uint8_t>(sizeof(SANYANG_BUILT_IN_TEE_NAMES) / sizeof(SANYANG_BUILT_IN_TEE_NAMES[0]));
+    return;
+  }
+  names = nullptr;
+  count = 0;
+}
+
+// Maps a built-in course's tee name to its flash yardage row. Keyed on the tee string
+// (CONTRACTS-V2 §32.2); only Sanyang Blue/White exist in flash.
 inline bool golfResolveBuiltInTeeYardages(const int8_t builtInIndex, const char* tee, const uint16_t*& yards) {
   yards = nullptr;
   if (builtInIndex != SANYANG_BUILT_IN_INDEX || tee == nullptr) return false;

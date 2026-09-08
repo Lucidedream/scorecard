@@ -227,7 +227,9 @@ TEST(GolfPlayerSetupDefaults, EmptyNoYardCourseDefaultsToSelectionOnlyBlue) {
   for (const uint16_t yards : round.players[0].yards) EXPECT_EQ(yards, 0);
 }
 
-TEST(GolfPlayerSetupDefaults, GuessedOrUnlabelledYardTeeKeepsCompleteDisabled) {
+TEST(GolfPlayerSetupDefaults, FreeFormTeeNameIsOfferedVerbatim) {
+  // Under CONTRACTS-V2 §32 the tee string is free-form: a course whose "tees" field is
+  // "Blue/White" carries one tee literally named "Blue/White" (it is not decomposed).
   GolfCourseFile sdFile{};
   strcpy(sdFile.filename, "custom.json");
   GolfCourse course{};
@@ -236,12 +238,20 @@ TEST(GolfPlayerSetupDefaults, GuessedOrUnlabelledYardTeeKeepsCompleteDisabled) {
   GolfRound round{};
   CourseStore::applyGolfCourse(course, round, 0);
 
-  EXPECT_FALSE(CourseStore::initializeGolfPlayerSelection(sdFile, course, round));
-  EXPECT_STREQ(round.players[0].tee, "");
+  ASSERT_TRUE(CourseStore::initializeGolfPlayerSelection(sdFile, course, round));
+  EXPECT_STREQ(round.players[0].tee, "Blue/White");
+}
 
-  course.tees[0] = '\0';
+TEST(GolfPlayerSetupDefaults, UnlabelledYardTeeKeepsCompleteDisabled) {
+  GolfCourseFile sdFile{};
+  strcpy(sdFile.filename, "custom.json");
+  GolfCourse course{};
+  strcpy(course.courseName, "Custom");
   course.hasYards = true;
   course.yards[0] = 300;
+  GolfRound round{};
+  CourseStore::applyGolfCourse(course, round, 0);
+
   EXPECT_FALSE(CourseStore::initializeGolfPlayerSelection(sdFile, course, round));
   for (const GolfPlayer& player : round.players) EXPECT_STREQ(player.tee, "");
 }

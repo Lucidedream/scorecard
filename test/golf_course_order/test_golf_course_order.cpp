@@ -78,6 +78,19 @@ bool resolveAllTees(const std::vector<Entry>& entries, const char* courseName, G
   return golfResolveAllTeesFrom(files.data(), courses.data(), static_cast<uint8_t>(files.size()), courseName, result);
 }
 
+std::vector<std::string> teeNames(const GolfCourseTeeSet& set) {
+  std::vector<std::string> names;
+  for (uint8_t i = 0; i < set.teeCount; ++i) names.emplace_back(set.tees[i].name);
+  return names;
+}
+
+const GolfCourseTee* findTee(const GolfCourseTeeSet& set, const char* name) {
+  for (uint8_t i = 0; i < set.teeCount; ++i) {
+    if (std::strcmp(set.tees[i].name, name) == 0) return &set.tees[i];
+  }
+  return nullptr;
+}
+
 }  // namespace
 
 TEST(GolfCourseOrder, BuiltInsSortBeforeUnrelatedSdCourses) {
@@ -171,12 +184,17 @@ TEST(GolfResolveAllTees, TwoSdTeeFilesForSameCourseNameResolveBoth) {
 
   GolfCourseTeeSet result{};
   ASSERT_TRUE(resolveAllTees(entries, "Owner Links", result));
-  EXPECT_TRUE(result.hasBlue);
-  EXPECT_TRUE(result.hasWhite);
-  EXPECT_TRUE(result.blue.hasYards);
-  EXPECT_TRUE(result.white.hasYards);
-  EXPECT_EQ(result.blue.yards[0], 380);
-  EXPECT_EQ(result.white.yards[0], 350);
+  EXPECT_EQ(teeNames(result), (std::vector<std::string>{"Blue", "White"}));
+  const GolfCourseTee* blue = findTee(result, "Blue");
+  const GolfCourseTee* white = findTee(result, "White");
+  ASSERT_NE(blue, nullptr);
+  ASSERT_NE(white, nullptr);
+  EXPECT_TRUE(blue->resolved);
+  EXPECT_TRUE(white->resolved);
+  EXPECT_TRUE(blue->hasYards);
+  EXPECT_TRUE(white->hasYards);
+  EXPECT_EQ(blue->yards[0], 380);
+  EXPECT_EQ(white->yards[0], 350);
   EXPECT_STREQ(result.primaryFile.filename, "club-blue.json");
 }
 
@@ -187,21 +205,84 @@ TEST(GolfResolveAllTees, OneFileResolvesOnlyThatTee) {
 
   GolfCourseTeeSet result{};
   ASSERT_TRUE(resolveAllTees(entries, "Owner Links", result));
-  EXPECT_TRUE(result.hasBlue);
-  EXPECT_FALSE(result.hasWhite);
+  EXPECT_EQ(teeNames(result), (std::vector<std::string>{"Blue"}));
 }
 
-TEST(GolfResolveAllTees, BuiltInSanyangSpecialCaseResolvesBothTeesThroughThisPath) {
+TEST(GolfResolveAllTees, SanyangFourSdTeeFilesGatherInFileOrderWithYardages) {
+  constexpr uint16_t blackYards[18] = {347, 530, 195, 328, 540, 196, 460, 450, 420,
+                                       430, 462, 545, 205, 400, 415, 410, 198, 518};
+  constexpr uint16_t blueYards[18] = {325, 510, 144, 290, 510, 170, 427, 430, 390,
+                                      400, 395, 520, 175, 365, 375, 385, 165, 490};
+  constexpr uint16_t whiteYards[18] = {310, 470, 122, 265, 490, 153, 389, 371, 340,
+                                       360, 360, 495, 150, 332, 350, 370, 156, 470};
+  constexpr uint16_t redYards[18] = {233, 441, 100, 200, 392, 98,  312, 322, 320,
+                                     305, 320, 435, 115, 305, 310, 320, 120, 441};
+  std::vector<Entry> entries;
+  entries.push_back(sdTeeEntry("sanyang-black.json", "Sanyang Golf Club", "Black", blackYards));
+  entries.push_back(sdTeeEntry("sanyang-blue.json", "Sanyang Golf Club", "Blue", blueYards));
+  entries.push_back(sdTeeEntry("sanyang-white.json", "Sanyang Golf Club", "White", whiteYards));
+  entries.push_back(sdTeeEntry("sanyang-red.json", "Sanyang Golf Club", "Red", redYards));
+
+  GolfCourseTeeSet result{};
+  ASSERT_TRUE(resolveAllTees(entries, "Sanyang Golf Club", result));
+  EXPECT_EQ(teeNames(result), (std::vector<std::string>{"Black", "Blue", "White", "Red"}));
+  EXPECT_EQ(findTee(result, "Black")->yards[0], 347);
+  EXPECT_EQ(findTee(result, "Blue")->yards[0], 325);
+  EXPECT_EQ(findTee(result, "White")->yards[0], 310);
+  EXPECT_EQ(findTee(result, "Red")->yards[0], 233);
+  for (uint8_t i = 0; i < result.teeCount; ++i) {
+    EXPECT_TRUE(result.tees[i].resolved);
+    EXPECT_TRUE(result.tees[i].hasYards);
+  }
+  EXPECT_STREQ(result.primaryFile.filename, "sanyang-black.json");
+}
+
+TEST(GolfResolveAllTees, TeeListIsCappedAtGolfMaxTees) {
+  std::vector<Entry> entries;
+  const char* names[7] = {"T1", "T2", "T3", "T4", "T5", "T6", "T7"};
+  for (int i = 0; i < 7; ++i) {
+    char filename[32];
+    std::snprintf(filename, sizeof(filename), "many-%d.json", i);
+    entries.push_back(sdTeeEntry(filename, "Many Tees", names[i]));
+  }
+
+  GolfCourseTeeSet result{};
+  ASSERT_TRUE(resolveAllTees(entries, "Many Tees", result));
+  EXPECT_EQ(result.teeCount, GOLF_MAX_TEES);
+  EXPECT_EQ(teeNames(result), (std::vector<std::string>{"T1", "T2", "T3", "T4", "T5", "T6"}));
+}
+
+TEST(GolfResolveAllTees, BuiltInSanyangYieldsBluePlusWhiteFromFlash) {
   std::vector<Entry> entries;
   entries.push_back(builtInEntry(SANYANG_BUILT_IN_INDEX));
   entries.push_back(builtInEntry(MOGANSHAN_BUILT_IN_INDEX));
 
   GolfCourseTeeSet result{};
   ASSERT_TRUE(resolveAllTees(entries, "Sanyang Golf Club", result));
-  EXPECT_TRUE(result.hasBlue);
-  EXPECT_TRUE(result.hasWhite);
-  EXPECT_EQ(result.blue.yards[0], GOLF_BUILT_IN_COURSES[SANYANG_BUILT_IN_INDEX].yards[0]);
-  EXPECT_EQ(result.white.yards[0], SANYANG_WHITE_YARDS[0]);
+  EXPECT_EQ(teeNames(result), (std::vector<std::string>{"Blue", "White"}));
+  EXPECT_EQ(findTee(result, "Blue")->yards[0], GOLF_BUILT_IN_COURSES[SANYANG_BUILT_IN_INDEX].yards[0]);
+  EXPECT_EQ(findTee(result, "White")->yards[0], SANYANG_WHITE_YARDS[0]);
+}
+
+TEST(GolfResolveAllTees, BuiltInMoganShanYieldsOnlyBlue) {
+  std::vector<Entry> entries;
+  entries.push_back(builtInEntry(MOGANSHAN_BUILT_IN_INDEX));
+
+  GolfCourseTeeSet result{};
+  ASSERT_TRUE(resolveAllTees(entries, "MoganShan Gowin", result));
+  EXPECT_EQ(teeNames(result), (std::vector<std::string>{"Blue"}));
+  EXPECT_TRUE(findTee(result, "Blue")->hasYards);
+}
+
+TEST(GolfResolveAllTees, LabelLessCourseKeepsSelectionOnlyBlueWhite) {
+  std::vector<Entry> entries;
+  entries.push_back(builtInEntry(3));  // Template course: no tee label, no yardage
+
+  GolfCourseTeeSet result{};
+  ASSERT_TRUE(resolveAllTees(entries, "Template course", result));
+  EXPECT_EQ(teeNames(result), (std::vector<std::string>{"Blue", "White"}));
+  EXPECT_TRUE(findTee(result, "Blue")->resolved);
+  EXPECT_FALSE(findTee(result, "Blue")->hasYards);
 }
 
 TEST(GolfResolveAllTees, NoMatchingFileReturnsFalse) {
@@ -210,6 +291,5 @@ TEST(GolfResolveAllTees, NoMatchingFileReturnsFalse) {
 
   GolfCourseTeeSet result{};
   EXPECT_FALSE(resolveAllTees(entries, "Nonexistent Course", result));
-  EXPECT_FALSE(result.hasBlue);
-  EXPECT_FALSE(result.hasWhite);
+  EXPECT_EQ(result.teeCount, 0);
 }

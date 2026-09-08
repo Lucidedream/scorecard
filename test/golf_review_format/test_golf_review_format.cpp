@@ -105,4 +105,33 @@ TEST(GolfReviewFormat, ParFreeStatusSuppressesToPar) {
   EXPECT_STREQ(status, "5");
 }
 
+TEST(GolfTeeDisplayLabel, TranslatesBuiltInTeesAndPassesFreeFormThrough) {
+  EXPECT_STREQ(golfTeeDisplayLabel("Blue"), "Blue");
+  EXPECT_STREQ(golfTeeDisplayLabel("White"), "White");
+  EXPECT_STREQ(golfTeeDisplayLabel("Black"), "Black");
+  EXPECT_STREQ(golfTeeDisplayLabel("Championship"), "Championship");
+  EXPECT_STREQ(golfTeeDisplayLabel(""), "Not play");
+  EXPECT_STREQ(golfTeeDisplayLabel(nullptr), "Not play");
+}
+
+TEST(GolfFormatTeeList, JoinsNamesAndEllipsizesWhenOverBudget) {
+  GolfCourseTeeSet set{};
+  char out[24];
+
+  golfFormatTeeList(set, out, sizeof(out));
+  EXPECT_STREQ(out, "\xE2\x80\x94");  // em dash
+
+  golfSetTeeString(set.tees[0].name, "Blue");
+  golfSetTeeString(set.tees[1].name, "White");
+  set.teeCount = 2;
+  golfFormatTeeList(set, out, sizeof(out));
+  EXPECT_STREQ(out, "Blue \xC2\xB7 White");
+
+  golfSetTeeString(set.tees[2].name, "Black");
+  golfSetTeeString(set.tees[3].name, "Red");
+  set.teeCount = 4;
+  golfFormatTeeList(set, out, sizeof(out));
+  EXPECT_STREQ(out, "Blue \xC2\xB7 White\xE2\x80\xA6");  // "Blue · White" + ellipsis
+}
+
 }  // namespace

@@ -25,6 +25,28 @@ bool golfCourseSortsBefore(const GolfCourseFile& lhsFile, const GolfCourse& lhs,
   return golfCompareCourseNames(lhs.courseName, rhs.courseName) < 0;
 }
 
+namespace {
+
+// Appends one tee to the set: skips empty names, names already present, and anything past
+// GOLF_MAX_TEES. The resolution (and any yardage) is copied by value from `course`, which
+// the caller may hold in scratch memory that does not outlive this call.
+void appendTee(GolfCourseTeeSet& result, const GolfCourseFile& file, const GolfCourse& course, const char* name) {
+  if (name == nullptr || name[0] == '\0' || result.teeCount >= GOLF_MAX_TEES) return;
+  for (uint8_t i = 0; i < result.teeCount; ++i) {
+    if (strcmp(result.tees[i].name, name) == 0) return;
+  }
+  GolfCourseTee& slot = result.tees[result.teeCount];
+  slot = {};
+  golfSetTeeString(slot.name, name);
+  GolfTeeResolution resolved{};
+  slot.resolved = CourseStore::resolveTee(file, course, name, resolved);
+  slot.hasYards = resolved.hasYards;
+  if (resolved.hasYards) memcpy(slot.yards, resolved.yards, sizeof(slot.yards));
+  ++result.teeCount;
+}
+
+}  // namespace
+
 bool golfResolveAllTeesFrom(const GolfCourseFile* files, const GolfCourse* courses, const uint8_t count,
                             const char* courseName, GolfCourseTeeSet& result) {
   result = {};
@@ -38,19 +60,27 @@ bool golfResolveAllTeesFrom(const GolfCourseFile* files, const GolfCourse* cours
       result.primary = courses[index];
       found = true;
     }
-    // TODO(task 2): dynamic tees -- gather every tee name across the file set,
-    // not just Blue/White (CONTRACTS-V2 §32.2).
-    GolfTeeResolution resolved{};
-    if (!result.hasBlue && CourseStore::resolveTee(files[index], courses[index], "Blue", resolved)) {
-      result.blue.hasYards = resolved.hasYards;
-      if (resolved.hasYards) memcpy(result.blue.yards, resolved.yards, sizeof(result.blue.yards));
-      result.hasBlue = true;
+    // An unmodified built-in contributes its flash alternates (Sanyang Blue/White) ahead
+    // of its own label; an SD file (even one overriding a built-in slot) contributes only
+    // the tee its `tees` string names.
+    if (files[index].filename[0] == '\0') {
+      const char* const* names = nullptr;
+      uint8_t nameCount = 0;
+      golfBuiltInTeeNames(files[index].builtInIndex, names, nameCount);
+      for (uint8_t n = 0; n < nameCount; ++n) appendTee(result, files[index], courses[index], names[n]);
     }
-    resolved = {};
-    if (!result.hasWhite && CourseStore::resolveTee(files[index], courses[index], "White", resolved)) {
-      result.white.hasYards = resolved.hasYards;
-      if (resolved.hasYards) memcpy(result.white.yards, resolved.yards, sizeof(result.white.yards));
-      result.hasWhite = true;
+    appendTee(result, files[index], courses[index], courses[index].tees);
+  }
+
+  // A label-less course carries no tee names of its own; keep the historical Blue/White
+  // selection-only choices so such a course is still playable (CONTRACTS-V2 §32.2).
+  if (found && result.teeCount == 0) {
+    GolfTeeResolution probe{};
+    if (CourseStore::resolveTee(result.primaryFile, result.primary, "Blue", probe)) {
+      appendTee(result, result.primaryFile, result.primary, "Blue");
+    }
+    if (CourseStore::resolveTee(result.primaryFile, result.primary, "White", probe)) {
+      appendTee(result, result.primaryFile, result.primary, "White");
     }
   }
   return found;

@@ -19,11 +19,12 @@ bool golfCourseSortsBefore(const GolfCourseFile& lhsFile, const GolfCourse& lhs,
                            const GolfCourse& rhs);
 
 // The pure merge behind CourseStore::resolveAllTees(), factored out so it can be exercised
-// with in-memory fixtures (no SD/HalStorage dependency): merges every tee available for
+// with in-memory fixtures (no SD/HalStorage dependency): gathers every tee available for
 // `courseName` across `count` already-loaded (file, course) pairs, e.g. the output of
-// CourseStore::enumerate() + load(). The first matching entry supplies primary/primaryFile;
-// Blue and White are each resolved independently via CourseStore::resolveTee() against
-// whichever entry actually carries that tee. Returns false when no entry matches courseName.
+// CourseStore::enumerate() + load(). The first matching entry supplies primary/primaryFile.
+// Tees are appended in entry order, deduped by name, capped at GOLF_MAX_TEES; each is
+// resolved via CourseStore::resolveTee() against the entry that named it. Returns false
+// when no entry matches courseName.
 bool golfResolveAllTeesFrom(const GolfCourseFile* files, const GolfCourse* courses, uint8_t count,
                             const char* courseName, GolfCourseTeeSet& result);
 

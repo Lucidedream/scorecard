@@ -32,6 +32,10 @@ GolfPlayerSetupActivity::GolfPlayerSetupActivity(GfxRenderer& renderer, MappedIn
 
 void GolfPlayerSetupActivity::onEnter() {
   phase = Phase::Count;
+  if (!CourseStore::resolveAllTees(course.courseName, teeSet)) {
+    LOG_ERR("GOLF", "Player setup: no tees resolved for %s", course.courseName);
+  }
+  if (teeSet.teeCount > 0) golfSetTeeString(defaultTee, teeSet.tees[0].name);
   golfSetPlayerCount(draft, playerCount, 1, defaultTee);
   editingPlayer = 0;
   saveFailed = false;
@@ -42,9 +46,22 @@ void GolfPlayerSetupActivity::onEnter() {
   nav.reset();
 }
 
+uint8_t GolfPlayerSetupActivity::teeRowCount() const {
+  const uint8_t tees = teeSet.teeCount < GOLF_MAX_TEES ? teeSet.teeCount : GOLF_MAX_TEES;
+  return static_cast<uint8_t>(1 + tees);
+}
+
+const GolfCourseTee* GolfPlayerSetupActivity::findTee(const char* name) const {
+  if (name == nullptr) return nullptr;
+  for (uint8_t i = 0; i < teeSet.teeCount; ++i) {
+    if (strcmp(teeSet.tees[i].name, name) == 0) return &teeSet.tees[i];
+  }
+  return nullptr;
+}
+
 int GolfPlayerSetupActivity::listCount() const {
   if (phase == Phase::Count) return 0;
-  return phase == Phase::Players ? playerCount + 1 : TEE_OPTION_COUNT;
+  return phase == Phase::Players ? playerCount + 1 : teeRowCount();
 }
 
 const char* GolfPlayerSetupActivity::headerTitle() const {
@@ -54,20 +71,11 @@ const char* GolfPlayerSetupActivity::headerTitle() const {
   return phase == Phase::Players ? tr(STR_GOLF_PLAYER_SETUP) : teeChoicePlayerLabel;
 }
 
-const char* GolfPlayerSetupActivity::teeLabel(const char* tee) {
-  if (tee == nullptr || tee[0] == '\0') return tr(STR_GOLF_NOT_PLAY);
-  // The built-in course's Blue/White tees keep their translated labels; any other
-  // (SD-course) tee name prints verbatim (CONTRACTS-V2 §32.4).
-  if (strcmp(tee, "Blue") == 0) return tr(STR_GOLF_BLUE);
-  if (strcmp(tee, "White") == 0) return tr(STR_GOLF_WHITE);
-  return tee;
-}
-
 void GolfPlayerSetupActivity::refreshPlayerRows() {
   for (uint8_t player = 0; player < GolfRound::MAX_PLAYERS; ++player) {
     playerRows[player] = {};
     playerRows[player].label = draft.players[player].name;
-    playerRows[player].value = teeLabel(draft.players[player].tee);
+    playerRows[player].value = golfTeeDisplayLabel(draft.players[player].tee);
     playerRows[player].actionValue = player;
     playerRows[player].enabled = player < playerCount;
   }
@@ -84,18 +92,18 @@ void GolfPlayerSetupActivity::initializeTeeRows() {
   teeRows[0].actionValue = 0;
   teeRows[0].enabled = true;
 
-  // TODO(task 2): dynamic tees -- build one row per tee in the selected course's
-  // file set instead of the fixed Blue/White pair (CONTRACTS-V2 §32.3).
-  GolfTeeResolution resolved{};
-  teeRows[1] = {};
-  teeRows[1].label = tr(STR_GOLF_BLUE);
-  teeRows[1].actionValue = 1;
-  teeRows[1].enabled = CourseStore::resolveTee(courseFile, course, "Blue", resolved);
-
-  teeRows[2] = {};
-  teeRows[2].label = tr(STR_GOLF_WHITE);
-  teeRows[2].actionValue = 2;
-  teeRows[2].enabled = CourseStore::resolveTee(courseFile, course, "White", resolved);
+  // One row per resolved course tee (CONTRACTS-V2 §32.3), bounded by GOLF_MAX_TEES.
+  for (uint8_t i = 0; i < GOLF_MAX_TEES; ++i) {
+    freeink::ui::ListItem& row = teeRows[i + 1];
+    row = {};
+    row.actionValue = i + 1;
+    if (i < teeSet.teeCount) {
+      row.label = golfTeeDisplayLabel(teeSet.tees[i].name);
+      row.enabled = teeSet.tees[i].resolved;
+    } else {
+      row.enabled = false;
+    }
+  }
 }
 
 bool GolfPlayerSetupActivity::rowIsEnabled(const int index) const {
@@ -141,19 +149,12 @@ void GolfPlayerSetupActivity::activateIndex(const int index) {
   if (!rowIsEnabled(index)) return;
 
   if (phase == Phase::TeeChoice) {
-    switch (index) {
-      case 0:
-        editPlayerName(editingPlayer);
-        break;
-      case 1:
-        selectTee("Blue");
-        break;
-      case 2:
-        selectTee("White");
-        break;
-      default:
-        break;
+    if (index == 0) {
+      editPlayerName(editingPlayer);
+      return;
     }
+    const uint8_t teeIndex = static_cast<uint8_t>(index - 1);
+    if (teeIndex < teeSet.teeCount) selectTee(teeSet.tees[teeIndex].name);
     return;
   }
 
@@ -202,13 +203,13 @@ void GolfPlayerSetupActivity::openTeeChoice(const uint8_t player) {
     golfFormatPlayerLabel(player, draft.players[player].name, tr(STR_GOLF_PLAYER_LABEL_FORMAT), teeChoicePlayerLabel,
                           sizeof(teeChoicePlayerLabel));
     closeRouting();
-    // TODO(task 2): dynamic tees -- match the row to draft.players[player].tee by
-    // name once teeRows is built from the course tee list (CONTRACTS-V2 §32.3).
+    // Pre-select the row whose tee name matches this player's current tee.
     int selected = 0;
-    if (strcmp(draft.players[player].tee, "Blue") == 0) {
-      selected = 1;
-    } else if (strcmp(draft.players[player].tee, "White") == 0) {
-      selected = 2;
+    for (uint8_t i = 0; i < teeSet.teeCount; ++i) {
+      if (strcmp(draft.players[player].tee, teeSet.tees[i].name) == 0) {
+        selected = i + 1;
+        break;
+      }
     }
     nav.reset(rowIsEnabled(selected) ? selected : nextFocusableIndex(selected, 1));
   }
@@ -320,14 +321,15 @@ void GolfPlayerSetupActivity::completeRound() {
     const uint8_t firstPlayer = golfFirstEnabledPlayer(draft);
     if (firstPlayer == GolfRound::NO_PLAYER) return;
 
-    // Resolve the whole group before changing any yardages. Four lightweight
-    // pointer/flag records stay well below the embedded stack budget and avoid
-    // a second resolver pass or a large per-player GolfCourse copy.
-    GolfTeeResolution resolved[GolfRound::MAX_PLAYERS]{};
+    // Match each player's tee against the resolved course set before changing any
+    // yardages. The set already carries a value copy of each tee's yardage row, so no
+    // second resolver pass or large per-player GolfCourse copy is needed.
+    const GolfCourseTee* playerTee[GolfRound::MAX_PLAYERS]{};
     for (uint8_t slot = 0; slot < GolfRound::MAX_PLAYERS; ++slot) {
       const GolfPlayer& player = draft.players[slot];
       if (!golfPlayerIsEnabled(player)) continue;
-      if (!CourseStore::resolveTee(courseFile, course, player.tee, resolved[slot])) {
+      playerTee[slot] = findTee(player.tee);
+      if (playerTee[slot] == nullptr || !playerTee[slot]->resolved) {
         LOG_ERR("GOLF", "Unavailable tee %s for player slot %u", player.tee, static_cast<unsigned>(slot));
         teeResolutionFailed = true;
         saveFailed = false;
@@ -342,8 +344,8 @@ void GolfPlayerSetupActivity::completeRound() {
       for (uint8_t slot = 0; slot < GolfRound::MAX_PLAYERS; ++slot) {
         GolfPlayer& player = draft.players[slot];
         memset(player.yards, 0, sizeof(player.yards));
-        if (golfPlayerIsEnabled(player) && resolved[slot].hasYards) {
-          memcpy(player.yards, resolved[slot].yards, sizeof(player.yards));
+        if (golfPlayerIsEnabled(player) && playerTee[slot] != nullptr && playerTee[slot]->hasYards) {
+          memcpy(player.yards, playerTee[slot]->yards, sizeof(player.yards));
         }
       }
       saveFailed = false;
