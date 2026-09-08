@@ -2217,3 +2217,57 @@ side rocker, wrapping, like every golf list.
    the field-dependent row set.
 4. **Career Stats screen** (§33.4) — the activity, the chooser row, the round-file scan,
    the five sections.
+
+
+## 34. Course-map tee lines, a tee-info page, and the History chooser as tiles (v6.1)
+
+*Added 2026-09-08, after the four-tee Sanyang data landed and the course-map hole line
+grew unreadable.*
+
+### 34.1 The course-map hole line shows at most two tees
+
+`GolfCourseMapBrowserActivity::formatTeeYardageLine` currently joins **every** tee with
+yardage onto the hole band's yardage line. With four tees that overflows the narrow band.
+
+**Rule:** when the course has **more than two** tees, the hole line shows exactly two — the
+tees named **`Blue`** and **`Red`** (the mid and forward reference), Blue first. If the
+course has more than two tees but is missing a `Blue` or a `Red`, fall back to the **first
+two** tees in `GolfCourseTeeSet` order. When the course has **one or two** tees, the line
+shows all of them, as today.
+
+The full picture moves to the tee-info page (34.2); the hole line is a glance, not a table.
+
+### 34.2 A "Tee" action opens the tee-info page
+
+The browser footer's Confirm cell is empty. It becomes **`Tee`** (`STR_GOLF_TEE`), opening
+`GolfCourseTeeInfoActivity(courseName)` — a read-only scorecard grid of **every** tee.
+Back returns to the browser at the same hole.
+
+`GolfCourseTeeInfoActivity` is modelled on `GolfCardActivity`: Front-9 / Back-9 tabs (side
+rocker or front Left/Right), a `fui::table` with a hole-number header row and rows for
+**Par**, **SI** (only when the course has stroke indexes), and one row per tee showing that
+tee's per-hole yardage, with an `OUT` / `IN` total column. A tee with no yardage data is
+listed with `—` cells rather than omitted. Header: the course name.
+
+It resolves its own `GolfCourseTeeSet` via `CourseStore::resolveAllTees` — it does not take
+one from the browser, so it stays self-contained and correct if entered by any future path.
+
+### 34.3 The History chooser is a tile screen, not a list
+
+`GolfHistoryChoiceActivity` (§29, §33.4) is re-shaped to match the **main-menu tile
+layout** (`GolfHomeActivity` — CONTRACTS-V2 §25.3 / §28): a horizontal strip of
+icon-over-label tiles, a bordered detail box under it naming the focused tile with a
+one-line description, and **no quote band** (that is the main menu's alone).
+
+Three tiles: **Trends** / **Stats** / **Rounds**, opening the same three unchanged
+activities. Icons: `trending-up` for Trends, `chart-column` for Stats, `list` for Rounds
+(`chart-column` and `list` added to `golfTileIcons.manifest`; the header regenerates at
+16/24/32 with the other six icons byte-identical). Header stays the player label. The
+detail line per tile: Trends — "Averages and the shot mix"; Stats — "Your game, all
+rounds"; Rounds — "N rounds recorded" (from the same count Trends/Stats read). The side
+rocker and front Left/Right move the focus, wrapping; Confirm opens; Back returns to the
+player picker.
+
+If the tile-strip drawing in `GolfHomeActivity::buildScreen` factors cleanly into a
+`golfui` helper both screens call, do that; otherwise a close copy is acceptable — the two
+screens are small.
