@@ -1,0 +1,404 @@
+<title>Career Stats</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Libre+Franklin:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+:root {
+  --paper:#F1F4F1; --card:#FBFCFA; --ink:#13181A; --ink-2:#4C5654; --ink-3:#737E7A;
+  --rule:#D2D9D2; --rule-soft:#E3E8E2;
+  --accent:#1E5C3E; --accent-ink:#123A28; --accent-wash:#E2ECE4;
+  --flag:#A93826; --flag-wash:#F4E4E0;
+  --panel-bg:#FFFFFF; --panel-ink:#000000; --panel-edge:#98A29C;
+  --measure:68ch; --gutter:13rem;
+  --step--1:clamp(0.78rem,0.76rem + 0.10vw,0.84rem);
+  --step-0:clamp(1.00rem,0.97rem + 0.14vw,1.08rem);
+  --step-1:clamp(1.22rem,1.15rem + 0.32vw,1.42rem);
+  --step-2:clamp(1.55rem,1.40rem + 0.68vw,2.05rem);
+  --step-3:clamp(2.05rem,1.72rem + 1.55vw,3.30rem);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:#0F1412; --card:#161C19; --ink:#E6EBE6; --ink-2:#A3AEA8; --ink-3:#7B8681;
+    --rule:#29322D; --rule-soft:#1E2622;
+    --accent:#6FC08D; --accent-ink:#A5DCB9; --accent-wash:#17251D;
+    --flag:#E1745F; --flag-wash:#2A1A16;
+    --panel-bg:#E9EBE7; --panel-ink:#0B0E0C; --panel-edge:#3A433D;
+  }
+}
+:root[data-theme="dark"] {
+  --paper:#0F1412; --card:#161C19; --ink:#E6EBE6; --ink-2:#A3AEA8; --ink-3:#7B8681;
+  --rule:#29322D; --rule-soft:#1E2622;
+  --accent:#6FC08D; --accent-ink:#A5DCB9; --accent-wash:#17251D;
+  --flag:#E1745F; --flag-wash:#2A1A16;
+  --panel-bg:#E9EBE7; --panel-ink:#0B0E0C; --panel-edge:#3A433D;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:"Libre Franklin",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:var(--step-0);line-height:1.62;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{font-family:Archivo,"Libre Franklin",system-ui,sans-serif;text-wrap:balance;margin:0;line-height:1.14;letter-spacing:-.014em}
+p{margin:0}
+a{color:var(--accent)}
+code,.mono{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}
+.wrap{max-width:78rem;margin:0 auto;padding:0 clamp(1.15rem,4vw,3rem)}
+
+.masthead{padding:clamp(3rem,8vw,5.5rem) 0 clamp(2rem,4vw,3rem);border-bottom:2px solid var(--ink)}
+.eyebrow{font-family:Archivo,system-ui,sans-serif;font-size:var(--step--1);font-weight:600;
+  letter-spacing:.15em;text-transform:uppercase;color:var(--flag);margin-bottom:1.15rem}
+.masthead h1{font-size:var(--step-3);font-weight:700;letter-spacing:-.03em;max-width:18ch}
+.standfirst{margin-top:1.4rem;max-width:60ch;font-size:var(--step-1);line-height:1.5;color:var(--ink-2)}
+.meta-strip{margin-top:2.4rem;display:flex;flex-wrap:wrap;gap:0 2.5rem;row-gap:1.1rem;font-size:var(--step--1)}
+.meta-strip div{display:flex;flex-direction:column;gap:.2rem}
+.meta-strip .k{font-family:Archivo,system-ui,sans-serif;font-weight:600;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--ink-3);font-size:.72rem}
+.meta-strip .v{font-weight:500;color:var(--ink)}
+
+section.doc{display:grid;grid-template-columns:var(--gutter) minmax(0,1fr);gap:0 3rem;
+  padding:clamp(2.6rem,6vw,4.4rem) 0;border-bottom:1px solid var(--rule)}
+section.doc:last-of-type{border-bottom:0}
+.rail{position:sticky;top:1.5rem;align-self:start}
+.rail .idx{font-family:Archivo,system-ui,sans-serif;font-size:var(--step--1);font-weight:700;
+  letter-spacing:.12em;color:var(--flag);display:block;margin-bottom:.5rem}
+.rail .label{font-size:var(--step--1);color:var(--ink-3);line-height:1.4;max-width:15ch}
+.body>*+*{margin-top:1.35rem}
+.body h2{font-size:var(--step-2);font-weight:700;max-width:24ch}
+.body h3{font-size:var(--step-1);font-weight:600;margin-top:2.6rem}
+.body h4{font-family:Archivo,system-ui,sans-serif;font-size:var(--step--1);font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-top:2rem}
+.body p,.body li{max-width:var(--measure)}
+.body ul,.body ol{margin:0;padding-left:1.25rem}
+.body li+li{margin-top:.5rem}
+strong{font-weight:600}
+@media (max-width:860px){
+  section.doc{grid-template-columns:minmax(0,1fr);gap:1.2rem}
+  .rail{position:static;display:flex;align-items:baseline;gap:.85rem}
+  .rail .idx{margin-bottom:0}
+}
+
+.callout{border-left:3px solid var(--accent);background:var(--accent-wash);padding:1.05rem 1.3rem;
+  max-width:var(--measure);font-size:.96rem}
+.callout.warn{border-left-color:var(--flag);background:var(--flag-wash)}
+.callout h4{margin-top:0;color:var(--ink-2)}
+.callout>*+*{margin-top:.6rem}
+
+.scroller{overflow-x:auto;max-width:100%;padding-bottom:.4rem}
+table{border-collapse:collapse;width:100%;min-width:32rem;font-size:.92rem}
+caption{caption-side:top;text-align:left;font-family:Archivo,system-ui,sans-serif;
+  font-size:var(--step--1);font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink-3);padding-bottom:.7rem}
+th,td{text-align:left;padding:.6rem 1rem .6rem 0;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+thead th{font-family:Archivo,system-ui,sans-serif;font-size:.74rem;font-weight:600;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--ink-3);border-bottom:1px solid var(--rule);white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+td.num{font-family:"JetBrains Mono",monospace;font-variant-numeric:tabular-nums}
+kbd{display:inline-block;border:1px solid var(--rule);border-bottom-width:2px;border-radius:3px;
+  background:var(--card);padding:.05em .42em;font-size:.8em;font-weight:500;white-space:nowrap;color:var(--ink)}
+pre{background:var(--card);border:1px solid var(--rule);padding:1rem 1.15rem;overflow-x:auto;
+  font-size:.82rem;line-height:1.62;margin:0;font-family:"JetBrains Mono",monospace}
+:not(pre)>code{background:var(--rule-soft);padding:.1em .36em;font-size:.86em;border-radius:2px}
+
+.mockrow{display:flex;gap:2rem;align-items:flex-start;overflow-x:auto;padding-bottom:.6rem}
+figure{margin:0}
+figcaption{margin-top:.85rem;font-size:var(--step--1);color:var(--ink-3);max-width:30rem}
+figcaption b{display:block;font-family:Archivo,system-ui,sans-serif;font-weight:600;letter-spacing:.09em;
+  text-transform:uppercase;font-size:.72rem;color:var(--ink-2);margin-bottom:.3rem}
+
+.panel{width:480px;height:800px;flex:none;background:var(--panel-bg);color:var(--panel-ink);
+  border:1px solid var(--panel-edge);display:flex;flex-direction:column;
+  font-family:Archivo,system-ui,sans-serif;overflow:hidden}
+.p-hdr{display:flex;justify-content:space-between;align-items:center;padding:0 16px;height:46px;
+  border-bottom:2px solid var(--panel-ink);font-size:14px;font-weight:600;letter-spacing:.04em;flex:none}
+.p-sub{padding:10px 16px;border-bottom:1px solid var(--panel-ink);font-size:12px;font-weight:600;
+  letter-spacing:.14em;text-transform:uppercase;flex:none}
+.p-hero{padding:18px 16px 16px;border-bottom:2px solid var(--panel-ink);display:flex;
+  justify-content:space-between;align-items:flex-end;flex:none}
+.p-hero .lab{font-size:11px;font-weight:600;letter-spacing:.18em;text-transform:uppercase}
+.p-hero .big{font-size:52px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.p-hero .note{text-align:right;font-size:12px;font-weight:500;line-height:1.45}
+.p-sec{padding:11px 16px 6px;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  border-bottom:1px solid var(--panel-ink);background:var(--panel-ink);color:var(--panel-bg);flex:none}
+.p-row{display:flex;align-items:center;gap:10px;padding:0 16px;height:44px;
+  border-bottom:1px solid var(--panel-ink);font-size:14px;flex:none}
+.p-row .rk{flex:1;font-weight:600;letter-spacing:.02em}
+.p-row .rv{font-weight:700;font-variant-numeric:tabular-nums;font-size:16px}
+.p-row .rp{width:56px;text-align:right;font-variant-numeric:tabular-nums;font-size:13px;opacity:.7}
+.p-dist{display:flex;flex-direction:column;padding:6px 16px 10px;gap:5px;border-bottom:2px solid var(--panel-ink);flex:none}
+.p-dist .d{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+.p-dist .d .dl{width:52px;letter-spacing:.04em}
+.p-dist .d .db{height:14px;background:var(--panel-ink)}
+.p-dist .d .dn{width:58px;text-align:right}
+.p-foot{margin-top:auto;display:flex;border-top:2px solid var(--panel-ink);font-size:12px;font-weight:600}
+.p-foot div{flex:1;text-align:center;padding:12px 3px;border-right:1px solid var(--panel-ink)}
+.p-foot div:last-child{border-right:0}
+.p-foot.two div{flex:0 0 50%}
+
+footer.end{padding:3.5rem 0 5rem;border-top:2px solid var(--ink);font-size:var(--step--1);color:var(--ink-3)}
+footer.end p{max-width:var(--measure)}
+footer.end p+p{margin-top:.8rem}
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="eyebrow">Scorecard · Design mock · draft for review</div>
+    <h1>Career Stats</h1>
+    <p class="standfirst">
+      Trends answers &ldquo;which way is my game moving.&rdquo; Stats answers
+      &ldquo;what <em>is</em> my game&rdquo; &mdash; a handicap index, a score-shape
+      breakdown, scoring by par type, scrambling, and the personal records worth
+      chasing. One more row on the History chooser, folded from rounds you've
+      already played.
+    </p>
+    <div class="meta-strip">
+      <div><span class="k">Lives at</span><span class="v">History &rarr; player &rarr; Stats</span></div>
+      <div><span class="k">Scope</span><span class="v">One player, all their rounds</span></div>
+      <div><span class="k">New input</span><span class="v">None (rating/slope is course data)</span></div>
+      <div><span class="k">Sibling to</span><span class="v">Trends (§29), per-round Stats</span></div>
+    </div>
+  </header>
+
+  <!-- 1 -->
+  <section class="doc">
+    <div class="rail"><span class="idx">§ 1</span><span class="label">What it is</span></div>
+    <div class="body">
+      <h2>The career view, next to Trends and Rounds</h2>
+      <p>
+        §29 put both Trends and Rounds behind one chooser:
+        <strong>History &rarr; pick a player &rarr; Trends / Rounds</strong>. Stats is a
+        third row on that chooser, opening a new <code>GolfCareerStatsActivity(slot,
+        playerName)</code>. Back returns to the chooser, like the other two.
+      </p>
+      <div class="scroller">
+        <table>
+          <caption>The three review screens, kept distinct</caption>
+          <thead><tr><th>Screen</th><th>Question it answers</th><th>Shape</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Trends</strong></td><td>Which way is my game moving?</td><td>Rolling averages &amp; the bucket mix, over 18-hole rounds</td></tr>
+            <tr><td><strong>Rounds</strong></td><td>What did I shoot, and when?</td><td>The list; drill into any one round</td></tr>
+            <tr><td><strong>Stats</strong> (new)</td><td>What is my game, overall?</td><td>Handicap, score shape, par-type scoring, records &mdash; career totals</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        The existing <em>per-round</em> <code>GolfStatisticsActivity</code> (reached from a
+        round's menu) is untouched &mdash; that's one round's bucket breakdown. This is the
+        aggregate.
+      </p>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section class="doc">
+    <div class="rail"><span class="idx">§ 2</span><span class="label">What it shows</span></div>
+    <div class="body">
+      <h2>Five things, in priority order</h2>
+
+      <h4>1 &mdash; Handicap index (the headline)</h4>
+      <p>
+        WHS-style: the average of the lowest 8 of your last 20 <em>score differentials</em>,
+        times 0.96. With fewer than 20 rounds a sliding rule applies (3 rounds &rarr; lowest
+        1 minus 2.0; 6 &rarr; lowest 2; &hellip; up to 20). Under 3 rounds it reads
+        &ldquo;need 3 rounds.&rdquo; See §4 for the differential.
+      </p>
+
+      <h4>2 &mdash; Score shape</h4>
+      <p>
+        Career counts and percentages for eagle-or-better / birdie / par / bogey /
+        double / triple-plus, with a bar. The single most legible &ldquo;this is my
+        game&rdquo; picture.
+      </p>
+
+      <h4>3 &mdash; Scoring by par type</h4>
+      <p>Average score, and average to-par, on your par 3s, par 4s, par 5s. Shows where the shots leak.</p>
+
+      <h4>4 &mdash; Around the green</h4>
+      <p>
+        <strong>Scrambling</strong> &mdash; of the greens you missed, the share you still
+        made par or better (uses the GIR bit from §31). Plus <strong>putts per GIR</strong>
+        and <strong>3-putt %</strong>. If bunker tracking is added (§6), sand-save % joins here.
+      </p>
+
+      <h4>5 &mdash; Records</h4>
+      <p>
+        Lowest round (and where), lowest 9, fewest putts, most pars in a round, longest
+        bogey-free run. Small, but it's what people screenshot.
+      </p>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section class="doc">
+    <div class="rail"><span class="idx">§ 3</span><span class="label">Where the numbers come from</span></div>
+    <div class="body">
+      <h2>Score shape and par-type scoring need per-hole data</h2>
+      <p>
+        <code>index.csv</code> stores per-round <em>totals</em> only. Handicap, lowest round,
+        fewest putts &mdash; those fold straight over the index like Trends does. But score
+        shape, par-type scoring and scrambling need each hole's score against its par, which
+        the index doesn't carry. Three ways to get it:
+      </p>
+      <div class="scroller">
+        <table>
+          <thead><tr><th>Option</th><th>How</th><th>Cost</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>A &mdash; open the round files</strong> <em>(recommended for v1)</em></td>
+              <td>On entering the screen, stream every archived round JSON once, tally, show. A short &ldquo;Reading 24 rounds&hellip;&rdquo; frame while it works.</td>
+              <td>~1&ndash;3 s load, occasional screen. No format change. Simplest thing that ships.</td>
+            </tr>
+            <tr>
+              <td>B &mdash; a career-stats cache</td>
+              <td>A per-player <code>/golf/rounds/career-&lt;slot&gt;.bin</code> updated on each archive, rebuilt from round files if missing/stale.</td>
+              <td>Instant load. A new derived file + invalidation logic. The optimisation path if A ever feels slow.</td>
+            </tr>
+            <tr>
+              <td>C &mdash; widen <code>index.csv</code> to v6</td>
+              <td>~13 more columns per row (the score histogram, par-type sums, scramble counts, the differential), computed at archive, backfilled on rebuild.</td>
+              <td>Pure fold, fast. But it's a format bump right after v5, and the row is already 17 columns wide. Rejected for now.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout">
+        <h4>Recommendation: A, then B if needed</h4>
+        <p>
+          Career stats is a screen you open now and then, not every hole. A 2-second read of
+          the round files is a fair trade for zero format churn. If it drags, B slots in
+          underneath with nothing user-facing changing. The handicap differential is the one
+          value worth precomputing &mdash; store it as a single <code>differential</code>
+          column so the handicap number is instant even under A.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section class="doc">
+    <div class="rail"><span class="idx">§ 4</span><span class="label">The handicap number</span></div>
+    <div class="body">
+      <h2>Course rating and slope are course data, not user input</h2>
+      <p>
+        A score differential is <code>(adjusted gross &minus; course rating) &times; 113 &divide; slope</code>.
+        That needs two numbers per tee that the course files don't have yet:
+      </p>
+      <pre>{
+  "name": "Sanyang Golf Club",
+  "tees": "Blue",
+  "rating": 71.2,          // NEW -- course rating for this tee, one decimal
+  "slope": 128,            // NEW -- slope, 55..155 (default 113 if absent)
+  "par":   [...], "yards": [...], "si": [...]
+}</pre>
+      <ul>
+        <li>Both optional. A round on a tee with no <code>rating</code> is simply left out of
+          the handicap (and the screen says so) &mdash; every other stat still counts it.</li>
+        <li><strong>Adjusted gross</strong> caps each hole at net double bogey
+          (par + 2 + handicap strokes received). Needs per-hole scores &mdash; option A gives them.</li>
+        <li><strong>Handicap index</strong> = mean of the lowest <em>N</em> of the last 20
+          differentials &times; 0.96, where <em>N</em> follows the WHS table (3&rarr;1,
+          4&rarr;1, 5&rarr;1, 6&rarr;2, &hellip; 20&rarr;8), with the &minus;2.0 / &minus;1.0
+          adjustment at the low end.</li>
+      </ul>
+      <div class="callout warn">
+        <h4>Decision: handicap in v1, or v2?</h4>
+        <p>
+          Handicap is the headline, but it's the only part that needs new course data
+          (<code>rating</code>/<code>slope</code> on every tee file) and the net-double-bogey
+          cap. If you'd rather ship §2's items 2&ndash;5 first and add handicap once the
+          course files carry ratings, the screen works fine without it &mdash; the hero slot
+          just shows scoring average instead.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section class="doc">
+    <div class="rail"><span class="idx">§ 5</span><span class="label">The screen</span></div>
+    <div class="body">
+      <h2>480 &times; 800, 1-bit, one scroll</h2>
+      <div class="mockrow">
+        <figure>
+          <div class="panel">
+            <div class="p-hdr"><span>NOAH</span><span>87%</span></div>
+            <div class="p-sub">Career &middot; 24 rounds</div>
+
+            <div class="p-hero">
+              <div><div class="lab">Handicap index</div><div class="big">11.4</div></div>
+              <div class="note">from 8 of your<br>last 20 rounds<br><span style="opacity:.6">avg 84.6 &middot; +12.6</span></div>
+            </div>
+
+            <div class="p-sec">Score shape</div>
+            <div class="p-dist">
+              <div class="d"><span class="dl">Eagle+</span><span class="db" style="width:4px"></span><span class="dn">2 &middot; 0%</span></div>
+              <div class="d"><span class="dl">Birdie</span><span class="db" style="width:28px"></span><span class="dn">34 &middot; 8%</span></div>
+              <div class="d"><span class="dl">Par</span><span class="db" style="width:150px"></span><span class="dn">181 &middot; 42%</span></div>
+              <div class="d"><span class="dl">Bogey</span><span class="db" style="width:120px"></span><span class="dn">146 &middot; 34%</span></div>
+              <div class="d"><span class="dl">Double</span><span class="db" style="width:44px"></span><span class="dn">53 &middot; 12%</span></div>
+              <div class="d"><span class="dl">Triple+</span><span class="db" style="width:14px"></span><span class="dn">16 &middot; 4%</span></div>
+            </div>
+
+            <div class="p-sec">By par</div>
+            <div class="p-row"><span class="rk">Par 3</span><span class="rv">3.42</span><span class="rp">+0.42</span></div>
+            <div class="p-row"><span class="rk">Par 4</span><span class="rv">4.71</span><span class="rp">+0.71</span></div>
+            <div class="p-row"><span class="rk">Par 5</span><span class="rv">5.58</span><span class="rp">+0.58</span></div>
+
+            <div class="p-sec">Around the green</div>
+            <div class="p-row"><span class="rk">Scrambling</span><span class="rv">31%</span><span class="rp">96 / 312</span></div>
+            <div class="p-row"><span class="rk">Putts per GIR</span><span class="rv">1.83</span><span class="rp"></span></div>
+            <div class="p-row"><span class="rk">3-putt</span><span class="rv">6%</span><span class="rp">26</span></div>
+
+            <div class="p-sec">Records</div>
+            <div class="p-row"><span class="rk">Lowest round</span><span class="rv">78</span><span class="rp">Sanyang</span></div>
+            <div class="p-row"><span class="rk">Fewest putts</span><span class="rv">28</span><span class="rp"></span></div>
+            <div class="p-row"><span class="rk">Bogey-free run</span><span class="rv">7</span><span class="rp">holes</span></div>
+
+            <div class="p-foot two"><div>&#8617; BACK</div><div>&#9662; MORE</div></div>
+          </div>
+          <figcaption>
+            <b>Career stats &mdash; Noah, 24 rounds</b>
+            One list, sectioned, scrolling under a fixed header and a two-cell footer. The
+            hero slot holds the handicap (or scoring average until ratings exist). The score-
+            shape bars are the one chart &mdash; everything else is a labelled number and a
+            context figure on the right.
+          </figcaption>
+        </figure>
+      </div>
+      <p>
+        Rows past the fold reached with the side rocker, wrapping, like every other golf
+        list. If a section has no data yet (no par-5s played, no ratings) its rows read
+        &ldquo;&mdash;&rdquo; rather than vanishing, so the layout is stable.
+      </p>
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section class="doc">
+    <div class="rail"><span class="idx">§ 6</span><span class="label">Decisions</span></div>
+    <div class="body">
+      <h2>Four calls before this becomes a build brief</h2>
+      <ol>
+        <li><strong>Data source.</strong> A (open round files, ~2 s load), B (career cache),
+          or C (index.csv v6). Recommendation: <strong>A</strong>, with the handicap
+          <code>differential</code> as the one precomputed index column.</li>
+        <li><strong>Handicap now or later.</strong> Ship it in v1 (needs
+          <code>rating</code>/<code>slope</code> added to every tee file), or ship §2's
+          items 2&ndash;5 first and fold handicap in once the course data carries ratings.</li>
+        <li><strong>v1 section list.</strong> All five of §2, or a subset? Score shape +
+          by-par + records is the minimum that feels worthwhile.</li>
+        <li><strong>Sand saves.</strong> Add a bunker marker to the Mark sheet (one more
+          tag, fairway-hit-sized) so scrambling can split greenside-bunker from everything
+          else &mdash; or leave it for later.</li>
+      </ol>
+    </div>
+  </section>
+
+  <footer class="end wrap">
+    <p>
+      Draft mock for a Career Stats screen. Extends CONTRACTS-V2 §29 (the History chooser)
+      and §31 (the GIR bit). On sign-off this becomes CONTRACTS-V2 §32 and a worker brief.
+    </p>
+    <p>Device frame is 480 &times; 800 at 1:1, 1-bit black on white.</p>
+  </footer>
+
+</div>
