@@ -92,6 +92,27 @@ const GolfCourseTee* findTee(const GolfCourseTeeSet& set, const char* name) {
   return nullptr;
 }
 
+struct Yards18 {
+  uint16_t v[18];
+};
+
+// 18 holes at one flat yardage: total = 18 * value, for equal / unequal-total cases.
+Yards18 flat(uint16_t value) {
+  Yards18 y{};
+  for (uint16_t& hole : y.v) hole = value;
+  return y;
+}
+
+// A single resolved tee, for golfTeeSortsBefore() unit tests.
+GolfCourseTee makeTee(const char* name, const uint16_t* yards) {
+  GolfCourseTee tee{};
+  std::snprintf(tee.name, sizeof(tee.name), "%s", name);
+  tee.resolved = true;
+  tee.hasYards = yards != nullptr;
+  if (yards != nullptr) std::memcpy(tee.yards, yards, sizeof(tee.yards));
+  return tee;
+}
+
 // A tee set built straight from a list of names, no SD/resolution involved.
 GolfCourseTeeSet teeSetOf(std::initializer_list<const char*> names) {
   GolfCourseTeeSet set{};
@@ -378,4 +399,85 @@ TEST(GolfDefaultTeeForSet, EmptySetYieldsEmptyString) { EXPECT_STREQ(golfDefault
 
 TEST(GolfDefaultTeeForSet, FindsBlueEvenWhenNotFirst) {
   EXPECT_STREQ(golfDefaultTeeForSet(teeSetOf({"Black", "White", "Blue", "Red"})), "Blue");
+}
+
+// CONTRACTS-V2 §35: strict-weak tee ordering, longest-first.
+TEST(GolfTeeSortsBefore, TeeWithYardageSortsBeforeYardlessTee) {
+  const Yards18 yards = flat(300);
+  const GolfCourseTee withYards = makeTee("Red", yards.v);   // low name priority
+  const GolfCourseTee yardless = makeTee("Black", nullptr);  // high name priority, no yardage
+  EXPECT_TRUE(golfTeeSortsBefore(withYards, yardless));
+  EXPECT_FALSE(golfTeeSortsBefore(yardless, withYards));
+}
+
+TEST(GolfTeeSortsBefore, LargerTotalYardageSortsFirst) {
+  const Yards18 longer = flat(420);
+  const Yards18 shorter = flat(400);
+  const GolfCourseTee white = makeTee("White", longer.v);  // lower name priority, but longer
+  const GolfCourseTee blue = makeTee("Blue", shorter.v);
+  EXPECT_TRUE(golfTeeSortsBefore(white, blue));
+  EXPECT_FALSE(golfTeeSortsBefore(blue, white));
+}
+
+TEST(GolfTeeSortsBefore, EqualYardageFallsBackToNamePriority) {
+  const Yards18 yards = flat(400);
+  const GolfCourseTee blue = makeTee("blue", yards.v);  // case-insensitive match
+  const GolfCourseTee white = makeTee("WHITE", yards.v);
+  EXPECT_TRUE(golfTeeSortsBefore(blue, white));
+  EXPECT_FALSE(golfTeeSortsBefore(white, blue));
+}
+
+TEST(GolfTeeSortsBefore, EqualPriorityFallsBackToAlphabetical) {
+  const Yards18 yards = flat(400);
+  const GolfCourseTee championship = makeTee("Championship", yards.v);  // neither name is listed
+  const GolfCourseTee members = makeTee("Members", yards.v);
+  EXPECT_TRUE(golfTeeSortsBefore(championship, members));
+  EXPECT_FALSE(golfTeeSortsBefore(members, championship));
+}
+
+TEST(GolfResolveAllTees, ResolvedTeesAreOrderedLongestFirstRegardlessOfFileOrder) {
+  const Yards18 black = flat(500);
+  const Yards18 blue = flat(450);
+  const Yards18 white = flat(400);
+  const Yards18 red = flat(350);
+  std::vector<Entry> entries;  // fed shortest-first; the resolve must reorder them
+  entries.push_back(sdTeeEntry("z-red.json", "Club", "Red", red.v));
+  entries.push_back(sdTeeEntry("y-white.json", "Club", "White", white.v));
+  entries.push_back(sdTeeEntry("x-black.json", "Club", "Black", black.v));
+  entries.push_back(sdTeeEntry("w-blue.json", "Club", "Blue", blue.v));
+
+  GolfCourseTeeSet result{};
+  ASSERT_TRUE(resolveAllTees(entries, "Club", result));
+  EXPECT_EQ(teeNames(result), (std::vector<std::string>{"Black", "Blue", "White", "Red"}));
+  // primary/primaryFile still come from the first matching file, unaffected by the tee sort.
+  EXPECT_STREQ(result.primaryFile.filename, "z-red.json");
+}
+
+TEST(GolfResolveAllTees, YardlessTeeSinksBelowTeesWithYardage) {
+  const Yards18 yards = flat(300);
+  std::vector<Entry> entries;
+  entries.push_back(sdTeeEntry("black.json", "Club", "Black"));  // no yardage
+  entries.push_back(sdTeeEntry("red.json", "Club", "Red", yards.v));
+
+  GolfCourseTeeSet result{};
+  ASSERT_TRUE(resolveAllTees(entries, "Club", result));
+  EXPECT_EQ(teeNames(result), (std::vector<std::string>{"Red", "Black"}));
+}
+
+TEST(GolfResolveAllTees, EqualYardageFallsBackToNamePriorityThenAlphabetical) {
+  const Yards18 yards = flat(400);
+
+  std::vector<Entry> byPriority;
+  byPriority.push_back(sdTeeEntry("a.json", "Club", "White", yards.v));
+  byPriority.push_back(sdTeeEntry("b.json", "Club", "Blue", yards.v));
+  GolfCourseTeeSet priorityResult{};
+  ASSERT_TRUE(resolveAllTees(byPriority, "Club", priorityResult));
+  EXPECT_EQ(teeNames(priorityResult), (std::vector<std::string>{"Blue", "White"}));
+
+  std::vector<Entry> unknownNames;
+  unknownNames.push_back(sdTeeEntry("c.json", "Range", "Sunset", yards.v));
+  unknownNames.push_back(sdTeeEntry("d.json", "Range", "Dawn", yards.v));
+  GolfCourseTeeSet alphaResult{};
+  ASSERT_TRUE(resolveAllTees(unknownNames, "Range", alphaResult));
+  EXPECT_EQ(teeNames(alphaResult), (std::vector<std::string>{"Dawn", "Sunset"}));
 }

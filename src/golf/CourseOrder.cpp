@@ -54,6 +54,24 @@ uint8_t golfSortAndDedupCourses(GolfCourseFile* files, GolfCourse* courses, cons
 
 namespace {
 
+// CONTRACTS-V2 §35 name-priority list: the golf-conventional tee order. A name matching
+// none of these sorts after every listed name.
+int golfTeeNamePriorityIndex(const char* name) {
+  static constexpr const char* kPriority[] = {"Black", "Gold", "Blue", "White", "Green", "Yellow", "Red", "Orange"};
+  for (int i = 0; i < static_cast<int>(sizeof(kPriority) / sizeof(kPriority[0])); ++i) {
+    if (golfCompareCourseNames(name, kPriority[i]) == 0) return i;
+  }
+  return 100;
+}
+
+// Total yardage across the fixed 18-slot array. A 9-hole tee has its back nine zeroed,
+// so the sums still order correctly.
+uint32_t golfTeeTotalYards(const GolfCourseTee& tee) {
+  uint32_t total = 0;
+  for (uint8_t hole = 0; hole < GolfRound::MAX_HOLES; ++hole) total += tee.yards[hole];
+  return total;
+}
+
 // Appends one tee to the set: skips empty names, names already present, and anything past
 // GOLF_MAX_TEES. The resolution (and any yardage) is copied by value from `course`, which
 // the caller may hold in scratch memory that does not outlive this call.
@@ -73,6 +91,19 @@ void appendTee(GolfCourseTeeSet& result, const GolfCourseFile& file, const GolfC
 }
 
 }  // namespace
+
+bool golfTeeSortsBefore(const GolfCourseTee& a, const GolfCourseTee& b) {
+  if (a.hasYards != b.hasYards) return a.hasYards;  // yardless tees sink below tees with yardage
+  if (a.hasYards) {
+    const uint32_t aTotal = golfTeeTotalYards(a);
+    const uint32_t bTotal = golfTeeTotalYards(b);
+    if (aTotal != bTotal) return aTotal > bTotal;  // longer course first
+  }
+  const int aPriority = golfTeeNamePriorityIndex(a.name);
+  const int bPriority = golfTeeNamePriorityIndex(b.name);
+  if (aPriority != bPriority) return aPriority < bPriority;
+  return strcmp(a.name, b.name) < 0;
+}
 
 bool golfResolveAllTeesFrom(const GolfCourseFile* files, const GolfCourse* courses, const uint8_t count,
                             const char* courseName, GolfCourseTeeSet& result) {
@@ -109,6 +140,19 @@ bool golfResolveAllTeesFrom(const GolfCourseFile* files, const GolfCourse* cours
     if (CourseStore::resolveTee(result.primaryFile, result.primary, "White", probe)) {
       appendTee(result, result.primaryFile, result.primary, "White");
     }
+  }
+
+  // CONTRACTS-V2 §35: reorder the gathered set longest-first so every consumer that
+  // iterates it renders in golf-conventional order without re-sorting. Stable insertion
+  // sort -- teeCount <= GOLF_MAX_TEES (6).
+  for (uint8_t i = 1; i < result.teeCount; ++i) {
+    const GolfCourseTee value = result.tees[i];
+    uint8_t position = i;
+    while (position > 0 && golfTeeSortsBefore(value, result.tees[position - 1])) {
+      result.tees[position] = result.tees[position - 1];
+      --position;
+    }
+    result.tees[position] = value;
   }
   return found;
 }

@@ -37,6 +37,17 @@ uint8_t golfSortAndDedupCourses(GolfCourseFile* files, GolfCourse* courses, uint
 bool golfResolveAllTeesFrom(const GolfCourseFile* files, const GolfCourse* courses, uint8_t count,
                             const char* courseName, GolfCourseTeeSet& result);
 
+// CONTRACTS-V2 §35. Strict-weak ordering for two resolved tees, longest-first:
+//   1. A tee with `hasYards` sorts before a tee without (yardless tees sink).
+//   2. Both have yardage: larger total 18-slot yardage first.
+//   3. Equal totals, or both yardless: golf-conventional name priority
+//      {Black, Gold, Blue, White, Green, Yellow, Red, Orange} (case-insensitive),
+//      any other name after those.
+//   4. Equal priority: strcmp(a.name, b.name) < 0, for a deterministic result.
+// golfResolveAllTeesFrom() applies this to result.tees before returning, so every
+// downstream view iterates the set longest-first without re-sorting.
+bool golfTeeSortsBefore(const GolfCourseTee& a, const GolfCourseTee& b);
+
 // CONTRACTS-V2 §32.7: the tee a fresh round pre-selects for player 1. "Blue" when the set has
 // a tee named "Blue", else "White" when present, else the first tee's name, else "" for an
 // empty set. Case-sensitive name match; does not gate on hasYards.
