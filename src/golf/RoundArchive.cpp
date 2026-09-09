@@ -812,6 +812,31 @@ bool recoverIndexState(GolfIndexMigrator& scratch, GolfIndexLiveState& live, Arc
   return true;
 }
 
+bool validRoundFilename(const char* filename) {
+  if (filename == nullptr || filename[0] == '\0' || strchr(filename, '/') != nullptr ||
+      strchr(filename, '\\') != nullptr) {
+    LOG_ERR("GOLF", "index delete rejected invalid round filename");
+    return false;
+  }
+  return true;
+}
+
+// Shared prologue for remove() and removePlayer(): recover the live index once,
+// validate the filename, then drop the round file's whole index group through the
+// verified rewrite. On success `live` is advanced to the post-delete on-disk
+// index (v5, group absent) so a follow-on appendIndexGroup() threads the state
+// left by the rewrite rather than a stale one.
+bool recoverAndDropIndexGroup(const char* filename, GolfIndexMigrator& migrator, GolfIndexLiveState& live,
+                              IndexRewriteResult& rewrite) {
+  live = {};
+  if (!recoverIndexState(migrator, live, nullptr)) return false;
+  if (!validRoundFilename(filename)) return false;
+  rewrite = rewriteIndexWithout(filename, migrator, live);
+  if (!rewrite.committed()) return false;
+  live = {migrator.dataRows(), GolfIndexVersion::V5, true};
+  return true;
+}
+
 }  // namespace
 
 bool RoundArchive::recoverIndex(GolfIndexMigrator& scratch) {
@@ -924,14 +949,8 @@ bool RoundArchive::remove(const char* filename) {
     return false;
   }
   GolfIndexLiveState liveIndex{};
-  if (!recoverIndexState(scratch->indexMigrator, liveIndex, nullptr)) return false;
-  if (filename == nullptr || filename[0] == '\0' || strchr(filename, '/') != nullptr ||
-      strchr(filename, '\\') != nullptr) {
-    LOG_ERR("GOLF", "index delete rejected invalid round filename");
-    return false;
-  }
-  const IndexRewriteResult rewrite = rewriteIndexWithout(filename, scratch->indexMigrator, liveIndex);
-  if (!rewrite.committed()) return false;
+  IndexRewriteResult rewrite{};
+  if (!recoverAndDropIndexGroup(filename, scratch->indexMigrator, liveIndex, rewrite)) return false;
 
   snprintf(scratch->path, sizeof(scratch->path), "%s/%s", ROUNDS_DIRECTORY, filename);
   if (Storage.exists(scratch->path) && !Storage.remove(scratch->path)) {
@@ -941,6 +960,55 @@ bool RoundArchive::remove(const char* filename) {
     LOG_ERR("GOLF", "completed round delete committed with index cleanup pending: %s", filename);
   }
   // Backups are append-only recovery copies and are not removed with History entries.
+  return true;
+}
+
+bool RoundArchive::removePlayer(const char* filename, const uint8_t playerSlot) {
+  if (!validRoundFilename(filename)) return false;
+
+  auto scratch = makeUniqueNoThrow<ArchiveScratch>();
+  if (!scratch) {
+    LOG_ERR("GOLF", "OOM: remove-player scratch (%u bytes)", static_cast<unsigned>(sizeof(ArchiveScratch)));
+    return false;
+  }
+
+  snprintf(scratch->path, sizeof(scratch->path), "%s/%s", ROUNDS_DIRECTORY, filename);
+  if (!loadGolfRoundFile(scratch->path, scratch->round)) {
+    LOG_ERR("GOLF", "remove-player round load failed: %s", scratch->path);
+    return false;
+  }
+  if (playerSlot >= GolfRound::MAX_PLAYERS || !golfPlayerIsEnabled(scratch->round.players[playerSlot])) {
+    LOG_ERR("GOLF", "remove-player rejected slot %u", static_cast<unsigned>(playerSlot));
+    return false;
+  }
+  // Last enabled player: nothing to keep, drop the whole round.
+  if (golfEnabledPlayerCount(scratch->round) <= 1) return remove(filename);
+
+  golfDisablePlayer(scratch->round, playerSlot);
+
+  // Same transactional order as an edit: drop the file's whole index group, then
+  // rewrite the round file, then re-append the now N-1-row group against the
+  // live state left by the rewrite.
+  GolfIndexLiveState liveIndex{};
+  IndexRewriteResult rewrite{};
+  if (!recoverAndDropIndexGroup(filename, scratch->indexMigrator, liveIndex, rewrite)) return false;
+
+  if (!writeVerifiedRound(scratch->path, scratch->round, "remove-player")) {
+    // The index group is already dropped. The round file is the source of truth
+    // and a rebuild recovers a consistent index, so this is a hard error but not
+    // a corruption.
+    LOG_ERR("GOLF", "remove-player round rewrite failed after index group drop: %s", scratch->path);
+    return false;
+  }
+
+  const GolfIndexTransactionResult appended = appendIndexGroup(scratch->round, filename, *scratch, liveIndex);
+  if (!appended.appendCommitted) {
+    LOG_ERR("GOLF", "remove-player index group re-append failed: %s", filename);
+    return false;
+  }
+  if (rewrite.status == IndexRewriteStatus::CommittedCleanupPending || !appended.ok() || appended.cleanupPending) {
+    LOG_ERR("GOLF", "remove-player committed with index artifact cleanup pending: %s", filename);
+  }
   return true;
 }
 

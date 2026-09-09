@@ -27,4 +27,9 @@ class RoundArchive {
   // Removes all 1..4 stable-slot rows through a staged verified rewrite, then
   // unlinks the shared JSON. Once rows are absent, retries only clean artifacts.
   static bool remove(const char* filename);
+  // Removes one enabled player from a shared multiplayer round: disables the slot
+  // in the round file and shrinks its index group to N-1 rows through the same
+  // transactional order as an edit. Routes to remove() when the slot is the
+  // round's last enabled player (CONTRACTS-V2 §36).
+  static bool removePlayer(const char* filename, uint8_t playerSlot);
 };

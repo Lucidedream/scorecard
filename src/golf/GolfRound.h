@@ -80,6 +80,26 @@ inline void initializeGolfPlayerDefaults(GolfRound& round) {
 
 constexpr bool golfPlayerIsEnabled(const GolfPlayer& player) { return player.tee[0] != '\0'; }
 
+constexpr uint8_t golfEnabledPlayerCount(const GolfRound& round) {
+  uint8_t count = 0;
+  for (uint8_t slot = 0; slot < GolfRound::MAX_PLAYERS; ++slot) {
+    if (golfPlayerIsEnabled(round.players[slot])) ++count;
+  }
+  return count;
+}
+
+// Turns one enabled slot into the "did not play" sentinel: clears the tee (so
+// golfPlayerIsEnabled is false) and zeroes the score and yardages so the removed
+// player's data cannot survive a re-save. The name is left untouched. Returns
+// false with no mutation when the slot is out of range or already disabled.
+inline bool golfDisablePlayer(GolfRound& round, const uint8_t slot) {
+  if (slot >= GolfRound::MAX_PLAYERS || !golfPlayerIsEnabled(round.players[slot])) return false;
+  golfSetTee(round.players[slot], "");
+  round.players[slot].score = GolfPlayerScore{};
+  memset(round.players[slot].yards, 0, sizeof(round.players[slot].yards));
+  return true;
+}
+
 static_assert(sizeof(GolfPlayerScore) == 150);
 static_assert(sizeof(GolfPlayer) == 222);
 static_assert(sizeof(GolfRound) == 970);

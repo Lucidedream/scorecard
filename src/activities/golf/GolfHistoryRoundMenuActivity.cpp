@@ -104,14 +104,20 @@ void GolfHistoryRoundMenuActivity::activateIndex(const int index) {
 
 void GolfHistoryRoundMenuActivity::confirmDelete() {
   deleteFailed = false;
-  char date[GOLF_DATE_BUFFER_SIZE];
-  if (golfFormatDate(round.dateYmd, date, sizeof(date))) {
-    snprintf(deletePrompt, sizeof(deletePrompt), tr(STR_GOLF_DELETE_DATED_PROMPT_FORMAT), round.courseName, date);
+  const char* title = nullptr;
+  if (golfEnabledPlayerCount(round) <= 1) {
+    char date[GOLF_DATE_BUFFER_SIZE];
+    if (golfFormatDate(round.dateYmd, date, sizeof(date))) {
+      snprintf(deletePrompt, sizeof(deletePrompt), tr(STR_GOLF_DELETE_DATED_PROMPT_FORMAT), round.courseName, date);
+    } else {
+      snprintf(deletePrompt, sizeof(deletePrompt), tr(STR_GOLF_DELETE_UNDATED_PROMPT_FORMAT), round.courseName);
+    }
+    title = tr(STR_GOLF_DELETE_ROUND);
   } else {
-    snprintf(deletePrompt, sizeof(deletePrompt), tr(STR_GOLF_DELETE_UNDATED_PROMPT_FORMAT), round.courseName);
+    snprintf(deletePrompt, sizeof(deletePrompt), tr(STR_GOLF_REMOVE_PLAYER_PROMPT_FORMAT), selectedPlayer().name);
+    title = tr(STR_GOLF_REMOVE_PLAYER);
   }
-  auto confirmation =
-      makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_GOLF_DELETE_ROUND), deletePrompt);
+  auto confirmation = makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, title, deletePrompt);
   if (!confirmation) {
     LOG_ERR("GOLF", "OOM: delete confirmation");
     return;
@@ -122,7 +128,10 @@ void GolfHistoryRoundMenuActivity::confirmDelete() {
 
 void GolfHistoryRoundMenuActivity::completeDelete(const bool confirmed) {
   if (!confirmed) return;
-  if (RoundArchive::remove(archiveFilename)) {
+  const bool wholeRound = golfEnabledPlayerCount(round) <= 1;
+  const bool ok =
+      wholeRound ? RoundArchive::remove(archiveFilename) : RoundArchive::removePlayer(archiveFilename, playerSlot);
+  if (ok) {
     finish();
     return;
   }
