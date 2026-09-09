@@ -2301,3 +2301,76 @@ re-resolves the full tee set from the name regardless.
 The load-sort-dedup-and-format-row body is now identical in `GolfSetupActivity` and
 `GolfCourseMapListActivity`; factor it into a `golfui` / `CourseStore` helper if it lands
 cleanly, else keep the second copy.
+
+
+## 35. Tees are ordered longest-first, everywhere (v6.1)
+
+*Added 2026-09-09. Fixes: the tee-info page and the new-round tee picker listed tees in SD
+file-iteration order (Red, White, Blue, Black for Sanyang) instead of a golf-conventional
+order.*
+
+`golfResolveAllTeesFrom` (the single source every consumer reads — `GolfCourseTeeSet`)
+sorts `result.tees[0..teeCount)` before returning, so **every** downstream view is ordered
+without each one re-sorting:
+
+* **Primary key — descending 18-hole (or all-available-hole) total yardage.** A tee with
+  `hasYards` and a larger total sorts first. This alone gives Black → Blue → White → Red
+  for Sanyang and generalises to any course with real yardages.
+* **Tees without `hasYards` sort after every tee that has yardage**, ordered among
+  themselves by the name-priority list below, then alphabetically.
+* **Tie / no-yardage name priority:** `Black, Gold, Blue, White, Green, Yellow, Red,
+  Orange` (case-insensitive), then any other name alphabetically after those.
+
+The sort is stable and pure; it lives next to `golfResolveAllTeesFrom` in `CourseOrder`
+and is host-tested (Sanyang's four tees → Black/Blue/White/Red; a yardless tee sinks; two
+equal-yardage tees fall back to name priority).
+
+Consumers that already pick specific tees by **name** are unaffected: `pickGlanceTees`
+(§34.1, "Blue then Red"), `golfDefaultTeeForSet` (§32.7, "Blue then White"). Consumers that
+**iterate** the set now render longest-first: `GolfCourseTeeInfoActivity` rows,
+`GolfPlayerSetupActivity` tee rows, `golfFormatTeeList` subtitles.
+
+### 35.1 `GolfCourseTeeInfoActivity` renders the full grid
+
+The hand-rolled table in `GolfCourseTeeInfoActivity` (§34.2) collapsed to a single hole
+column on device. Rebuild its table on the **`GolfCardActivity` `fui::table` pattern**
+(the proven scorecard grid — `golfui::makeCardLayout`, `dataPointers[]`, per-nine
+`tableDataColumns`), not a bespoke `drawText` loop: hole-header row, Par, SI (only when
+`primary.hasSi`), one row per tee (now longest-first per §35), `OUT`/`IN` total column,
+Front/Back tabs only for an 18-hole course.
+
+
+## 36. Deleting one player's History entry keeps the others (v6.1)
+
+*Added 2026-09-09. Fixes data loss: deleting player 1's History entry for a 2-player round
+deleted the shared round file, so player 2's entry vanished too.*
+
+A multiplayer round is **one file, one index group of N rows** (one per enabled player).
+The History round menu (`GolfHistoryRoundMenuActivity`) is entered for a specific
+`playerSlot`. Its **Delete** action becomes slot-aware:
+
+* **The round has one enabled player** (this slot) — unchanged: `RoundArchive::remove(file)`
+  drops the file and its index group.
+* **The round has more than one enabled player** — **remove only this player**:
+  1. Load the round file.
+  2. Disable this `playerSlot` — `golfSetTee(round.players[slot], "")` and zero that
+     `GolfPlayerScore` — so `golfPlayerIsEnabled` is now false for it.
+  3. Drop the file's whole index group (`rewriteIndexWithout(file)`), rewrite the round
+     file from the modified `GolfRound` (`writeVerifiedRound`), then re-append the now
+     `N-1`-row index group (`appendIndexGroup`). Same transactional order as an edit.
+  4. If step 2 leaves **zero** enabled players (shouldn't happen given the branch, but
+     guard), fall through to the whole-file delete.
+
+`RoundArchive` gets one new entry point, `removePlayer(const char* filename, uint8_t
+playerSlot)`, composing the existing `rewriteIndexWithout` / `writeVerifiedRound` /
+`appendIndexGroup` primitives. Host-tested: a 3-player round minus the middle slot leaves a
+2-row group and a file whose middle player is disabled; a 1-player round routes to
+`remove`; the removed slot's scores do not survive the rewrite.
+
+### 36.1 The confirmation names what happens
+
+`STR_GOLF_DELETE_ROUND` / the prompt stays for the last-player case. For the
+remove-one-player case the confirmation title is **`STR_GOLF_REMOVE_PLAYER`** ("Remove
+player") and the prompt reads "Remove <name> from this round? The other players keep their
+scores." (`STR_GOLF_REMOVE_PLAYER_PROMPT_FORMAT`). The History list the menu returns to
+reflects the change on the next rebuild.
