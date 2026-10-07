@@ -32,8 +32,11 @@ void GolfStatisticsActivity::onEnter() {
 }
 
 void GolfStatisticsActivity::loop() {
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
-      mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  golfui::FooterInput input(mappedInput, {tr(STR_BACK), "", "", ""});
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const auto chrome = golfui::chromeLayout(renderer, mappedInput, metrics.topPadding);
+  if (input.wasReleased(golfui::FooterAction::Back) || input.wasReleased(golfui::FooterAction::Confirm) ||
+      input.tapIn(chrome.body)) {
     finish();
   }
 }
@@ -76,14 +79,13 @@ void GolfStatisticsActivity::drawStat(const freeink::ui::Rect rect, const char* 
 }
 
 void GolfStatisticsActivity::drawFooter() const {
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  golfui::drawFooter(renderer, mappedInput, {tr(STR_BACK), "", "", ""});
 }
 
 void GolfStatisticsActivity::render(RenderLock&&) {
   renderer.clearScreen();
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto chrome = golfui::chromeLayout(renderer, metrics.topPadding);
+  const auto chrome = golfui::chromeLayout(renderer, mappedInput, metrics.topPadding);
   const auto layout = golfui::makeStatisticsLayout(chrome.body, renderer.getLineHeight(UI_10_FONT_ID));
   const GolfPlayer& player = selectedPlayer();
   const GolfPlayerScore& score = player.score;

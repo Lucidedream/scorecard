@@ -95,25 +95,23 @@ void GolfCardActivity::changeTab(const int delta) {
 }
 
 void GolfCardActivity::loop() {
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  const bool hasTabs = round.holeCount == 18;
+  golfui::FooterInput input(
+      mappedInput, {tr(STR_BACK), "", hasTabs ? tr(STR_GOLF_PREVIOUS_TAB) : "", hasTabs ? tr(STR_GOLF_NEXT_TAB) : ""});
+  if (input.wasReleased(golfui::FooterAction::Back)) {
     finish();
     return;
   }
-  const bool swapped = mappedInput.isNavDirectionSwapped();
-  if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
-    changeTab(golfFrontNavDelta(swapped, true));
-    return;
-  }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
-    changeTab(golfFrontNavDelta(swapped, false));
+  const int frontDelta = input.releasedFrontNavigationDelta();
+  if (frontDelta != 0) {
+    changeTab(frontDelta);
     return;
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {
     changeTab(-1);
     return;
   }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Down) ||
-      mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Down) || input.wasReleased(golfui::FooterAction::Confirm)) {
     changeTab(1);
     return;
   }
@@ -123,7 +121,7 @@ void GolfCardActivity::loop() {
 
 void GolfCardActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto chrome = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding);
+  const auto chrome = golfui::chromeLayout(renderer, mappedInput, screen.frame().safeRect(), metrics.topPadding);
   screen.setContentMargin(chrome.contentMargins);
   const int16_t fontMinimum = screen.target().lineHeight(screen.theme().smallText.font);
   const auto layout = golfui::makeCardLayout(screen.body(), round.holeCount == 18, metrics.tabBarHeight,
@@ -269,15 +267,15 @@ void GolfCardActivity::drawPenaltyMarkers() const {
 
 void GolfCardActivity::drawFooter() const {
   const bool hasTabs = round.holeCount == 18;
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", hasTabs ? tr(STR_GOLF_PREVIOUS_TAB) : "",
-                                            hasTabs ? tr(STR_GOLF_NEXT_TAB) : "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  golfui::drawFooter(
+      renderer, mappedInput,
+      {tr(STR_BACK), "", hasTabs ? tr(STR_GOLF_PREVIOUS_TAB) : "", hasTabs ? tr(STR_GOLF_NEXT_TAB) : ""});
 }
 
 void GolfCardActivity::render(RenderLock&&) {
   renderer.clearScreen();
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding);
+  const auto layout = golfui::chromeLayout(renderer, mappedInput, metrics.topPadding);
   golfui::drawHeader(renderer, layout.header, tr(STR_GOLF_APP_TITLE), round.courseName);
   renderUi();
   drawPenaltyMarkers();

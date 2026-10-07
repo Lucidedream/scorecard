@@ -267,21 +267,23 @@ void GolfHomeActivity::moveSelection(const int delta) {
 }
 
 void GolfHomeActivity::loop() {
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  const char* confirm = resumeFocused                                     ? tr(STR_GOLF_OPEN)
+                        : destinations[selected] == Destination::NewRound ? tr(STR_GOLF_START)
+                                                                          : tr(STR_GOLF_OPEN);
+  golfui::FooterInput input(mappedInput,
+                            {tr(STR_BACK), confirm, destinationCount > 1 ? tr(STR_GOLF_BUTTON_PREVIOUS) : "",
+                             destinationCount > 1 ? tr(STR_GOLF_BUTTON_NEXT) : ""});
+  if (input.wasReleased(golfui::FooterAction::Back)) {
     onGoHome();
     return;
   }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (input.wasReleased(golfui::FooterAction::Confirm)) {
     activateSelected();
     return;
   }
-  const bool swapped = mappedInput.isNavDirectionSwapped();
-  if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
-    moveSelection(golfFrontNavDelta(swapped, true));
-    return;
-  }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
-    moveSelection(golfFrontNavDelta(swapped, false));
+  const int frontDelta = input.releasedFrontNavigationDelta();
+  if (frontDelta != 0) {
+    moveSelection(frontDelta);
     return;
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {
@@ -319,7 +321,7 @@ void GolfHomeActivity::actionTrampoline(const fui::ActionEvent& event, void* use
 
 void GolfHomeActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding);
+  const auto layout = golfui::chromeLayout(renderer, mappedInput, screen.frame().safeRect(), metrics.topPadding);
   screen.setContentMargin(layout.contentMargins);
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
   // Four tiles across 480 px leave ~118 px each; the row is a little shorter
@@ -426,16 +428,15 @@ void GolfHomeActivity::drawFooter() const {
   const char* confirm = resumeFocused                                     ? tr(STR_GOLF_OPEN)
                         : destinations[selected] == Destination::NewRound ? tr(STR_GOLF_START)
                                                                           : tr(STR_GOLF_OPEN);
-  const auto labels =
-      mappedInput.mapLabels(tr(STR_BACK), confirm, destinationCount > 1 ? tr(STR_GOLF_BUTTON_PREVIOUS) : "",
-                            destinationCount > 1 ? tr(STR_GOLF_BUTTON_NEXT) : "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  golfui::drawFooter(renderer, mappedInput,
+                     {tr(STR_BACK), confirm, destinationCount > 1 ? tr(STR_GOLF_BUTTON_PREVIOUS) : "",
+                      destinationCount > 1 ? tr(STR_GOLF_BUTTON_NEXT) : ""});
 }
 
 void GolfHomeActivity::render(RenderLock&&) {
   renderer.clearScreen();
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding);
+  const auto layout = golfui::chromeLayout(renderer, mappedInput, metrics.topPadding);
   golfui::drawHeader(renderer, layout.header, headerTitle());
   renderUi();
   drawFooter();

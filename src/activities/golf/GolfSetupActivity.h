@@ -1,12 +1,12 @@
 #pragma once
 
-#include "activities/UiListActivity.h"
+#include "GolfUiListActivity.h"
 #include "golf/CourseStore.h"
 
-class GolfSetupActivity final : public UiListActivity {
+class GolfSetupActivity final : public GolfUiListActivity {
  public:
   GolfSetupActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : UiListActivity("GolfSetup", renderer, mappedInput) {}
+      : GolfUiListActivity("GolfSetup", renderer, mappedInput) {}
 
   void onEnter() override;
 

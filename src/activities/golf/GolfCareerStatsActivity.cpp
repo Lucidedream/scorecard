@@ -164,19 +164,16 @@ void GolfCareerStatsActivity::page(const int direction) {
 }
 
 void GolfCareerStatsActivity::loop() {
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
-      mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  const char* more = (!scanning && overflow) ? tr(STR_GOLF_FOOTER_MORE) : "";
+  golfui::FooterInput input(mappedInput, {tr(STR_BACK), "", "", more});
+  if (input.wasReleased(golfui::FooterAction::Back) || input.wasReleased(golfui::FooterAction::Confirm)) {
     finish();
     return;
   }
   if (scanning) return;
-  const bool swapped = mappedInput.isNavDirectionSwapped();
-  if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
-    page(golfFrontNavDelta(swapped, true));
-    return;
-  }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
-    page(golfFrontNavDelta(swapped, false));
+  const int frontDelta = input.releasedFrontNavigationDelta();
+  if (frontDelta != 0) {
+    page(frontDelta);
     return;
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::PageBack)) {
@@ -404,8 +401,7 @@ void GolfCareerStatsActivity::drawBodyRow(const fui::Rect rect, const RowSpec& r
 
 void GolfCareerStatsActivity::drawFooter() const {
   const char* more = (!scanning && overflow) ? tr(STR_GOLF_FOOTER_MORE) : "";
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", more);
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  golfui::drawFooter(renderer, mappedInput, {tr(STR_BACK), "", "", more});
 }
 
 void GolfCareerStatsActivity::finishPaint() {
@@ -416,7 +412,7 @@ void GolfCareerStatsActivity::finishPaint() {
 void GolfCareerStatsActivity::render(RenderLock&&) {
   renderer.clearScreen();
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto chrome = golfui::chromeLayout(renderer, metrics.topPadding);
+  const auto chrome = golfui::chromeLayout(renderer, mappedInput, metrics.topPadding);
   golfui::drawHeader(renderer, chrome.header, playerLabel);
 
   const fui::Rect body = chrome.body;

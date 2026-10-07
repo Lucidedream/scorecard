@@ -298,12 +298,10 @@ bool GolfScoringActivity::powerCyclesField() const {
   return cycles;
 }
 
-bool GolfScoringActivity::confirmFromFrontButton() const {
-  // Power is deliberately overloaded as the field-cycle button on this
-  // screen (§12.6); exclude its combined Confirm event so one click cannot
-  // also activate the penalty picker.
-  return golfConfirmFromFrontButton(mappedInput.wasReleased(MappedInputManager::Button::Confirm),
-                                    mappedInput.wasReleased(MappedInputManager::Button::Power));
+golfui::FooterLabels GolfScoringActivity::footerLabels() const {
+  const char* confirm = tr(STR_GOLF_FOOTER_FIELD);
+  if (powerCyclesField()) confirm = markSheetOpensOnFocusedField() ? tr(STR_GOLF_MARK) : "";
+  return {tr(STR_GOLF_FOOTER_MENU), confirm, tr(STR_GOLF_FOOTER_PREVIOUS), tr(STR_GOLF_FOOTER_NEXT)};
 }
 
 void GolfScoringActivity::openPenaltyPicker() {
@@ -329,7 +327,8 @@ void GolfScoringActivity::closePenaltyPicker() {
 }
 
 void GolfScoringActivity::handlePickerInput() {
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  golfui::FooterInput input(mappedInput, {tr(STR_GOLF_FOOTER_BACK), tr(STR_GOLF_FOOTER_CONFIRM), "", ""});
+  if (input.wasReleased(golfui::FooterAction::Back)) {
     closePenaltyPicker();
     return;
   }
@@ -359,17 +358,52 @@ void GolfScoringActivity::handlePickerInput() {
   // Confirm applies the highlighted row. A bare Power release also confirms:
   // the scoring screen's §12.6 reservation of Power for field-cycling does not
   // apply once the sheet is open (loop() routes here and returns first).
-  if (confirmFromFrontButton() || mappedInput.wasReleased(MappedInputManager::Button::Power)) {
-    if (pickerRow == PICKER_ROW_THIRD) {
-      if (pickerThirdRowIsBunker()) {
-        toggleGreensideBunker();
-      } else {
-        toggleFairwayHit();
-      }
-    } else {
-      applyPenaltyPick();
-    }
+  if (golfConfirmFromFrontButton(input.wasReleased(golfui::FooterAction::Confirm),
+                                 mappedInput.wasReleased(MappedInputManager::Button::Power))) {
+    applyPickerSelection();
     return;
+  }
+
+  if (!input.hasTap()) return;
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const auto chrome = golfui::chromeLayout(renderer, mappedInput, 0);
+  const GolfRound& round = GOLF_ROUND_STORE.getRound();
+  const GolfPlayerScore& score = round.players[round.currentPlayer].score;
+  const auto layout =
+      golfui::makeScoringLayout(chrome.safe, metrics.topPadding, static_cast<uint8_t>(focusedField),
+                                score.penaltyCount[round.currentHole] > 0, renderer.getLineHeight(UI_10_FONT_ID));
+  const int noticeHeight = pickerHoleFull ? SHEET_NOTICE_H : 0;
+  const int sheetHeight =
+      golfui::clampValue(SHEET_TITLE_H + noticeHeight + SHEET_OPTION_H * rowCount, 0, layout.safe.height);
+  const int sheetTop = layout.safe.y + layout.safe.height - sheetHeight;
+  const freeink::ui::Point tap = input.tapPoint();
+  const freeink::ui::Rect sheet{layout.safe.x, static_cast<int16_t>(sheetTop), layout.safe.width,
+                                static_cast<int16_t>(sheetHeight)};
+  if (tap.x < sheet.x || tap.x >= sheet.right() || tap.y < sheet.y || tap.y >= sheet.bottom()) {
+    closePenaltyPicker();
+    return;
+  }
+  const int optionTop =
+      sheetTop + golfui::clampValue(SHEET_TITLE_H, 0, sheetHeight) +
+      golfui::clampValue(noticeHeight, 0, sheetHeight - golfui::clampValue(SHEET_TITLE_H, 0, sheetHeight));
+  if (tap.y < optionTop || optionTop >= sheet.bottom()) return;
+  {
+    RenderLock lock(*this);
+    pickerRow = static_cast<uint8_t>(golfui::clampValue(
+        static_cast<int32_t>(tap.y - optionTop) * rowCount / (sheet.bottom() - optionTop), 0, rowCount - 1));
+  }
+  applyPickerSelection();
+}
+
+void GolfScoringActivity::applyPickerSelection() {
+  if (pickerRow == PICKER_ROW_THIRD) {
+    if (pickerThirdRowIsBunker()) {
+      toggleGreensideBunker();
+    } else {
+      toggleFairwayHit();
+    }
+  } else {
+    applyPenaltyPick();
   }
 }
 
@@ -555,21 +589,18 @@ void GolfScoringActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasLongPressed(MappedInputManager::Button::Back, MAP_LONGPRESS_MS)) {
+  golfui::FooterInput input(mappedInput, footerLabels());
+  if (input.wasLongPressed(golfui::FooterAction::Back, MAP_LONGPRESS_MS)) {
     openCourseMap();
     return;
   }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  if (input.wasReleased(golfui::FooterAction::Back)) {
     openRoundMenu();
     return;
   }
-  const bool swapped = mappedInput.isNavDirectionSwapped();
-  if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
-    changeTurn(golfFrontNavDelta(swapped, true) > 0);
-    return;
-  }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
-    changeTurn(golfFrontNavDelta(swapped, false) > 0);
+  const int frontDelta = input.releasedFrontNavigationDelta();
+  if (frontDelta != 0) {
+    changeTurn(frontDelta > 0);
     return;
   }
 
@@ -585,19 +616,42 @@ void GolfScoringActivity::loop() {
       handleConfirm();
       return;
     }
-    if (confirmFromFrontButton()) {
+    if (golfConfirmFromFrontButton(input.wasReleased(golfui::FooterAction::Confirm),
+                                   mappedInput.wasReleased(MappedInputManager::Button::Power))) {
       // No-op on Putts: the sheet has nothing to offer there (§31.2). Power
       // still cycles and the rocker still counts, so §12.6 holds.
       if (markSheetOpensOnFocusedField()) openPenaltyPicker();
       return;
     }
   } else {
-    if (mappedInput.wasLongPressed(MappedInputManager::Button::Confirm, PICKER_LONGPRESS_MS)) {
+    if (input.wasLongPressed(golfui::FooterAction::Confirm, PICKER_LONGPRESS_MS)) {
       if (markSheetOpensOnFocusedField()) openPenaltyPicker();
       return;
     }
-    if (confirmFromFrontButton()) {
+    if (golfConfirmFromFrontButton(input.wasReleased(golfui::FooterAction::Confirm),
+                                   mappedInput.wasReleased(MappedInputManager::Button::Power))) {
       handleConfirm();
+      return;
+    }
+  }
+
+  if (input.hasTap()) {
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    const auto chrome = golfui::chromeLayout(renderer, mappedInput, 0);
+    const GolfRound& round = GOLF_ROUND_STORE.getRound();
+    const GolfPlayerScore& score = round.players[round.currentPlayer].score;
+    const auto layout =
+        golfui::makeScoringLayout(chrome.safe, metrics.topPadding, static_cast<uint8_t>(focusedField),
+                                  score.penaltyCount[round.currentHole] > 0, renderer.getLineHeight(UI_10_FONT_ID));
+    for (uint8_t counter = 0; counter < 3; ++counter) {
+      if (!input.tapIn(layout.counters[counter])) continue;
+      if (focusedField != static_cast<GolfField>(counter)) {
+        {
+          RenderLock lock(*this);
+          focusedField = static_cast<GolfField>(counter);
+        }
+        requestUpdate();
+      }
       return;
     }
   }
@@ -884,15 +938,7 @@ void GolfScoringActivity::drawNineStrip(const golfui::ScoringLayout& layout) con
   }
 }
 
-void GolfScoringActivity::drawFooter() const {
-  // Cell 2 (Confirm): FIELD when Power cannot cycle (Confirm carries that role);
-  // otherwise MARK where the Mark sheet can open, and blank on Putts (§31.2).
-  const char* cell2 = tr(STR_GOLF_FOOTER_FIELD);
-  if (powerCyclesField()) cell2 = markSheetOpensOnFocusedField() ? tr(STR_GOLF_MARK) : "";
-  const auto labels =
-      mappedInput.mapLabels(tr(STR_GOLF_FOOTER_MENU), cell2, tr(STR_GOLF_FOOTER_PREVIOUS), tr(STR_GOLF_FOOTER_NEXT));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-}
+void GolfScoringActivity::drawFooter() const { golfui::drawFooter(renderer, mappedInput, footerLabels()); }
 
 void GolfScoringActivity::drawPenaltyPicker(const freeink::ui::Rect safe) const {
   const GolfRound& round = GOLF_ROUND_STORE.getRound();
@@ -980,14 +1026,13 @@ void GolfScoringActivity::drawPenaltyPicker(const freeink::ui::Rect safe) const 
 
     renderer.drawLine(safe.x, rowBottom - 1, safe.x + safe.width - 1, rowBottom - 1, true);
   }
-  const auto labels = mappedInput.mapLabels(tr(STR_GOLF_FOOTER_BACK), tr(STR_GOLF_FOOTER_CONFIRM), "", "");
-  GUI.drawButtonHintsTwo(renderer, labels.btn1, labels.btn2);
+  golfui::drawFooterTwo(renderer, mappedInput, tr(STR_GOLF_FOOTER_BACK), tr(STR_GOLF_FOOTER_CONFIRM));
 }
 
 void GolfScoringActivity::render(RenderLock&&) {
   renderer.clearScreen();
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto chrome = golfui::chromeLayout(renderer, 0);
+  const auto chrome = golfui::chromeLayout(renderer, mappedInput, 0);
   const GolfRound& round = GOLF_ROUND_STORE.getRound();
   const GolfPlayerScore& score = round.players[round.currentPlayer].score;
   const bool hasPenalty = score.penaltyCount[round.currentHole] > 0;

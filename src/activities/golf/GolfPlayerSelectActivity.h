@@ -4,14 +4,14 @@
 #include <cstdint>
 
 #include "GolfReviewFormat.h"
-#include "activities/UiListActivity.h"
+#include "GolfUiListActivity.h"
 #include "golf/GolfHistory.h"
 #include "golf/GolfIndexMigrate.h"
 
-class GolfPlayerSelectActivity final : public UiListActivity {
+class GolfPlayerSelectActivity final : public GolfUiListActivity {
  public:
   GolfPlayerSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : UiListActivity("GolfPlayerSel", renderer, mappedInput) {}
+      : GolfUiListActivity("GolfPlayerSel", renderer, mappedInput) {}
 
   void onEnter() override;
   void loop() override;
@@ -39,7 +39,7 @@ class GolfPlayerSelectActivity final : public UiListActivity {
   void activateIndex(int index) override;
   void onRowAction(const freeink::ui::ActionEvent& event) override;
   void drawChrome() override;
-  void drawFooter() override;
+  golfui::FooterLabels golfFooterLabels() const override;
   const char* headerTitle() const override;
 
   void scanPlayers();

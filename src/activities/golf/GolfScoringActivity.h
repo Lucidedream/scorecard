@@ -82,11 +82,12 @@ class GolfScoringActivity final : public Activity, protected UiAppHost {
   // True while Power is the field-cycle button; false leaves that role on
   // Confirm and moves the picker to a Confirm long-press (§12.6).
   bool powerCyclesField() const;
-  bool confirmFromFrontButton() const;
+  golfui::FooterLabels footerLabels() const;
 
   void openPenaltyPicker();
   void closePenaltyPicker();
   void handlePickerInput();
+  void applyPickerSelection();
   void applyPenaltyPick();
 
   // Writes the space-separated marker sequence for a hole ("H OB"), in event

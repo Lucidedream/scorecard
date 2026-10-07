@@ -31,7 +31,7 @@ void formatToPar(const int16_t value, char* output, const size_t size) {
 
 GolfHistoryActivity::GolfHistoryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                          const uint8_t selectedPlayerSlot, const char* selectedFallbackName)
-    : UiListActivity("GolfHistory", renderer, mappedInput), playerSlot(selectedPlayerSlot) {
+    : GolfUiListActivity("GolfHistory", renderer, mappedInput), playerSlot(selectedPlayerSlot) {
   const char* source = selectedFallbackName;
   if (source == nullptr && playerSlot < GolfRound::MAX_PLAYERS) source = GOLF_DEFAULT_PLAYER_NAMES[playerSlot];
   if (source != nullptr) snprintf(fallbackName, sizeof(fallbackName), "%s", source);
@@ -174,7 +174,7 @@ void GolfHistoryActivity::activateIndex(const int index) {
 
 void GolfHistoryActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding);
+  const auto layout = golfui::chromeLayout(renderer, mappedInput, screen.frame().safeRect(), metrics.topPadding);
   screen.setContentMargin(layout.contentMargins);
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
   if (activeState->loadError || activeState->history.count() == 0) {
@@ -218,13 +218,12 @@ void GolfHistoryActivity::buildScreen(UiScreen& screen) {
 
 void GolfHistoryActivity::drawChrome() {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding);
+  const auto layout = golfui::chromeLayout(renderer, mappedInput, metrics.topPadding);
   golfui::drawHeader(renderer, layout.header, headerTitle(), playerLabel);
 }
 
 void GolfHistoryActivity::drawFooter() {
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  golfui::drawFooter(renderer, mappedInput, {tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN)});
 }
 
 #endif

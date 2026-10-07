@@ -23,7 +23,9 @@ namespace fui = freeink::ui;
 GolfHistoryRoundMenuActivity::GolfHistoryRoundMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                            const GolfRound& archivedRound, const char* filename,
                                                            const uint8_t selectedPlayerSlot)
-    : UiListActivity("GolfHistoryMenu", renderer, mappedInput), round(archivedRound), playerSlot(selectedPlayerSlot) {
+    : GolfUiListActivity("GolfHistoryMenu", renderer, mappedInput),
+      round(archivedRound),
+      playerSlot(selectedPlayerSlot) {
   if (filename != nullptr) snprintf(archiveFilename, sizeof(archiveFilename), "%s", filename);
 }
 
@@ -141,7 +143,7 @@ void GolfHistoryRoundMenuActivity::completeDelete(const bool confirmed) {
 
 void GolfHistoryRoundMenuActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto chrome = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding);
+  const auto chrome = golfui::chromeLayout(renderer, mappedInput, screen.frame().safeRect(), metrics.topPadding);
   screen.setContentMargin(chrome.contentMargins);
 
   const int16_t smallLine = screen.target().lineHeight(screen.theme().smallText.font);
@@ -176,13 +178,12 @@ void GolfHistoryRoundMenuActivity::buildScreen(UiScreen& screen) {
 
 void GolfHistoryRoundMenuActivity::drawChrome() {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding);
+  const auto layout = golfui::chromeLayout(renderer, mappedInput, metrics.topPadding);
   golfui::drawHeader(renderer, layout.header, round.courseName, status);
 }
 
 void GolfHistoryRoundMenuActivity::drawFooter() {
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  golfui::drawFooter(renderer, mappedInput, {tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN)});
 }
 
 #endif

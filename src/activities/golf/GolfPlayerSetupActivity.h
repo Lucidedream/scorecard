@@ -5,10 +5,10 @@
 #include <string_view>
 
 #include "GolfReviewFormat.h"
-#include "activities/UiListActivity.h"
+#include "GolfUiListActivity.h"
 #include "golf/CourseStore.h"
 
-class GolfPlayerSetupActivity final : public UiListActivity {
+class GolfPlayerSetupActivity final : public GolfUiListActivity {
  public:
   GolfPlayerSetupActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const GolfCourseFile& courseFile,
                           const GolfCourse& course);
@@ -42,11 +42,13 @@ class GolfPlayerSetupActivity final : public UiListActivity {
   void activateIndex(int index) override;
   void onRowAction(const freeink::ui::ActionEvent& event) override;
   void onBackButton() override;
-  bool handleButtons() override;
+  golfui::FooterLabels golfFooterLabels() const override;
+  void onFooterConfirm() override;
+  void onFooterPrevious() override;
+  void onFooterNext() override;
   const char* headerTitle() const override;
   void navigateButtons() override;
   void drawChrome() override;
-  void drawFooter() override;
 
   void refreshPlayerRows();
   void initializeTeeRows();

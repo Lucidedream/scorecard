@@ -6,6 +6,7 @@
 #include <GfxRenderer.h>
 #include <HalGPIO.h>
 #include <HalPowerManager.h>
+#include <MappedInputManager.h>
 
 #include "CrossPointSettings.h"
 #include "components/UIScale.h"
@@ -16,10 +17,12 @@ namespace golfui {
 
 namespace {
 
-fui::Rect hintSafeRect(const GfxRenderer& renderer) {
+fui::Rect hintSafeRect(const GfxRenderer& renderer, const MappedInputManager& mappedInput) {
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  return fui::Rect{static_cast<int16_t>(safe.x), static_cast<int16_t>(safe.y), static_cast<int16_t>(safe.width),
+  fui::Rect result{static_cast<int16_t>(safe.x), static_cast<int16_t>(safe.y), static_cast<int16_t>(safe.width),
                    static_cast<int16_t>(safe.height)};
+  if (mappedInput.hasTouch()) result = reserveHintEdge(result, HintEdge::Bottom, GOLF_TOUCH_FOOTER_HEIGHT);
+  return result;
 }
 
 fui::Rect bezelSafeRect(const GfxRenderer& renderer) {
@@ -36,14 +39,106 @@ fui::Rect bezelSafeRect(const GfxRenderer& renderer) {
 
 }  // namespace
 
-ChromeLayout chromeLayout(const GfxRenderer& renderer, const fui::Rect frameSafe, const int topPadding,
-                          const fui::Insets bodyPadding) {
-  const fui::Rect hardwareSafe = intersect(bezelSafeRect(renderer), hintSafeRect(renderer));
+TouchFooterLayout touchFooterLayout(const GfxRenderer& renderer) {
+  return makeTouchFooterLayout(bezelSafeRect(renderer));
+}
+
+FooterInput::FooterInput(MappedInputManager& mappedInput, const FooterLabels labels) : mappedInput(mappedInput) {
+  if (!mappedInput.hasTouch()) return;
+  const TouchFooterLayout layout = touchFooterLayout(mappedInput.getRenderer());
+  int x = 0;
+  int y = 0;
+  if (mappedInput.wasScreenLongPress(x, y)) {
+    longPressAction = touchFooterActionAt(layout, labels, x, y);
+    return;
+  }
+  if (mappedInput.wasScreenTapped(x, y)) {
+    tapped = true;
+    tapX = static_cast<int16_t>(x);
+    tapY = static_cast<int16_t>(y);
+    tapAction = touchFooterActionAt(layout, labels, x, y);
+  }
+}
+
+bool FooterInput::wasReleased(const FooterAction action) const {
+  MappedInputManager::Button button = MappedInputManager::Button::Back;
+  switch (action) {
+    case FooterAction::Confirm:
+      button = MappedInputManager::Button::Confirm;
+      break;
+    case FooterAction::Previous:
+      button = MappedInputManager::Button::Left;
+      break;
+    case FooterAction::Next:
+      button = MappedInputManager::Button::Right;
+      break;
+    case FooterAction::Back:
+    case FooterAction::None:
+    default:
+      break;
+  }
+  return mappedInput.wasReleased(button) || tapAction == action;
+}
+
+bool FooterInput::wasLongPressed(const FooterAction action, const unsigned long thresholdMs) const {
+  const MappedInputManager::Button button =
+      action == FooterAction::Confirm ? MappedInputManager::Button::Confirm : MappedInputManager::Button::Back;
+  return mappedInput.wasLongPressed(button, thresholdMs) || longPressAction == action;
+}
+
+bool FooterInput::tapIn(const fui::Rect rect) const {
+  return tapped && tapX >= rect.x && tapX < rect.x + rect.width && tapY >= rect.y && tapY < rect.y + rect.height;
+}
+
+int FooterInput::releasedFrontNavigationDelta() const {
+  if (tapAction == FooterAction::Previous) return -1;
+  if (tapAction == FooterAction::Next) return 1;
+  const bool swapped = mappedInput.isNavDirectionSwapped();
+  if (mappedInput.wasReleased(MappedInputManager::Button::Left)) return swapped ? 1 : -1;
+  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) return swapped ? -1 : 1;
+  return 0;
+}
+
+void drawFooter(GfxRenderer& renderer, MappedInputManager& mappedInput, const FooterLabels labels) {
+  if (!mappedInput.hasTouch()) {
+    const auto mapped = mappedInput.mapLabels(labels.back, labels.confirm, labels.previous, labels.next);
+    GUI.drawButtonHints(renderer, mapped.btn1, mapped.btn2, mapped.btn3, mapped.btn4);
+    return;
+  }
+
+  const TouchFooterLayout layout = touchFooterLayout(renderer);
+  renderer.fillRect(layout.footer.x, layout.footer.y, layout.footer.width, layout.footer.height, false);
+  constexpr FooterAction actions[4] = {FooterAction::Back, FooterAction::Confirm, FooterAction::Previous,
+                                       FooterAction::Next};
+  for (uint8_t index = 0; index < 4; ++index) {
+    const char* label = footerLabel(labels, actions[index]);
+    if (label == nullptr || label[0] == '\0') continue;
+    const fui::Rect cell = layout.cells[index];
+    renderer.drawRect(cell.x, cell.y, cell.width, cell.height, true);
+    GUI.drawHintLabel(renderer, UI_10_FONT_ID, label, cell.x, cell.width, cell.y, cell.height,
+                      (cell.height - renderer.getLineHeight(UI_10_FONT_ID)) / 2);
+  }
+}
+
+void drawFooterTwo(GfxRenderer& renderer, MappedInputManager& mappedInput, const char* back, const char* confirm) {
+  if (mappedInput.hasTouch()) {
+    drawFooter(renderer, mappedInput, {back, confirm, "", ""});
+    return;
+  }
+  const auto mapped = mappedInput.mapLabels(back, confirm, "", "");
+  GUI.drawButtonHintsTwo(renderer, mapped.btn1, mapped.btn2);
+}
+
+ChromeLayout chromeLayout(const GfxRenderer& renderer, const MappedInputManager& mappedInput, const fui::Rect frameSafe,
+                          const int topPadding, const fui::Insets bodyPadding) {
+  const fui::Rect hardwareSafe = intersect(bezelSafeRect(renderer), hintSafeRect(renderer, mappedInput));
   return makeChromeLayout(frameSafe, hardwareSafe, topPadding, GOLF_HEADER_HEIGHT, bodyPadding);
 }
 
-ChromeLayout chromeLayout(const GfxRenderer& renderer, const int topPadding, const fui::Insets bodyPadding) {
-  return makeChromeLayout(bezelSafeRect(renderer), hintSafeRect(renderer), topPadding, GOLF_HEADER_HEIGHT, bodyPadding);
+ChromeLayout chromeLayout(const GfxRenderer& renderer, const MappedInputManager& mappedInput, const int topPadding,
+                          const fui::Insets bodyPadding) {
+  return makeChromeLayout(bezelSafeRect(renderer), hintSafeRect(renderer, mappedInput), topPadding, GOLF_HEADER_HEIGHT,
+                          bodyPadding);
 }
 
 void drawHeader(const GfxRenderer& renderer, const fui::Rect rect, const char* title, const char* rightLabel) {

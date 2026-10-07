@@ -145,11 +145,13 @@ void GolfRoundExportActivity::onExit() {
 }
 
 void GolfRoundExportActivity::loop() {
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  const char* confirm = errorMessage ? "" : showReport ? tr(STR_GOLF_EXPORT_PREVIOUS) : tr(STR_GOLF_EXPORT_NEXT);
+  golfui::FooterInput input(mappedInput, {tr(STR_GOLF_EXPORT_DONE), confirm, "", ""});
+  if (input.wasReleased(golfui::FooterAction::Back)) {
     finish();
     return;
   }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (input.wasReleased(golfui::FooterAction::Confirm)) {
     if (errorMessage) {
       finish();
       return;
@@ -197,7 +199,7 @@ void GolfRoundExportActivity::screenTrampoline(UiScreen& screen, void* user) {
 
 void GolfRoundExportActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto chrome = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding);
+  const auto chrome = golfui::chromeLayout(renderer, mappedInput, screen.frame().safeRect(), metrics.topPadding);
   screen.setContentMargin(chrome.contentMargins);
   auto style = screen.theme().smallText;
   style.align = fui::TextAlign::Center;
@@ -240,18 +242,18 @@ __attribute__((noinline)) void GolfRoundExportActivity::drawQr(UiScreen& screen)
 
 void GolfRoundExportActivity::render(RenderLock&&) {
   renderer.clearScreen();
-  const auto chrome = golfui::chromeLayout(renderer, UITheme::getInstance().getMetrics().topPadding);
+  const auto chrome = golfui::chromeLayout(renderer, mappedInput, UITheme::getInstance().getMetrics().topPadding);
   golfui::drawHeader(renderer, chrome.header, tr(STR_GOLF_EXPORT_SEND),
                      data.detailed && data.playerSlot < GolfRound::MAX_PLAYERS
                          ? data.round.players[data.playerSlot].name
                          : data.summary.playerName);
   renderUi();
-  const auto labels = mappedInput.mapLabels(tr(STR_GOLF_EXPORT_DONE),
-                                            errorMessage ? ""
-                                            : showReport ? tr(STR_GOLF_EXPORT_PREVIOUS)
-                                                         : tr(STR_GOLF_EXPORT_NEXT),
-                                            "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  golfui::drawFooter(renderer, mappedInput,
+                     {tr(STR_GOLF_EXPORT_DONE),
+                      errorMessage ? ""
+                      : showReport ? tr(STR_GOLF_EXPORT_PREVIOUS)
+                                   : tr(STR_GOLF_EXPORT_NEXT),
+                      "", ""});
   renderer.displayBuffer(HalDisplay::FULL_REFRESH);
 }
 

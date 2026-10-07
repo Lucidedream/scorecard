@@ -1,10 +1,10 @@
 #pragma once
 
-#include "activities/UiListActivity.h"
+#include "GolfUiListActivity.h"
 #include "golf/GolfPaths.h"
 #include "golf/GolfRound.h"
 
-class GolfHistoryRoundMenuActivity final : public UiListActivity {
+class GolfHistoryRoundMenuActivity final : public GolfUiListActivity {
  public:
   GolfHistoryRoundMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const GolfRound& round,
                                const char* filename, uint8_t playerSlot);

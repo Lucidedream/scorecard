@@ -92,17 +92,16 @@ void GolfTipNoteActivity::turnPage(const int delta) {
 }
 
 void GolfTipNoteActivity::loop() {
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  const bool paged = !loadError_ && section_ && sectionCount_ > 1 && section_->found;
+  golfui::FooterInput input(mappedInput, {tr(STR_BACK), "", paged ? tr(STR_GOLF_BUTTON_PREVIOUS) : "",
+                                          paged ? tr(STR_GOLF_BUTTON_NEXT) : ""});
+  if (input.wasReleased(golfui::FooterAction::Back)) {
     finish();
     return;
   }
-  const bool swapped = mappedInput.isNavDirectionSwapped();
-  if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
-    turnPage(golfFrontNavDelta(swapped, true));
-    return;
-  }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
-    turnPage(golfFrontNavDelta(swapped, false));
+  const int frontDelta = input.releasedFrontNavigationDelta();
+  if (frontDelta != 0) {
+    turnPage(frontDelta);
     return;
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::PageBack)) {
@@ -114,7 +113,8 @@ void GolfTipNoteActivity::loop() {
 
 void GolfTipNoteActivity::drawSection() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding, freeink::ui::Insets{10, 20, 8, 20});
+  const auto layout =
+      golfui::chromeLayout(renderer, mappedInput, metrics.topPadding, freeink::ui::Insets{10, 20, 8, 20});
   const int left = layout.body.x;
   const int width = layout.body.width;
   const int bottom = layout.body.y + layout.body.height;
@@ -196,7 +196,7 @@ void GolfTipNoteActivity::drawSection() const {
 
 void GolfTipNoteActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding);
+  const auto layout = golfui::chromeLayout(renderer, mappedInput, metrics.topPadding);
   renderer.clearScreen();
   golfui::drawHeader(renderer, layout.header, title_);
 
@@ -215,9 +215,9 @@ void GolfTipNoteActivity::render(RenderLock&&) {
   }
 
   const bool paged = !loadError_ && section_ && sectionCount_ > 1 && section_->found;
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", paged ? tr(STR_GOLF_BUTTON_PREVIOUS) : "",
-                                            paged ? tr(STR_GOLF_BUTTON_NEXT) : "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  golfui::drawFooter(
+      renderer, mappedInput,
+      {tr(STR_BACK), "", paged ? tr(STR_GOLF_BUTTON_PREVIOUS) : "", paged ? tr(STR_GOLF_BUTTON_NEXT) : ""});
   renderer.displayBuffer();
 }
 

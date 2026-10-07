@@ -3,12 +3,12 @@
 #include <memory>
 
 #include "GolfReviewFormat.h"
-#include "activities/UiListActivity.h"
+#include "GolfUiListActivity.h"
 #include "golf/GolfHistory.h"
 #include "golf/GolfIndexMigrate.h"
 #include "golf/GolfRound.h"
 
-class GolfHistoryActivity final : public UiListActivity {
+class GolfHistoryActivity final : public GolfUiListActivity {
  public:
   GolfHistoryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, uint8_t playerSlot,
                       const char* fallbackName);

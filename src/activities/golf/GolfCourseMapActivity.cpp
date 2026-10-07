@@ -33,12 +33,13 @@ void GolfCourseMapActivity::onExit() {
 }
 
 void GolfCourseMapActivity::loop() {
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) finish();
+  golfui::FooterInput input(mappedInput, {tr(STR_GOLF_FOOTER_BACK), "", "", ""});
+  if (input.wasReleased(golfui::FooterAction::Back)) finish();
 }
 
 void GolfCourseMapActivity::drawChrome(const char* message) const {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding);
+  const auto layout = golfui::chromeLayout(renderer, mappedInput, metrics.topPadding);
   char title[32];
   snprintf(title, sizeof(title), tr(STR_GOLF_MAP_TITLE_FORMAT), static_cast<unsigned>(holeIndex + 1));
   golfui::drawHeader(renderer, layout.header, title);
@@ -47,8 +48,7 @@ void GolfCourseMapActivity::drawChrome(const char* message) const {
         renderer, Rect{layout.body.x, layout.body.y, layout.body.width, layout.body.height}, UI_10_FONT_ID, message, 3,
         true, EpdFontFamily::REGULAR, UITheme::TextVerticalAlignment::CENTER);
   }
-  const auto labels = mappedInput.mapLabels(tr(STR_GOLF_FOOTER_BACK), "", "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, "", "", "");
+  golfui::drawFooter(renderer, mappedInput, {tr(STR_GOLF_FOOTER_BACK), "", "", ""});
 }
 
 void GolfCourseMapActivity::renderMissing() const {
@@ -71,7 +71,7 @@ void GolfCourseMapActivity::loadAndRender() {
   }
 
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding);
+  const auto layout = golfui::chromeLayout(renderer, mappedInput, metrics.topPadding);
   renderer.clearScreen();
   drawChrome();
 

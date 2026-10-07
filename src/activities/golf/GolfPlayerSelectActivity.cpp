@@ -124,7 +124,7 @@ const char* GolfPlayerSelectActivity::headerTitle() const { return tr(STR_GOLF_H
 
 void GolfPlayerSelectActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding);
+  const auto layout = golfui::chromeLayout(renderer, mappedInput, screen.frame().safeRect(), metrics.topPadding);
   screen.setContentMargin(layout.contentMargins);
   if (refreshPending.load(std::memory_order_acquire)) {
     screen.centeredText(tr(STR_LOADING));
@@ -150,14 +150,13 @@ void GolfPlayerSelectActivity::buildScreen(UiScreen& screen) {
 
 void GolfPlayerSelectActivity::drawChrome() {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding);
+  const auto layout = golfui::chromeLayout(renderer, mappedInput, metrics.topPadding);
   golfui::drawHeader(renderer, layout.header, headerTitle());
 }
 
-void GolfPlayerSelectActivity::drawFooter() {
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), rowCount > 0 ? tr(STR_SELECT) : "",
-                                            rowCount > 1 ? tr(STR_DIR_UP) : "", rowCount > 1 ? tr(STR_DIR_DOWN) : "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+golfui::FooterLabels GolfPlayerSelectActivity::golfFooterLabels() const {
+  return {tr(STR_BACK), rowCount > 0 ? tr(STR_SELECT) : "", rowCount > 1 ? tr(STR_DIR_UP) : "",
+          rowCount > 1 ? tr(STR_DIR_DOWN) : ""};
 }
 
 #endif

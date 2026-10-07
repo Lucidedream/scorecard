@@ -2,17 +2,17 @@
 
 #if defined(CROSSPOINT_GOLF)
 
-#include "activities/UiListActivity.h"
+#include "GolfUiListActivity.h"
 #include "golf/CourseStore.h"
 
 // Read-only course browser entry point (CONTRACTS-V2 §30): one row per course *name*,
 // deduped across every file that shares it, so a course split into separate tee files
 // (docs/golf/examples/sanyang-suzhou.json / -white.json) shows once. Picking a row opens
 // GolfCourseMapBrowserActivity; unlike GolfSetupActivity, nothing here starts a round.
-class GolfCourseMapListActivity final : public UiListActivity {
+class GolfCourseMapListActivity final : public GolfUiListActivity {
  public:
   GolfCourseMapListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : UiListActivity("GolfCourseMapList", renderer, mappedInput) {}
+      : GolfUiListActivity("GolfCourseMapList", renderer, mappedInput) {}
 
   void onEnter() override;
 

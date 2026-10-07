@@ -25,7 +25,9 @@ static_assert(sizeof(GolfCourse) <= 256, "Tee selection must stay within the emb
 GolfPlayerSetupActivity::GolfPlayerSetupActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                  const GolfCourseFile& selectedCourseFile,
                                                  const GolfCourse& selectedCourse)
-    : UiListActivity("GolfPlayerSetup", renderer, mappedInput), courseFile(selectedCourseFile), course(selectedCourse) {
+    : GolfUiListActivity("GolfPlayerSetup", renderer, mappedInput),
+      courseFile(selectedCourseFile),
+      course(selectedCourse) {
   CourseStore::applyGolfCourse(course, draft, 0);
   CourseStore::initializeGolfPlayerSelection(courseFile, course, draft);
   golfSetTeeString(defaultTee, draft.players[0].tee);
@@ -264,21 +266,32 @@ void GolfPlayerSetupActivity::onBackButton() {
   openGolfSetup(activityManager, renderer, mappedInput);
 }
 
-bool GolfPlayerSetupActivity::handleButtons() {
-  if (phase != Phase::Count) return UiListActivity::handleButtons();
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    onBackButton();
-    return true;
-  }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+void GolfPlayerSetupActivity::onFooterConfirm() {
+  if (phase == Phase::Count) {
     switch (golfPlayerSetupNext(playerCount)) {
       case GolfPlayerSetupNext::ReviewRoster:
         showPlayers();
         break;
     }
-    return true;
+    return;
   }
-  return false;
+  GolfUiListActivity::onFooterConfirm();
+}
+
+void GolfPlayerSetupActivity::onFooterPrevious() {
+  if (phase == Phase::Count) {
+    stepPlayerCount(-1);
+    return;
+  }
+  GolfUiListActivity::onFooterPrevious();
+}
+
+void GolfPlayerSetupActivity::onFooterNext() {
+  if (phase == Phase::Count) {
+    stepPlayerCount(1);
+    return;
+  }
+  GolfUiListActivity::onFooterNext();
 }
 
 bool GolfPlayerSetupActivity::applyPlayerName(const uint8_t player, const std::string_view name) {
@@ -373,12 +386,12 @@ void GolfPlayerSetupActivity::completeRound() {
 
 void GolfPlayerSetupActivity::drawChrome() {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding);
+  const auto layout = golfui::chromeLayout(renderer, mappedInput, metrics.topPadding);
   golfui::drawHeader(renderer, layout.header, headerTitle(),
                      phase == Phase::TeeChoice ? tr(STR_GOLF_CHOOSE_TEE) : nullptr);
 }
 
-void GolfPlayerSetupActivity::drawFooter() {
+golfui::FooterLabels GolfPlayerSetupActivity::golfFooterLabels() const {
   const char* confirm = tr(STR_SELECT);
   const char* previous = tr(STR_DIR_UP);
   const char* next = tr(STR_DIR_DOWN);
@@ -389,13 +402,12 @@ void GolfPlayerSetupActivity::drawFooter() {
   } else if (phase == Phase::Players && nav.selected == playerCount) {
     confirm = tr(STR_GOLF_START);
   }
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirm, previous, next);
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  return {tr(STR_BACK), confirm, previous, next};
 }
 
 void GolfPlayerSetupActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding);
+  const auto layout = golfui::chromeLayout(renderer, mappedInput, screen.frame().safeRect(), metrics.topPadding);
   screen.setContentMargin(layout.contentMargins);
   if (phase == Phase::Count) {
     const fui::Rect body = screen.body();

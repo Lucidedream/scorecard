@@ -52,17 +52,15 @@ void GolfCourseMapBrowserActivity::changeHole(const int delta) {
 }
 
 void GolfCourseMapBrowserActivity::loop() {
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  golfui::FooterInput input(mappedInput,
+                            {tr(STR_BACK), tr(STR_GOLF_TEE), tr(STR_GOLF_BUTTON_PREVIOUS), tr(STR_GOLF_BUTTON_NEXT)});
+  if (input.wasReleased(golfui::FooterAction::Back)) {
     finish();
     return;
   }
-  const bool swapped = mappedInput.isNavDirectionSwapped();
-  if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
-    changeHole(golfFrontNavDelta(swapped, true));
-    return;
-  }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
-    changeHole(golfFrontNavDelta(swapped, false));
+  const int frontDelta = input.releasedFrontNavigationDelta();
+  if (frontDelta != 0) {
+    changeHole(frontDelta);
     return;
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::PageBack)) {
@@ -73,7 +71,7 @@ void GolfCourseMapBrowserActivity::loop() {
     changeHole(1);
     return;
   }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) openTeeInfo();
+  if (input.wasReleased(golfui::FooterAction::Confirm)) openTeeInfo();
 }
 
 void GolfCourseMapBrowserActivity::openTeeInfo() {
@@ -147,14 +145,13 @@ void GolfCourseMapBrowserActivity::renderMessage(const freeink::ui::Rect body, c
 }
 
 void GolfCourseMapBrowserActivity::drawFooter() const {
-  const auto labels =
-      mappedInput.mapLabels(tr(STR_BACK), tr(STR_GOLF_TEE), tr(STR_GOLF_BUTTON_PREVIOUS), tr(STR_GOLF_BUTTON_NEXT));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  golfui::drawFooter(renderer, mappedInput,
+                     {tr(STR_BACK), tr(STR_GOLF_TEE), tr(STR_GOLF_BUTTON_PREVIOUS), tr(STR_GOLF_BUTTON_NEXT)});
 }
 
 void GolfCourseMapBrowserActivity::renderHole() {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto chrome = golfui::chromeLayout(renderer, metrics.topPadding);
+  const auto chrome = golfui::chromeLayout(renderer, mappedInput, metrics.topPadding);
   const int16_t bandHeight = golfui::minValue(HOLE_BAND_HEIGHT, chrome.body.height);
   const freeink::ui::Rect holeBand{chrome.body.x, chrome.body.y, chrome.body.width, bandHeight};
   const freeink::ui::Rect imageBody{chrome.body.x, static_cast<int16_t>(chrome.body.y + bandHeight), chrome.body.width,

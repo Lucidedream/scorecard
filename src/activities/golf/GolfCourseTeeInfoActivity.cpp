@@ -48,25 +48,23 @@ void GolfCourseTeeInfoActivity::changeTab(const int delta) {
 }
 
 void GolfCourseTeeInfoActivity::loop() {
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  const bool hasTabs = holeCount == 18;
+  golfui::FooterInput input(
+      mappedInput, {tr(STR_BACK), "", hasTabs ? tr(STR_GOLF_PREVIOUS_TAB) : "", hasTabs ? tr(STR_GOLF_NEXT_TAB) : ""});
+  if (input.wasReleased(golfui::FooterAction::Back)) {
     finish();
     return;
   }
-  const bool swapped = mappedInput.isNavDirectionSwapped();
-  if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
-    changeTab(golfFrontNavDelta(swapped, true));
-    return;
-  }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
-    changeTab(golfFrontNavDelta(swapped, false));
+  const int frontDelta = input.releasedFrontNavigationDelta();
+  if (frontDelta != 0) {
+    changeTab(frontDelta);
     return;
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {
     changeTab(-1);
     return;
   }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Down) ||
-      mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Down) || input.wasReleased(golfui::FooterAction::Confirm)) {
     changeTab(1);
     return;
   }
@@ -91,7 +89,7 @@ void GolfCourseTeeInfoActivity::tabTrampoline(const fui::ActionEvent& event, voi
 
 void GolfCourseTeeInfoActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto chrome = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding);
+  const auto chrome = golfui::chromeLayout(renderer, mappedInput, screen.frame().safeRect(), metrics.topPadding);
   screen.setContentMargin(chrome.contentMargins);
 
   const fui::Rect body = screen.body();
@@ -220,15 +218,15 @@ void GolfCourseTeeInfoActivity::buildCard(UiScreen& screen, const fui::Rect tabl
 
 void GolfCourseTeeInfoActivity::drawFooter() const {
   const bool hasTabs = holeCount == 18;
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", hasTabs ? tr(STR_GOLF_PREVIOUS_TAB) : "",
-                                            hasTabs ? tr(STR_GOLF_NEXT_TAB) : "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  golfui::drawFooter(
+      renderer, mappedInput,
+      {tr(STR_BACK), "", hasTabs ? tr(STR_GOLF_PREVIOUS_TAB) : "", hasTabs ? tr(STR_GOLF_NEXT_TAB) : ""});
 }
 
 void GolfCourseTeeInfoActivity::render(RenderLock&&) {
   renderer.clearScreen();
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding);
+  const auto layout = golfui::chromeLayout(renderer, mappedInput, metrics.topPadding);
   golfui::drawHeader(renderer, layout.header, tr(STR_GOLF_TEE_INFO_TITLE), courseName);
 
   if (!resolved || teeSet.teeCount == 0) {

@@ -2,16 +2,16 @@
 
 #include <memory>
 
-#include "activities/UiListActivity.h"
+#include "GolfUiListActivity.h"
 #include "golf/GolfTips.h"
 
 // The note list (CONTRACTS-V2 §25.3): one row per /golf/tips/*.txt file, titled
 // by the note's first line, with its section count. Empty and unreadable are
 // kept distinct, as §22.4 established for the player picker.
-class GolfTipListActivity final : public UiListActivity {
+class GolfTipListActivity final : public GolfUiListActivity {
  public:
   GolfTipListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : UiListActivity("GolfTipList", renderer, mappedInput) {}
+      : GolfUiListActivity("GolfTipList", renderer, mappedInput) {}
 
   void onEnter() override;
 

@@ -151,8 +151,8 @@ void GolfTrendsActivity::screenTrampoline(UiScreen& screen, void* user) {
 }
 
 void GolfTrendsActivity::loop() {
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
-      mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  golfui::FooterInput input(mappedInput, {tr(STR_BACK), "", "", ""});
+  if (input.wasReleased(golfui::FooterAction::Back) || input.wasReleased(golfui::FooterAction::Confirm)) {
     finish();
     return;
   }
@@ -164,7 +164,7 @@ void GolfTrendsActivity::buildScreen(UiScreen& screen) {
   const TrendsState& state = *activeState;
   const GolfTrendStats& trends = state.trends;
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding);
+  const auto layout = golfui::chromeLayout(renderer, mappedInput, screen.frame().safeRect(), metrics.topPadding);
   screen.setContentMargin(layout.contentMargins);
   if (state.loadError || !trends.enoughRounds()) {
     screen.centeredText(state.loadError ? tr(STR_GOLF_TRENDS_ERROR) : state.message, screen.theme().bodyText);
@@ -262,11 +262,10 @@ void GolfTrendsActivity::buildScreen(UiScreen& screen) {
 void GolfTrendsActivity::render(RenderLock&&) {
   renderer.clearScreen();
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding);
+  const auto layout = golfui::chromeLayout(renderer, mappedInput, metrics.topPadding);
   golfui::drawHeader(renderer, layout.header, tr(STR_GOLF_TRENDS), playerLabel);
   renderUi();
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  golfui::drawFooter(renderer, mappedInput, {tr(STR_BACK), "", "", ""});
   renderer.displayBuffer();
 }
 

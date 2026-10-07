@@ -5,12 +5,14 @@
 #include <cstdint>
 
 class GfxRenderer;
+class MappedInputManager;
 
 namespace golfui {
 
 namespace fui = freeink::ui;
 
 inline constexpr int GOLF_HEADER_HEIGHT = 46;
+inline constexpr int GOLF_TOUCH_FOOTER_HEIGHT = 56;
 inline constexpr int SCORING_HOLE_DIGIT_MAX_HEIGHT = 48;
 inline constexpr int SCORING_HOLE_DIGIT_RULE_GAP = 12;
 
@@ -76,6 +78,100 @@ constexpr fui::Rect reserveHintEdge(const fui::Rect screen, const HintEdge edge,
   }
 }
 
+enum class FooterAction : uint8_t { None, Back, Confirm, Previous, Next };
+
+struct FooterLabels {
+  const char* back = "";
+  const char* confirm = "";
+  const char* previous = "";
+  const char* next = "";
+};
+
+struct TouchFooterLayout {
+  fui::Rect safe{};
+  fui::Rect footer{};
+  fui::Rect cells[4]{};
+};
+
+constexpr TouchFooterLayout makeTouchFooterLayout(const fui::Rect safe) {
+  TouchFooterLayout result{};
+  result.safe = safe;
+  const int16_t height = clampValue(GOLF_TOUCH_FOOTER_HEIGHT, 0, safe.height);
+  result.footer = fui::Rect{safe.x, static_cast<int16_t>(safe.y + safe.height - height), safe.width, height};
+  for (uint8_t index = 0; index < 4; ++index) {
+    const int left = safe.x + static_cast<int32_t>(safe.width) * index / 4;
+    const int right = safe.x + static_cast<int32_t>(safe.width) * (index + 1) / 4;
+    result.cells[index] = fui::Rect{static_cast<int16_t>(left), result.footer.y, static_cast<int16_t>(right - left),
+                                    result.footer.height};
+  }
+  return result;
+}
+
+constexpr int touchFooterCellAt(const TouchFooterLayout& layout, const int x, const int y) {
+  if (x < layout.footer.x || x >= layout.footer.x + layout.footer.width || y < layout.footer.y ||
+      y >= layout.footer.y + layout.footer.height) {
+    return -1;
+  }
+  for (uint8_t index = 0; index < 4; ++index) {
+    const fui::Rect cell = layout.cells[index];
+    if (x >= cell.x && x < cell.x + cell.width && y >= cell.y && y < cell.y + cell.height) return index;
+  }
+  return -1;
+}
+
+constexpr const char* footerLabel(const FooterLabels labels, const FooterAction action) {
+  switch (action) {
+    case FooterAction::Back:
+      return labels.back;
+    case FooterAction::Confirm:
+      return labels.confirm;
+    case FooterAction::Previous:
+      return labels.previous;
+    case FooterAction::Next:
+      return labels.next;
+    case FooterAction::None:
+    default:
+      return "";
+  }
+}
+
+constexpr FooterAction touchFooterActionAt(const TouchFooterLayout& layout, const FooterLabels labels, const int x,
+                                           const int y) {
+  const int cell = touchFooterCellAt(layout, x, y);
+  if (cell < 0) return FooterAction::None;
+  constexpr FooterAction actions[4] = {FooterAction::Back, FooterAction::Confirm, FooterAction::Previous,
+                                       FooterAction::Next};
+  const FooterAction action = actions[cell];
+  const char* label = footerLabel(labels, action);
+  return label != nullptr && label[0] != '\0' ? action : FooterAction::None;
+}
+
+class FooterInput {
+ public:
+  FooterInput(MappedInputManager& mappedInput, FooterLabels labels);
+
+  bool wasReleased(FooterAction action) const;
+  bool wasLongPressed(FooterAction action, unsigned long thresholdMs) const;
+  bool wasTouchReleased(FooterAction action) const { return tapAction == action; }
+  bool wasTouchLongPressed(FooterAction action) const { return longPressAction == action; }
+  bool hasTap() const { return tapped; }
+  fui::Point tapPoint() const { return fui::Point{tapX, tapY}; }
+  bool tapIn(fui::Rect rect) const;
+  int releasedFrontNavigationDelta() const;
+
+ private:
+  MappedInputManager& mappedInput;
+  FooterAction tapAction = FooterAction::None;
+  FooterAction longPressAction = FooterAction::None;
+  int16_t tapX = 0;
+  int16_t tapY = 0;
+  bool tapped = false;
+};
+
+TouchFooterLayout touchFooterLayout(const GfxRenderer& renderer);
+void drawFooter(GfxRenderer& renderer, MappedInputManager& mappedInput, FooterLabels labels);
+void drawFooterTwo(GfxRenderer& renderer, MappedInputManager& mappedInput, const char* back, const char* confirm);
+
 struct ChromeLayout {
   fui::Rect safe{};
   fui::Rect header{};
@@ -105,9 +201,10 @@ constexpr ChromeLayout makeChromeLayout(const fui::Rect frameSafe, const fui::Re
 // Runtime adapters obtain both sources of hardware clearance. The first form
 // uses a FreeInkUI frame-safe rect; the second derives the bezel-safe rect
 // directly from GfxRenderer for legacy/raw drawing screens.
-ChromeLayout chromeLayout(const GfxRenderer& renderer, fui::Rect frameSafe, int topPadding,
+ChromeLayout chromeLayout(const GfxRenderer& renderer, const MappedInputManager& mappedInput, fui::Rect frameSafe,
+                          int topPadding, fui::Insets bodyPadding = {});
+ChromeLayout chromeLayout(const GfxRenderer& renderer, const MappedInputManager& mappedInput, int topPadding,
                           fui::Insets bodyPadding = {});
-ChromeLayout chromeLayout(const GfxRenderer& renderer, int topPadding, fui::Insets bodyPadding = {});
 void drawHeader(const GfxRenderer& renderer, fui::Rect rect, const char* title, const char* rightLabel = nullptr);
 
 constexpr int scoringDigitHeight(const int rowHeight, const bool focused) {

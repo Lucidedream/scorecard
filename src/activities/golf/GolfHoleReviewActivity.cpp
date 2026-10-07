@@ -42,17 +42,14 @@ void GolfHoleReviewActivity::changeHole(const int delta) {
 }
 
 void GolfHoleReviewActivity::loop() {
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  golfui::FooterInput input(mappedInput, {tr(STR_BACK), "", tr(STR_GOLF_BUTTON_PREVIOUS), tr(STR_GOLF_BUTTON_NEXT)});
+  if (input.wasReleased(golfui::FooterAction::Back)) {
     finish();
     return;
   }
-  const bool swapped = mappedInput.isNavDirectionSwapped();
-  if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
-    changeHole(golfFrontNavDelta(swapped, true));
-    return;
-  }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
-    changeHole(golfFrontNavDelta(swapped, false));
+  const int frontDelta = input.releasedFrontNavigationDelta();
+  if (frontDelta != 0) {
+    changeHole(frontDelta);
     return;
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::PageBack)) {
@@ -200,14 +197,13 @@ void GolfHoleReviewActivity::drawPenaltyBand(const freeink::ui::Rect rect) const
 }
 
 void GolfHoleReviewActivity::drawFooter() const {
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", tr(STR_GOLF_BUTTON_PREVIOUS), tr(STR_GOLF_BUTTON_NEXT));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  golfui::drawFooter(renderer, mappedInput, {tr(STR_BACK), "", tr(STR_GOLF_BUTTON_PREVIOUS), tr(STR_GOLF_BUTTON_NEXT)});
 }
 
 void GolfHoleReviewActivity::render(RenderLock&&) {
   renderer.clearScreen();
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto chrome = golfui::chromeLayout(renderer, metrics.topPadding);
+  const auto chrome = golfui::chromeLayout(renderer, mappedInput, metrics.topPadding);
   const GolfPlayerScore& score = selectedPlayer().score;
   const bool hasPenalty = golfPenaltyStrokesForHole(score, currentHole) > 0;
   const int fontMinimum = renderer.getLineHeight(UI_10_FONT_ID);

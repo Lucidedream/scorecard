@@ -154,21 +154,19 @@ void GolfHistoryChoiceActivity::moveSelection(const int delta) {
 }
 
 void GolfHistoryChoiceActivity::loop() {
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  golfui::FooterInput input(mappedInput,
+                            {tr(STR_BACK), tr(STR_GOLF_OPEN), tr(STR_GOLF_BUTTON_PREVIOUS), tr(STR_GOLF_BUTTON_NEXT)});
+  if (input.wasReleased(golfui::FooterAction::Back)) {
     finish();
     return;
   }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (input.wasReleased(golfui::FooterAction::Confirm)) {
     activateIndex(selected);
     return;
   }
-  const bool swapped = mappedInput.isNavDirectionSwapped();
-  if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
-    moveSelection(golfFrontNavDelta(swapped, true));
-    return;
-  }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
-    moveSelection(golfFrontNavDelta(swapped, false));
+  const int frontDelta = input.releasedFrontNavigationDelta();
+  if (frontDelta != 0) {
+    moveSelection(frontDelta);
     return;
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {
@@ -199,7 +197,7 @@ void GolfHistoryChoiceActivity::actionTrampoline(const fui::ActionEvent& event, 
 
 void GolfHistoryChoiceActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding);
+  const auto layout = golfui::chromeLayout(renderer, mappedInput, screen.frame().safeRect(), metrics.topPadding);
   screen.setContentMargin(layout.contentMargins);
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
 
@@ -261,15 +259,14 @@ void GolfHistoryChoiceActivity::buildScreen(UiScreen& screen) {
 }
 
 void GolfHistoryChoiceActivity::drawFooter() const {
-  const auto labels =
-      mappedInput.mapLabels(tr(STR_BACK), tr(STR_GOLF_OPEN), tr(STR_GOLF_BUTTON_PREVIOUS), tr(STR_GOLF_BUTTON_NEXT));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  golfui::drawFooter(renderer, mappedInput,
+                     {tr(STR_BACK), tr(STR_GOLF_OPEN), tr(STR_GOLF_BUTTON_PREVIOUS), tr(STR_GOLF_BUTTON_NEXT)});
 }
 
 void GolfHistoryChoiceActivity::render(RenderLock&&) {
   renderer.clearScreen();
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding);
+  const auto layout = golfui::chromeLayout(renderer, mappedInput, metrics.topPadding);
   golfui::drawHeader(renderer, layout.header, playerLabel);
   renderUi();
   drawFooter();

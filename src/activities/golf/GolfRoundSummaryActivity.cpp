@@ -37,7 +37,10 @@ void GolfRoundSummaryActivity::screenTrampoline(UiScreen& screen, void* user) {
 }
 
 void GolfRoundSummaryActivity::loop() {
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  golfui::FooterInput input(
+      mappedInput,
+      {tr(STR_BACK), archiveFilename[0] ? tr(STR_GOLF_EXPORT_SEND) : tr(STR_GOLF_EXPORT_SHARE_SUMMARY), "", ""});
+  if (input.wasReleased(golfui::FooterAction::Confirm)) {
     auto transfer = makeUniqueNoThrow<GolfRoundExportActivity>(renderer, mappedInput, entry, archiveFilename);
     if (!transfer) {
       LOG_ERR("GOLF", "OOM: summary export activity");
@@ -55,7 +58,7 @@ void GolfRoundSummaryActivity::loop() {
     startActivityForResult(std::move(transfer), nullptr);
     return;
   }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  if (input.wasReleased(golfui::FooterAction::Back)) {
     if (returnToGolfHome) {
       openGolfHome(activityManager, renderer, mappedInput);
     } else {
@@ -66,7 +69,7 @@ void GolfRoundSummaryActivity::loop() {
 
 void GolfRoundSummaryActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, screen.frame().safeRect(), metrics.topPadding);
+  const auto layout = golfui::chromeLayout(renderer, mappedInput, screen.frame().safeRect(), metrics.topPadding);
   screen.setContentMargin(layout.contentMargins);
   const bool hasPar = golfHistoryShowsToPar(entry);
   const char* labels[] = {tr(STR_GOLF_SCORE),           tr(STR_GOLF_TO_PAR),       tr(STR_GOLF_PUTTS),
@@ -121,12 +124,12 @@ void GolfRoundSummaryActivity::buildScreen(UiScreen& screen) {
 void GolfRoundSummaryActivity::render(RenderLock&&) {
   renderer.clearScreen();
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, metrics.topPadding);
+  const auto layout = golfui::chromeLayout(renderer, mappedInput, metrics.topPadding);
   golfui::drawHeader(renderer, layout.header, playerLabel, entry.course);
   renderUi();
-  const auto labels = mappedInput.mapLabels(
-      tr(STR_BACK), archiveFilename[0] ? tr(STR_GOLF_EXPORT_SEND) : tr(STR_GOLF_EXPORT_SHARE_SUMMARY), "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  golfui::drawFooter(
+      renderer, mappedInput,
+      {tr(STR_BACK), archiveFilename[0] ? tr(STR_GOLF_EXPORT_SEND) : tr(STR_GOLF_EXPORT_SHARE_SUMMARY), "", ""});
   renderer.displayBuffer();
 }
 
