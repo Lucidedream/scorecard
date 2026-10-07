@@ -358,8 +358,7 @@ void GolfScoringActivity::handlePickerInput() {
   // Confirm applies the highlighted row. A bare Power release also confirms:
   // the scoring screen's §12.6 reservation of Power for field-cycling does not
   // apply once the sheet is open (loop() routes here and returns first).
-  if (golfConfirmFromFrontButton(input.wasReleased(golfui::FooterAction::Confirm),
-                                 mappedInput.wasReleased(MappedInputManager::Button::Power))) {
+  if (input.wasReleased(golfui::FooterAction::Confirm) || mappedInput.wasReleased(MappedInputManager::Button::Power)) {
     applyPickerSelection();
     return;
   }

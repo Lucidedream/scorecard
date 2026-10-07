@@ -95,3 +95,19 @@ e-ink appearance/refresh behavior, frontlight timing on a physical switch, RTC a
 or runtime heap high-water behavior. On-device verification should monitor the serial log
 and `ESP.getFreeHeap()` before entering golf, during Scoring/mark-sheet use, and after
 returning Home to confirm no lifecycle leak.
+
+## Review fix
+
+A review found that the first touch-footer rewrite accidentally changed the open mark
+sheet from Confirm-or-Power to Confirm-without-Power. The picker now applies its highlighted
+row when either the footer/physical Confirm release or a bare Power release occurs
+(`src/activities/golf/GolfScoringActivity.cpp:361-363`), restoring the X4 behavior and the
+X4 Pro's physical confirmation path. A pair-by-pair audit of every other input-condition
+replacement in `git diff main...HEAD -- src/activities/golf` found no further semantic
+regressions: physical Back/Confirm conditions remain ORed with touch footer actions,
+physical Left/Right direction swapping is preserved, touch Previous/Next remains direct,
+list side-key navigation still falls through to `ButtonNavigator`, and the two main
+Scoring call sites still deliberately exclude same-frame Power from front Confirm.
+After the fix, `pio run -e golf-x4pro` passed at 5,510,650 bytes of flash and
+90,628 bytes of reported RAM, `pio run -e golf` passed at 5,619,785 bytes of flash
+and 57,204 bytes of reported RAM, and the host suite again passed all 538 tests.
