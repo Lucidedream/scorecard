@@ -287,4 +287,44 @@ TEST(GolfUiLayout, ReviewStatisticsAndMenuRowsUseAvailableSafeHeight) {
   }
 }
 
+TEST(GolfUiLayout, TouchFooterCellsTileTheBezelSafeWidth) {
+  constexpr fui::Rect safe{17, 23, 451, 731};
+  constexpr golfui::TouchFooterLayout layout = golfui::makeTouchFooterLayout(safe);
+
+  EXPECT_EQ(layout.footer.x, safe.x);
+  EXPECT_EQ(layout.footer.y, safe.y + safe.height - golfui::GOLF_TOUCH_FOOTER_HEIGHT);
+  EXPECT_EQ(layout.footer.width, safe.width);
+  EXPECT_EQ(layout.footer.height, golfui::GOLF_TOUCH_FOOTER_HEIGHT);
+  EXPECT_EQ(layout.cells[0].x, safe.x);
+  EXPECT_EQ(layout.cells[3].x + layout.cells[3].width, safe.x + safe.width);
+  for (uint8_t index = 1; index < 4; ++index) {
+    EXPECT_EQ(layout.cells[index - 1].x + layout.cells[index - 1].width, layout.cells[index].x);
+    EXPECT_FALSE(overlaps(layout.cells[index - 1], layout.cells[index]));
+  }
+}
+
+TEST(GolfUiLayout, TouchFooterHitTestRoundTripsAndRejectsBodyAndBezel) {
+  constexpr fui::Rect safe{13, 19, 455, 762};
+  constexpr golfui::TouchFooterLayout layout = golfui::makeTouchFooterLayout(safe);
+
+  for (uint8_t index = 0; index < 4; ++index) {
+    const fui::Rect cell = layout.cells[index];
+    EXPECT_EQ(golfui::touchFooterCellAt(layout, cell.x + cell.width / 2, cell.y + cell.height / 2), index);
+  }
+  EXPECT_EQ(golfui::touchFooterCellAt(layout, safe.x, layout.footer.y - 1), -1);
+  EXPECT_EQ(golfui::touchFooterCellAt(layout, safe.x - 1, layout.footer.y), -1);
+  EXPECT_EQ(golfui::touchFooterCellAt(layout, safe.x + safe.width, layout.footer.y), -1);
+  EXPECT_EQ(golfui::touchFooterCellAt(layout, safe.x, safe.y + safe.height), -1);
+}
+
+TEST(GolfUiLayout, TouchFooterEmptyLabelsAreInert) {
+  constexpr golfui::TouchFooterLayout layout = golfui::makeTouchFooterLayout(fui::Rect{10, 20, 460, 760});
+  constexpr golfui::FooterLabels labels{"Back", "", "Previous", "Next"};
+
+  EXPECT_EQ(golfui::touchFooterActionAt(layout, labels, layout.cells[0].x + 1, layout.cells[0].y + 1),
+            golfui::FooterAction::Back);
+  EXPECT_EQ(golfui::touchFooterActionAt(layout, labels, layout.cells[1].x + 1, layout.cells[1].y + 1),
+            golfui::FooterAction::None);
+}
+
 }  // namespace
