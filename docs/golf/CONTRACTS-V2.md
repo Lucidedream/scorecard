@@ -2374,3 +2374,128 @@ remove-one-player case the confirmation title is **`STR_GOLF_REMOVE_PLAYER`** ("
 player") and the prompt reads "Remove <name> from this round? The other players keep their
 scores." (`STR_GOLF_REMOVE_PLAYER_PROMPT_FORMAT`). The History list the menu returns to
 reflects the change on the next rebuild.
+
+## 37. The Xteink X4 Pro target: same app, touch-operable (v7)
+
+The owner now also carries an **Xteink X4 Pro**. The Scorecard app must run there with the
+same screens, data files and behaviour as on the X4. This section defines the Pro build and
+the one input mechanism that makes every existing screen operable on it. It adds no
+feature and changes nothing on the X4.
+
+### 37.1 What the Pro is (evidence)
+
+`freeink-sdk/libs/hardware/BoardConfig/include/BoardConfig.h:1479-1612` (`XTEINK_X4_PRO`)
+and `freeink-sdk/docs/xteink-x4pro-support.md`:
+
+| | X4 | X4 Pro |
+| --- | --- | --- |
+| MCU / RAM | ESP32-C3, ~380 KB, no PSRAM | ESP32-S3, 8 MB PSRAM |
+| Panel | 800x480 (480x800 portrait) | same |
+| Buttons | Back, Confirm, Left, Right, Up, Down, Power | **Up (GPIO0), Down (GPIO7), Power only** |
+| Touch | none | GT911 + capacitive Home key |
+| Clock | none | BM8563 RTC |
+| UI scale | 1.0 | 1.2 (`uiScale`) |
+
+Consequences already implemented by the host firmware, which golf must build on rather
+than re-solve:
+
+* `Button::Back` is also a left-edge swipe (`src/MappedInputManager.cpp:314-315,324-325`).
+* `Button::Confirm` exists only as a Power click when the user selects `PWR_CONFIRM`
+  (`MappedInputManager.cpp:131-143`). `Button::Left` / `Button::Right` have **no** source:
+  their pins are `PIN_UNASSIGNED`.
+* The Home key leaves to firmware Home through `ActivityManager.cpp:93`, which already
+  calls `handleHomeGesture()` (Scoring flushes there, `GolfScoringActivity.cpp:545`).
+* **The button-hint footer is not drawn on touch boards** (`BaseTheme.cpp:170-174`) and its
+  height is zeroed (`UITheme.cpp:59-64`). Every golf footer (20 `drawButtonHints` call
+  sites) therefore disappears on the Pro.
+* `UiListActivity` screens and the five `UiAppHost` screens that call `routeTouch`
+  (Home, Card, TeeInfo, HistoryChoice, Trends) already take row/tile taps.
+
+What is therefore unreachable on the Pro today: hole/turn Previous and Next on Scoring;
+the mark sheet (Confirm) and the course map (Back long-press) on Scoring; Confirm on
+Round Summary, Round Export, Player Setup, Course Map Browser; and every on-screen label
+saying what the controls do.
+
+### 37.2 The build
+
+`[env:golf-x4pro]` in `platformio.ini` (an existing touchpoint): the `[env:x4pro]` profile
+plus `-DCROSSPOINT_GOLF=1`, version suffix `-golf-x4pro`. `CROSSPOINT_VERSION` must be
+defined exactly once (no macro-redefinition warning); if `${env:x4pro.build_flags}` cannot
+be inherited without redefining it, list the flags explicitly as `[env:x4pro-gh_release]`
+does. It extends `base`, **not** `firmware_tuned` (see the comment at
+`platformio.ini:104-107`). `[env:golf]` is untouched.
+
+No new upstream touchpoint. `src/main.cpp`, `MappedInputManager.*`, the themes and the HAL
+are not modified; if the worker believes one must be, stop and escalate.
+
+### 37.3 The golf touch footer
+
+On a touch board golf draws its **own** footer in place of the hidden hint row: the same
+four labels, as four finger-sized cells that are tapped instead of pressed. This keeps the
+X4's screens, labels and muscle memory, and gives every screen its missing buttons through
+one shared component.
+
+* **One call replaces the pair.** `golfui::drawFooter(renderer, mappedInput, back, confirm,
+  previous, next)` takes *logical* labels. Without touch it performs exactly today's
+  `mappedInput.mapLabels(...)` + `GUI.drawButtonHints(...)` (pixel-identical on the X4).
+  With touch it draws the cells in the fixed order Back, Confirm, Previous, Next — the
+  front-button remap settings do not apply, there being no front buttons. An empty label
+  draws no cell. The two-cell and side-hint variants get the same treatment where golf
+  uses them.
+* **Geometry is constexpr and host-tested**, in `GolfUiLayout.h` beside `makeScoringLayout`:
+  footer height `GOLF_TOUCH_FOOTER_HEIGHT = 56`, four equal cells across the bezel-safe
+  width, anchored to the bezel-safe bottom, plus `touchFooterCellAt(layout, x, y)`.
+  `test/golf_layout` covers: cells tile the width without overlap, hit-test round-trips
+  each cell centre, points above the footer and in the bezel miss.
+* **The body yields the space.** On touch boards the golf chrome/scoring layouts subtract
+  the footer height wherever a footer is drawn (today `hintSafeRect`,
+  `GolfUiLayout.cpp:19-23`, returns the full height there). No body content may sit under
+  the footer on any golf screen.
+* **Input parity rule.** A tap on a labelled cell is that button's release; a long-press on
+  it (`wasScreenLongPress`) is that button's long-press. Provide one golf-side helper that
+  ORs the physical query with the footer query so each `loop()` changes mechanically.
+  Previous/Next cells mean previous/next directly — `isNavDirectionSwapped()` applies to
+  physical front buttons only. A cell with an empty label is inert.
+* **Ordering.** Screens that also call `routeTouch` test the footer first and return on a
+  hit, so one tap cannot both press a cell and activate a row.
+* Runtime-gated on `mappedInput.hasTouch()`, not `#if`, so the X4/X3 dual binary and the
+  Pro share one code path. No heap allocation; rects live on the stack or in constexpr.
+
+### 37.4 Scoring on the Pro
+
+Side keys count (Up `+`, Down `-`/remove mark), exactly as on the X4. Power keeps its
+§12.6 role. With the footer, MENU / MARK / PREV / NEXT are all reachable, and MENU
+long-press opens the course map (§26). Two additions, touch boards only:
+
+* **Tap a counter band to focus that field** (`ScoringLayout::counters[i]`). It never
+  changes a count: a stray touch on the course must not alter a score.
+* **Mark sheet:** tap a row to apply it (same as highlighting it and confirming); a tap
+  outside the sheet cancels.
+
+The worker must read `handleX4ProFrontlightDoubleClick()` (`src/main.cpp:214-232`) and the
+delayed power click (`MappedInputManager.h:43-47`) and state in the report what one Power
+click and one double-click do on the Scoring screen on a Pro. If a double-click both
+toggles the frontlight and cycles the field twice, report it — do not patch `main.cpp`.
+
+### 37.5 Every other screen
+
+Each golf screen is operable on the Pro with: its footer cells, row/tile taps where they
+already exist, the side keys, and Back-swipe. Dismiss-only screens (Message, Statistics)
+additionally accept a tap anywhere in the body. The worker delivers a table, one row per
+activity in `src/activities/golf/`, listing every action and the Pro input that reaches it.
+
+### 37.6 Acceptance
+
+1. `pio run -e golf-x4pro` and `pio run -e golf` both build with no new warnings.
+2. All golf host tests pass, including the new footer-geometry tests.
+3. Non-touch rendering and input are unchanged: `drawFooter` without touch is the old call
+   pair, and no `loop()` changes behaviour when `hasTouch()` is false.
+4. Upstream touchpoints remain six; the only upstream file in the diff is `platformio.ini`.
+5. The §37.5 table has no unreachable action.
+6. User-facing strings via `tr()`; CLAUDE.md resource rules hold (the C3 build is still the
+   380 KB device — nothing added here may cost it heap).
+
+Owner-side, on the device: flash, corner-tap the four footer cells on each screen, score
+three holes with side keys + Power, open the mark sheet and the course map, finish a round,
+confirm the 1.2 UI scale leaves no clipped text on Scoring and the Card, and check that
+round dates are right without a Wi-Fi sync (the Pro has an RTC).
