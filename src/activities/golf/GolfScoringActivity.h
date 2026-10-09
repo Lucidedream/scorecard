@@ -42,8 +42,9 @@ class GolfScoringActivity final : public Activity, protected UiAppHost {
   bool pickerOpen = false;
   uint8_t pickerRow = 0;
   bool pickerHoleFull = false;
-  bool holeStripOpen = false;
-  uint8_t holeStripPage = 0;
+  uint8_t nineStripPage = 0;
+  bool touchStartValid = false;
+  freeink::ui::Point touchStart{};
 
   static constexpr uint8_t PICKER_ROW_THIRD = 2;
 
@@ -92,9 +93,8 @@ class GolfScoringActivity final : public Activity, protected UiAppHost {
   void applyPickerSelection();
   void applyPenaltyPick();
 
-  void openHoleStrip();
-  void closeHoleStrip();
-  void handleHoleStripInput();
+  void handleScoringInput();
+  bool handleNavigationSwipe();
   void jumpToHole(uint8_t hole);
 
   // Writes the space-separated marker sequence for a hole ("H OB"), in event
@@ -113,5 +113,4 @@ class GolfScoringActivity final : public Activity, protected UiAppHost {
   void drawHoleCells(freeink::ui::Rect rect, uint8_t firstHole) const;
   void drawFooter() const;
   void drawPenaltyPicker(freeink::ui::Rect safe) const;
-  void drawHoleStrip(freeink::ui::Rect safe) const;
 };

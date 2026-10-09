@@ -135,6 +135,7 @@ void ellipsize(const GfxRenderer& renderer, char* text, const size_t size, const
 void GolfScoringActivity::onEnter() {
   Activity::onEnter();
   resetUi();
+  touchStartValid = false;
   finishPromptShown = false;
   archiveFailed = false;
   if (GOLF_ROUND_STORE.isArchived()) {
@@ -196,8 +197,7 @@ void GolfScoringActivity::resetTurnState() {
   pickerOpen = false;
   pickerRow = 0;
   pickerHoleFull = false;
-  holeStripOpen = false;
-  holeStripPage = 0;
+  nineStripPage = static_cast<uint8_t>(GOLF_ROUND_STORE.getRound().currentHole / golfui::HOLE_STRIP_PAGE_SIZE);
   lastRepeatAt = 0;
 }
 
@@ -309,31 +309,9 @@ golfui::FooterLabels GolfScoringActivity::footerLabels() const {
 void GolfScoringActivity::openPenaltyPicker() {
   {
     RenderLock lock(*this);
-    holeStripOpen = false;
     pickerRow = 0;
     pickerHoleFull = false;
     pickerOpen = true;
-  }
-  renderer.promoteNextRefresh(HalDisplay::HALF_REFRESH);
-  requestUpdate();
-}
-
-void GolfScoringActivity::openHoleStrip() {
-  {
-    RenderLock lock(*this);
-    const GolfRound& round = GOLF_ROUND_STORE.getRound();
-    pickerOpen = false;
-    holeStripPage = static_cast<uint8_t>(round.currentHole / golfui::HOLE_STRIP_PAGE_SIZE);
-    holeStripOpen = true;
-  }
-  renderer.promoteNextRefresh(HalDisplay::HALF_REFRESH);
-  requestUpdate();
-}
-
-void GolfScoringActivity::closeHoleStrip() {
-  {
-    RenderLock lock(*this);
-    holeStripOpen = false;
   }
   renderer.promoteNextRefresh(HalDisplay::HALF_REFRESH);
   requestUpdate();
@@ -347,67 +325,12 @@ void GolfScoringActivity::jumpToHole(const uint8_t hole) {
     changed = golfJumpToHole(GOLF_ROUND_STORE.getRound(), hole);
     if (changed) {
       resetTurnState();
-    } else {
-      holeStripOpen = false;
     }
   }
-  if (changed) {
-    markDirtyForIdle();
-    flushDirty();
-  }
-  renderer.promoteNextRefresh(HalDisplay::HALF_REFRESH);
+  if (!changed) return;
+  markDirtyForIdle();
+  flushDirty();
   requestUpdate();
-}
-
-void GolfScoringActivity::handleHoleStripInput() {
-  golfui::FooterInput input(mappedInput, {tr(STR_GOLF_FOOTER_BACK), "", "", ""});
-  if (input.wasReleased(golfui::FooterAction::Back)) {
-    closeHoleStrip();
-    return;
-  }
-
-  const GolfRound& round = GOLF_ROUND_STORE.getRound();
-  const uint8_t pageCount = golfui::holeStripPageCount(round.holeCount);
-  int pageDelta = 0;
-  if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
-    pageDelta = -1;
-  } else if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
-    pageDelta = 1;
-  } else {
-    const MappedInputManager::SwipeDir swipe = mappedInput.wasSwipe();
-    if (swipe == MappedInputManager::SwipeDir::Left) {
-      pageDelta = 1;
-    } else if (swipe == MappedInputManager::SwipeDir::Right) {
-      pageDelta = -1;
-    }
-  }
-  if (pageDelta != 0) {
-    const int nextPage = static_cast<int>(holeStripPage) + pageDelta;
-    if (nextPage >= 0 && nextPage < pageCount) {
-      {
-        RenderLock lock(*this);
-        holeStripPage = static_cast<uint8_t>(nextPage);
-      }
-      requestUpdate();
-    }
-    return;
-  }
-
-  if (!input.hasTap()) return;
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto chrome = golfui::chromeLayout(renderer, mappedInput, 0);
-  const GolfPlayerScore& score = round.players[round.currentPlayer].score;
-  const auto scoring =
-      golfui::makeScoringLayout(chrome.safe, metrics.topPadding, static_cast<uint8_t>(focusedField),
-                                score.penaltyCount[round.currentHole] > 0, renderer.getLineHeight(UI_10_FONT_ID));
-  const golfui::HoleStripLayout strip = golfui::makeHoleStripLayout(scoring.safe);
-  const freeink::ui::Point tap = input.tapPoint();
-  if (tap.x < strip.sheet.x || tap.x >= strip.sheet.right() || tap.y < strip.sheet.y || tap.y >= strip.sheet.bottom()) {
-    closeHoleStrip();
-    return;
-  }
-  const int hole = golfui::holeStripHoleAt(strip, holeStripPage, round.holeCount, tap.x, tap.y);
-  if (hole >= 0) jumpToHole(static_cast<uint8_t>(hole));
 }
 
 void GolfScoringActivity::closePenaltyPicker() {
@@ -673,6 +596,55 @@ void GolfScoringActivity::openCourseMap() {
 bool GolfScoringActivity::handleHomeGesture() { return !flushDirty(); }
 
 void GolfScoringActivity::loop() {
+  if (!mappedInput.hasTouch()) {
+    handleScoringInput();
+    return;
+  }
+  int x = 0;
+  int y = 0;
+  const bool held = mappedInput.isScreenTouchHeld(x, y);
+  if (held && !touchStartValid) {
+    touchStart = freeink::ui::Point{static_cast<int16_t>(x), static_cast<int16_t>(y)};
+    touchStartValid = true;
+  }
+  handleScoringInput();
+  // Suppressed contacts may hide their release edge; absence clears those too.
+  if (mappedInput.wasScreenTouchReleased() || !mappedInput.isScreenTouchHeld(x, y)) touchStartValid = false;
+}
+
+bool GolfScoringActivity::handleNavigationSwipe() {
+  if (!mappedInput.hasTouch()) return false;
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe == MappedInputManager::SwipeDir::None) return false;
+  if (!touchStartValid || (swipe != MappedInputManager::SwipeDir::Left && swipe != MappedInputManager::SwipeDir::Right))
+    return true;
+  const int delta = swipe == MappedInputManager::SwipeDir::Left ? 1 : -1;
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const auto chrome = golfui::chromeLayout(renderer, mappedInput, 0);
+  const GolfRound& round = GOLF_ROUND_STORE.getRound();
+  const GolfPlayerScore& score = round.players[round.currentPlayer].score;
+  const auto layout =
+      golfui::makeScoringLayout(chrome.safe, metrics.topPadding, static_cast<uint8_t>(focusedField),
+                                score.penaltyCount[round.currentHole] > 0, renderer.getLineHeight(UI_10_FONT_ID));
+  if (touchStart.x >= layout.hole.x && touchStart.x < layout.hole.right() && touchStart.y >= layout.hole.y &&
+      touchStart.y < layout.hole.bottom()) {
+    const int hole = static_cast<int>(round.currentHole) + delta;
+    if (hole >= 0 && hole < round.holeCount) jumpToHole(static_cast<uint8_t>(hole));
+  } else if (touchStart.x >= layout.nineStrip.x && touchStart.x < layout.nineStrip.right() &&
+             touchStart.y >= layout.nineStrip.y && touchStart.y < layout.nineStrip.bottom()) {
+    const uint8_t page = golfui::clampNineStripPage(static_cast<int>(nineStripPage) + delta, round.holeCount);
+    if (page != nineStripPage) {
+      {
+        RenderLock lock(*this);
+        nineStripPage = page;
+      }
+      requestUpdate();
+    }
+  }
+  return true;
+}
+
+void GolfScoringActivity::handleScoringInput() {
   if (GOLF_ROUND_STORE.isArchived()) {
     LOG_ERR("GOLF", "Leaving committed archive scoring surface");
     openGolfHome(activityManager, renderer, mappedInput);
@@ -682,11 +654,6 @@ void GolfScoringActivity::loop() {
     handlePickerInput();
     return;
   }
-  if (holeStripOpen) {
-    handleHoleStripInput();
-    return;
-  }
-
   golfui::FooterInput input(mappedInput, footerLabels());
   if (input.wasLongPressed(golfui::FooterAction::Back, MAP_LONGPRESS_MS)) {
     openCourseMap();
@@ -696,6 +663,7 @@ void GolfScoringActivity::loop() {
     openRoundMenu();
     return;
   }
+  if (handleNavigationSwipe()) return;
   const int frontDelta = input.releasedFrontNavigationDelta();
   if (frontDelta != 0) {
     changeTurn(frontDelta > 0);
@@ -741,8 +709,11 @@ void GolfScoringActivity::loop() {
     const auto layout =
         golfui::makeScoringLayout(chrome.safe, metrics.topPadding, static_cast<uint8_t>(focusedField),
                                   score.penaltyCount[round.currentHole] > 0, renderer.getLineHeight(UI_10_FONT_ID));
-    if (mappedInput.hasTouch() && input.tapIn(layout.hole)) {
-      openHoleStrip();
+    if (input.tapIn(layout.hole)) return;
+    if (input.tapIn(layout.nineStrip)) {
+      const auto tap = input.tapPoint();
+      const int hole = golfui::nineStripHoleAt(layout.nineStrip, nineStripPage, round.holeCount, tap.x, tap.y);
+      if (hole >= 0) jumpToHole(static_cast<uint8_t>(hole));
       return;
     }
     for (uint8_t counter = 0; counter < 3; ++counter) {
@@ -1018,9 +989,9 @@ void GolfScoringActivity::drawHoleCells(const freeink::ui::Rect rect, const uint
   const int textTop = rect.y + (rect.height - numberHeight - scoreHeight) / 2;
   for (uint8_t offset = 0; offset < golfui::HOLE_STRIP_PAGE_SIZE && firstHole + offset < round.holeCount; ++offset) {
     const uint8_t hole = firstHole + offset;
-    const int left = rect.x + static_cast<int32_t>(rect.width) * offset / golfui::HOLE_STRIP_PAGE_SIZE;
-    const int right = rect.x + static_cast<int32_t>(rect.width) * (offset + 1) / golfui::HOLE_STRIP_PAGE_SIZE;
-    const int cellWidth = right - left;
+    const auto cell = golfui::nineStripCell(rect, offset);
+    const int left = cell.x;
+    const int cellWidth = cell.width;
     const bool current = hole == round.currentHole;
     if (current) renderer.fillRect(left, rect.y, cellWidth, rect.height, true);
     char number[4];
@@ -1047,9 +1018,11 @@ void GolfScoringActivity::drawHoleCells(const freeink::ui::Rect rect, const uint
 }
 
 void GolfScoringActivity::drawNineStrip(const golfui::ScoringLayout& layout) const {
-  const GolfRound& round = GOLF_ROUND_STORE.getRound();
-  drawHoleCells(layout.nineStrip, static_cast<uint8_t>((round.currentHole / golfui::HOLE_STRIP_PAGE_SIZE) *
-                                                       golfui::HOLE_STRIP_PAGE_SIZE));
+  const uint8_t page =
+      mappedInput.hasTouch()
+          ? nineStripPage
+          : static_cast<uint8_t>(GOLF_ROUND_STORE.getRound().currentHole / golfui::HOLE_STRIP_PAGE_SIZE);
+  drawHoleCells(layout.nineStrip, static_cast<uint8_t>(page * golfui::HOLE_STRIP_PAGE_SIZE));
 }
 
 void GolfScoringActivity::drawFooter() const { golfui::drawFooter(renderer, mappedInput, footerLabels()); }
@@ -1143,32 +1116,6 @@ void GolfScoringActivity::drawPenaltyPicker(const freeink::ui::Rect safe) const 
   golfui::drawFooterTwo(renderer, mappedInput, tr(STR_GOLF_FOOTER_BACK), tr(STR_GOLF_FOOTER_CONFIRM));
 }
 
-void GolfScoringActivity::drawHoleStrip(const freeink::ui::Rect safe) const {
-  const GolfRound& round = GOLF_ROUND_STORE.getRound();
-  const golfui::HoleStripLayout layout = golfui::makeHoleStripLayout(safe);
-  renderer.fillRectDither(safe.x, safe.y, safe.width, layout.sheet.y - safe.y, Color::LightGray);
-  renderer.fillRect(layout.sheet.x, layout.sheet.y, layout.sheet.width, layout.sheet.height, false);
-  renderer.fillRect(layout.sheet.x, layout.sheet.y, layout.sheet.width,
-                    golfui::minValue(SHEET_BORDER, layout.title.height), true);
-
-  const int titleY = layout.title.y + (layout.title.height - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
-  renderer.drawText(UI_10_FONT_ID, layout.title.x + SHEET_PAD_X, titleY, tr(STR_GOLF_HOLE), true, EpdFontFamily::BOLD);
-  const uint8_t firstHole = static_cast<uint8_t>(holeStripPage * golfui::HOLE_STRIP_PAGE_SIZE);
-  const uint8_t lastHole =
-      golfui::minValue(static_cast<int>(firstHole + golfui::HOLE_STRIP_PAGE_SIZE), static_cast<int>(round.holeCount));
-  char indicator[8];
-  snprintf(indicator, sizeof(indicator), "%u-%u", static_cast<unsigned>(firstHole + 1),
-           static_cast<unsigned>(lastHole));
-  renderer.drawText(UI_10_FONT_ID,
-                    layout.title.x + layout.title.width - SHEET_PAD_X - renderer.getTextWidth(UI_10_FONT_ID, indicator),
-                    titleY, indicator, true, EpdFontFamily::BOLD);
-  renderer.drawLine(layout.title.x, layout.title.bottom() - 1, layout.title.right() - 1, layout.title.bottom() - 1);
-
-  const freeink::ui::Rect cells{layout.cells[0].x, layout.cells[0].y, layout.sheet.width, layout.cells[0].height};
-  drawHoleCells(cells, firstHole);
-  golfui::drawFooter(renderer, mappedInput, {tr(STR_GOLF_FOOTER_BACK), "", "", ""});
-}
-
 void GolfScoringActivity::render(RenderLock&&) {
   renderer.clearScreen();
   const auto& metrics = UITheme::getInstance().getMetrics();
@@ -1186,7 +1133,6 @@ void GolfScoringActivity::render(RenderLock&&) {
   drawNineStrip(layout);
   drawFooter();
   if (pickerOpen) drawPenaltyPicker(layout.safe);
-  if (holeStripOpen) drawHoleStrip(layout.safe);
   ++paintCount;
   if (paintCount % 8 == 0) renderer.promoteNextRefresh(HalDisplay::HALF_REFRESH);
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);

@@ -235,40 +235,24 @@ constexpr CounterTapZone counterTapZoneAt(const fui::Rect band, const int x, con
 }
 
 inline constexpr uint8_t HOLE_STRIP_PAGE_SIZE = 9;
-inline constexpr int HOLE_STRIP_TITLE_HEIGHT = 44;
-inline constexpr int HOLE_STRIP_CELL_HEIGHT = 72;
-
-struct HoleStripLayout {
-  fui::Rect sheet{};
-  fui::Rect title{};
-  fui::Rect cells[HOLE_STRIP_PAGE_SIZE]{};
-};
-
-constexpr HoleStripLayout makeHoleStripLayout(const fui::Rect safe) {
-  HoleStripLayout result{};
-  const int desiredHeight = HOLE_STRIP_TITLE_HEIGHT + HOLE_STRIP_CELL_HEIGHT;
-  const int16_t sheetHeight = clampValue(desiredHeight, 0, safe.height);
-  result.sheet = fui::Rect{safe.x, static_cast<int16_t>(safe.y + safe.height - sheetHeight), safe.width, sheetHeight};
-  const int16_t titleHeight = clampValue(HOLE_STRIP_TITLE_HEIGHT, 0, sheetHeight);
-  result.title = fui::Rect{safe.x, result.sheet.y, safe.width, titleHeight};
-  const int16_t cellsY = static_cast<int16_t>(result.title.y + result.title.height);
-  const int16_t cellsHeight = static_cast<int16_t>(result.sheet.y + result.sheet.height - cellsY);
-  for (uint8_t index = 0; index < HOLE_STRIP_PAGE_SIZE; ++index) {
-    const int left = safe.x + static_cast<int32_t>(safe.width) * index / HOLE_STRIP_PAGE_SIZE;
-    const int right = safe.x + static_cast<int32_t>(safe.width) * (index + 1) / HOLE_STRIP_PAGE_SIZE;
-    result.cells[index] =
-        fui::Rect{static_cast<int16_t>(left), cellsY, static_cast<int16_t>(right - left), cellsHeight};
-  }
-  return result;
-}
-
 constexpr uint8_t holeStripPageCount(const uint8_t holeCount) { return holeCount > HOLE_STRIP_PAGE_SIZE ? 2 : 1; }
 
-constexpr int holeStripHoleAt(const HoleStripLayout& layout, const uint8_t page, const uint8_t holeCount, const int x,
+constexpr uint8_t clampNineStripPage(const int page, const uint8_t holeCount) {
+  return static_cast<uint8_t>(clampValue(page, 0, holeStripPageCount(holeCount) - 1));
+}
+
+constexpr fui::Rect nineStripCell(const fui::Rect strip, const uint8_t index) {
+  if (index >= HOLE_STRIP_PAGE_SIZE) return {};
+  const int left = strip.x + static_cast<int32_t>(strip.width) * index / HOLE_STRIP_PAGE_SIZE;
+  const int right = strip.x + static_cast<int32_t>(strip.width) * (index + 1) / HOLE_STRIP_PAGE_SIZE;
+  return fui::Rect{static_cast<int16_t>(left), strip.y, static_cast<int16_t>(right - left), strip.height};
+}
+
+constexpr int nineStripHoleAt(const fui::Rect strip, const uint8_t page, const uint8_t holeCount, const int x,
                               const int y) {
   if (page >= holeStripPageCount(holeCount)) return -1;
   for (uint8_t index = 0; index < HOLE_STRIP_PAGE_SIZE; ++index) {
-    const fui::Rect cell = layout.cells[index];
+    const fui::Rect cell = nineStripCell(strip, index);
     if (x < cell.x || x >= cell.x + cell.width || y < cell.y || y >= cell.y + cell.height) continue;
     const int hole = static_cast<int>(page) * HOLE_STRIP_PAGE_SIZE + index;
     return hole < holeCount ? hole : -1;
