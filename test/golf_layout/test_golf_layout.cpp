@@ -177,38 +177,6 @@ TEST(GolfUiLayout, CounterTapZonesTileBandWithDeterministicBoundaries) {
   EXPECT_EQ(golfui::counterTapZoneAt(band, 7, 71), golfui::CounterTapZone::None);
 }
 
-TEST(GolfUiLayout, HoleStripCellsTileWidthAndRoundTripCentres) {
-  constexpr fui::Rect safe{7, 11, 461, 700};
-  constexpr golfui::HoleStripLayout layout = golfui::makeHoleStripLayout(safe);
-
-  EXPECT_EQ(layout.sheet.y + layout.sheet.height, safe.y + safe.height);
-  EXPECT_GE(layout.cells[0].height, 56);
-  EXPECT_EQ(layout.cells[0].x, safe.x);
-  for (uint8_t index = 0; index < golfui::HOLE_STRIP_PAGE_SIZE; ++index) {
-    const fui::Rect cell = layout.cells[index];
-    if (index > 0) EXPECT_EQ(layout.cells[index - 1].x + layout.cells[index - 1].width, cell.x);
-    EXPECT_EQ(golfui::holeStripHoleAt(layout, 0, 18, cell.x + cell.width / 2, cell.y + cell.height / 2), index);
-    EXPECT_EQ(golfui::holeStripHoleAt(layout, 1, 18, cell.x + cell.width / 2, cell.y + cell.height / 2), index + 9);
-  }
-  EXPECT_EQ(layout.cells[8].x + layout.cells[8].width, safe.x + safe.width);
-  EXPECT_EQ(golfui::holeStripHoleAt(layout, 0, 18, safe.x, layout.title.y), -1);
-  EXPECT_EQ(golfui::holeStripHoleAt(layout, 0, 18, safe.x - 1, layout.cells[0].y), -1);
-}
-
-TEST(GolfUiLayout, HoleStripPageCountAndLastPageHolesAreBounded) {
-  constexpr golfui::HoleStripLayout layout = golfui::makeHoleStripLayout(fui::Rect{0, 0, 480, 700});
-  EXPECT_EQ(golfui::holeStripPageCount(0), 1);
-  EXPECT_EQ(golfui::holeStripPageCount(9), 1);
-  EXPECT_EQ(golfui::holeStripPageCount(10), 2);
-  EXPECT_EQ(golfui::holeStripPageCount(18), 2);
-
-  const fui::Rect first = layout.cells[0];
-  const fui::Rect second = layout.cells[1];
-  EXPECT_EQ(golfui::holeStripHoleAt(layout, 1, 10, first.x + first.width / 2, first.y + first.height / 2), 9);
-  EXPECT_EQ(golfui::holeStripHoleAt(layout, 1, 10, second.x + second.width / 2, second.y + second.height / 2), -1);
-  EXPECT_EQ(golfui::holeStripHoleAt(layout, 1, 9, first.x + first.width / 2, first.y + first.height / 2), -1);
-}
-
 TEST(GolfUiLayout, TotalsBandUsesThreeContiguousCells) {
   const fui::Rect totals{7, 11, 458, 64};
   const fui::Rect first = golfui::totalsCell(totals, 0);
@@ -228,6 +196,51 @@ TEST(GolfUiLayout, TotalsBandUsesThreeContiguousCells) {
   EXPECT_EQ(second.height, totals.height);
   EXPECT_EQ(third.height, totals.height);
   EXPECT_EQ(third.x + third.width, totals.x + totals.width);
+}
+
+TEST(GolfUiLayout, NineStripCellsTileOddWidthAndHitEveryBoundary) {
+  constexpr fui::Rect strip{7, 11, 461, 58};
+  for (uint8_t index = 0; index < golfui::HOLE_STRIP_PAGE_SIZE; ++index) {
+    const auto cell = golfui::nineStripCell(strip, index);
+    EXPECT_TRUE(inside(strip, cell));
+    EXPECT_EQ(cell.y, strip.y);
+    EXPECT_EQ(cell.height, strip.height);
+    EXPECT_EQ(cell.x, index == 0 ? strip.x : golfui::nineStripCell(strip, index - 1).right());
+    for (const int x : {static_cast<int>(cell.x), cell.x + cell.width / 2, cell.right() - 1}) {
+      EXPECT_EQ(golfui::nineStripHoleAt(strip, 0, 18, x, strip.y), index);
+      EXPECT_EQ(golfui::nineStripHoleAt(strip, 1, 18, x, strip.bottom() - 1), index + 9);
+    }
+  }
+  EXPECT_EQ(golfui::nineStripCell(strip, 8).right(), strip.right());
+  EXPECT_EQ(golfui::nineStripHoleAt(strip, 0, 18, strip.x - 1, strip.y), -1);
+  EXPECT_EQ(golfui::nineStripHoleAt(strip, 0, 18, strip.right(), strip.y), -1);
+  EXPECT_EQ(golfui::nineStripHoleAt(strip, 0, 18, strip.x, strip.y - 1), -1);
+  EXPECT_EQ(golfui::nineStripHoleAt(strip, 0, 18, strip.x, strip.bottom()), -1);
+}
+
+TEST(GolfUiLayout, NineStripEmptyCellsAndInvalidPagesMiss) {
+  constexpr fui::Rect strip{0, 0, 480, 58};
+  for (uint8_t holes = 0; holes <= 18; ++holes) {
+    for (uint8_t page = 0; page <= 2; ++page) {
+      for (uint8_t index = 0; index < 9; ++index) {
+        const auto cell = golfui::nineStripCell(strip, index);
+        const int hole = page * 9 + index;
+        EXPECT_EQ(golfui::nineStripHoleAt(strip, page, holes, cell.x + cell.width / 2, cell.y),
+                  page < golfui::holeStripPageCount(holes) && hole < holes ? hole : -1);
+      }
+    }
+  }
+}
+
+TEST(GolfUiLayout, NineStripPageCountAndClampNeverWrap) {
+  for (uint8_t holes = 0; holes <= 18; ++holes) {
+    const uint8_t lastPage = holes > 9 ? 1 : 0;
+    EXPECT_EQ(golfui::holeStripPageCount(holes), lastPage + 1);
+    EXPECT_EQ(golfui::clampNineStripPage(-1, holes), 0);
+    EXPECT_EQ(golfui::clampNineStripPage(0, holes), 0);
+    EXPECT_EQ(golfui::clampNineStripPage(1, holes), lastPage);
+    EXPECT_EQ(golfui::clampNineStripPage(2, holes), lastPage);
+  }
 }
 
 TEST(GolfPlayerSetupPolicy, EveryPlayerCountReviewsRoster) {
