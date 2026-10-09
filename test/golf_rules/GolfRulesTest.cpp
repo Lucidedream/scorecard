@@ -253,6 +253,30 @@ TEST_F(GolfRulesTest, AdvanceRefusesDraftWithNoEnabledPlayers) {
   EXPECT_EQ(round.currentPlayer, 0);
 }
 
+TEST_F(GolfRulesTest, JumpChangesOnlyTheCurrentHole) {
+  round.currentHole = 2;
+  round.currentPlayer = 3;
+  score(0).putts[2] = 4;
+  score(0).putts[12] = 7;
+  const GolfPlayerScore before = score(0);
+
+  ASSERT_TRUE(golfJumpToHole(round, 12));
+  EXPECT_EQ(round.currentHole, 12);
+  EXPECT_EQ(round.currentPlayer, 3);
+  EXPECT_EQ(memcmp(&score(0), &before, sizeof(before)), 0);
+}
+
+TEST_F(GolfRulesTest, JumpRejectsInvalidOrCurrentHoleWithoutMutation) {
+  round.currentHole = 4;
+  round.currentPlayer = 2;
+
+  EXPECT_FALSE(golfJumpToHole(round, 4));
+  EXPECT_FALSE(golfJumpToHole(round, round.holeCount));
+  EXPECT_FALSE(golfJumpToHole(round, GolfRound::MAX_HOLES));
+  EXPECT_EQ(round.currentHole, 4);
+  EXPECT_EQ(round.currentPlayer, 2);
+}
+
 TEST(GolfRules, FocusCyclesInEntryOrder) {
   EXPECT_EQ(nextGolfField(GolfField::Putts), GolfField::In100);
   EXPECT_EQ(nextGolfField(GolfField::In100), GolfField::Out100);
