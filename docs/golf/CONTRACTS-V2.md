@@ -2571,3 +2571,66 @@ is 1 for <= 9 holes and 2 for 10-18.
    keys only), and only if a new user-facing string is needed.
 5. One tap produces exactly one action: a tap that selects a row does not also count; a tap
    that opens or closes a sheet does not also reach the row or cell beneath it.
+
+## 39. Hole navigation in place: swipe the hole number, swipe or tap the nine strip (v7.2)
+
+Owner decision after using §38 on the device. **§38.1 (tap-to-count, row select) stands
+unchanged. §38.2 (the pop-up hole strip sheet) is withdrawn and replaced by this section.**
+Touch boards only; nothing changes without touch.
+
+### 39.1 Remove the sheet
+
+Delete the hole-strip bottom sheet and everything that exists only for it:
+`holeStripOpen`, `openHoleStrip`, `closeHoleStrip`, `handleHoleStripInput`,
+`drawHoleStrip`, `HoleStripLayout`, `makeHoleStripLayout`, `holeStripHoleAt`, the sheet's
+title/cell-height constants, and their tests. A **tap** on the hole band now does nothing.
+`golfJumpToHole`, `jumpToHole`, `holeStripPageCount` (rename if clearer) and the shared
+`drawHoleCells` stay.
+
+### 39.2 Swipe the hole band to step one hole
+
+A horizontal swipe that **starts inside `ScoringLayout::hole`** steps the hole by one:
+swipe left = next hole, swipe right = previous hole. It keeps the current player
+(`golfJumpToHole(current ± 1)`), does **not** wrap (no-op at hole 1 and at the last hole),
+and has the same side effects as any hole change (§38.2's `jumpToHole` wrapper).
+
+### 39.3 The nine strip scrolls and selects
+
+`ScoringLayout::nineStrip` is the row of hole cells already at the bottom of the screen.
+
+* **Swipe to scroll.** A horizontal swipe that starts inside the nine strip changes which
+  nine holes it shows: swipe left shows the later page, swipe right the earlier one, no
+  wrap. This only changes the view; the current hole and all scores are untouched.
+* **Tap to jump.** A tap on a cell makes that hole current (`jumpToHole`). A tap on the
+  current hole's cell, or on an empty cell past `holeCount`, does nothing.
+* **The view follows the round.** The viewed page is activity state (`nineStripPage`),
+  reset to the page containing the current hole whenever the current hole changes by any
+  means (jump, swipe step, PREV/NEXT, Power advance) and on entering the screen. When the
+  viewed page does not contain the current hole, no cell is drawn inverted — the strip
+  draws exactly what `drawHoleCells` produces for that page.
+* A round of nine holes or fewer has a single page and the swipe is a no-op.
+* The nine strip keeps its current height and appearance. No arrows or page label.
+
+Geometry and hit-testing are constexpr in `GolfUiLayout.h` and host-tested: the cell
+hit-test over a given strip rect (nine cells tile the width; cells past `holeCount` are
+inert; a point outside the strip misses), and the page-count/page-clamp helper.
+
+### 39.4 Knowing where a swipe started
+
+`MappedInputManager::wasSwipe()` reports direction only, and its endpoint decoder is
+private. Do **not** edit `MappedInputManager` or call the HAL from golf. Latch the contact's
+start point in the activity from the public per-frame queries (`isScreenTouchHeld` /
+`wasScreenTouchDown`: record the first point seen for a contact, clear it on
+`wasScreenTouchReleased` after the frame's gestures are handled) and classify the swipe by
+which band contains that latched point. If the latch cannot be made reliable with the
+public API, stop and escalate rather than editing upstream.
+
+Precedence each frame: Back (footer cell or edge swipe) first, then swipes, then taps. A
+swipe never also delivers a tap; a swipe that starts on a counter row or anywhere else is
+ignored, so it cannot count a stroke.
+
+### 39.5 Acceptance
+
+Same builds, tests, formatting and scope checks as §38.3, plus: no reference to the removed
+sheet remains (`grep -n "holeStripOpen\|HoleStripLayout\|drawHoleStrip"` is empty), §38.1
+behaviour is unchanged, and the mark sheet is unaffected.
