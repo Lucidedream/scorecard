@@ -42,6 +42,8 @@ class GolfScoringActivity final : public Activity, protected UiAppHost {
   bool pickerOpen = false;
   uint8_t pickerRow = 0;
   bool pickerHoleFull = false;
+  bool holeStripOpen = false;
+  uint8_t holeStripPage = 0;
 
   static constexpr uint8_t PICKER_ROW_THIRD = 2;
 
@@ -90,6 +92,11 @@ class GolfScoringActivity final : public Activity, protected UiAppHost {
   void applyPickerSelection();
   void applyPenaltyPick();
 
+  void openHoleStrip();
+  void closeHoleStrip();
+  void handleHoleStripInput();
+  void jumpToHole(uint8_t hole);
+
   // Writes the space-separated marker sequence for a hole ("H OB"), in event
   // order, trimming trailing markers to a "+N" tail when the run exceeds
   // maxWidth. fieldFilter < 0 takes every field; otherwise only that GolfField's
@@ -103,6 +110,8 @@ class GolfScoringActivity final : public Activity, protected UiAppHost {
   void drawPenaltyBand(const golfui::ScoringLayout& layout) const;
   void drawTotals(const golfui::ScoringLayout& layout) const;
   void drawNineStrip(const golfui::ScoringLayout& layout) const;
+  void drawHoleCells(freeink::ui::Rect rect, uint8_t firstHole) const;
   void drawFooter() const;
   void drawPenaltyPicker(freeink::ui::Rect safe) const;
+  void drawHoleStrip(freeink::ui::Rect safe) const;
 };

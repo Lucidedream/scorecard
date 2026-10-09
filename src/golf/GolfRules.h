@@ -23,3 +23,4 @@ uint8_t golfPreviousEnabledPlayer(const GolfRound& round, uint8_t player);
 bool golfIsFinalCommit(const GolfRound& round);
 bool advanceGolfTurn(GolfRound& round);
 bool retreatGolfTurn(GolfRound& round);
+bool golfJumpToHole(GolfRound& round, uint8_t hole);

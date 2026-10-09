@@ -164,4 +164,10 @@ bool retreatGolfTurn(GolfRound& round) {
   return true;
 }
 
+bool golfJumpToHole(GolfRound& round, const uint8_t hole) {
+  if (hole >= round.holeCount || hole == round.currentHole) return false;
+  round.currentHole = hole;
+  return true;
+}
+
 #endif

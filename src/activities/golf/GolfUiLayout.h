@@ -221,6 +221,61 @@ constexpr int scoringHoleDigitTop(const fui::Rect rect, const int digitHeight) {
   return rect.y + rect.height - digitHeight - SCORING_HOLE_DIGIT_RULE_GAP;
 }
 
+enum class CounterTapZone : uint8_t { None, Decrement, Centre, Increment };
+
+constexpr CounterTapZone counterTapZoneAt(const fui::Rect band, const int x, const int y) {
+  if (band.width <= 0 || band.height <= 0 || x < band.x || x >= band.x + band.width || y < band.y ||
+      y >= band.y + band.height) {
+    return CounterTapZone::None;
+  }
+  const int offset = x - band.x;
+  if (offset < static_cast<int32_t>(band.width) / 3) return CounterTapZone::Decrement;
+  if (offset < static_cast<int32_t>(band.width) * 2 / 3) return CounterTapZone::Centre;
+  return CounterTapZone::Increment;
+}
+
+inline constexpr uint8_t HOLE_STRIP_PAGE_SIZE = 9;
+inline constexpr int HOLE_STRIP_TITLE_HEIGHT = 44;
+inline constexpr int HOLE_STRIP_CELL_HEIGHT = 72;
+
+struct HoleStripLayout {
+  fui::Rect sheet{};
+  fui::Rect title{};
+  fui::Rect cells[HOLE_STRIP_PAGE_SIZE]{};
+};
+
+constexpr HoleStripLayout makeHoleStripLayout(const fui::Rect safe) {
+  HoleStripLayout result{};
+  const int desiredHeight = HOLE_STRIP_TITLE_HEIGHT + HOLE_STRIP_CELL_HEIGHT;
+  const int16_t sheetHeight = clampValue(desiredHeight, 0, safe.height);
+  result.sheet = fui::Rect{safe.x, static_cast<int16_t>(safe.y + safe.height - sheetHeight), safe.width, sheetHeight};
+  const int16_t titleHeight = clampValue(HOLE_STRIP_TITLE_HEIGHT, 0, sheetHeight);
+  result.title = fui::Rect{safe.x, result.sheet.y, safe.width, titleHeight};
+  const int16_t cellsY = static_cast<int16_t>(result.title.y + result.title.height);
+  const int16_t cellsHeight = static_cast<int16_t>(result.sheet.y + result.sheet.height - cellsY);
+  for (uint8_t index = 0; index < HOLE_STRIP_PAGE_SIZE; ++index) {
+    const int left = safe.x + static_cast<int32_t>(safe.width) * index / HOLE_STRIP_PAGE_SIZE;
+    const int right = safe.x + static_cast<int32_t>(safe.width) * (index + 1) / HOLE_STRIP_PAGE_SIZE;
+    result.cells[index] =
+        fui::Rect{static_cast<int16_t>(left), cellsY, static_cast<int16_t>(right - left), cellsHeight};
+  }
+  return result;
+}
+
+constexpr uint8_t holeStripPageCount(const uint8_t holeCount) { return holeCount > HOLE_STRIP_PAGE_SIZE ? 2 : 1; }
+
+constexpr int holeStripHoleAt(const HoleStripLayout& layout, const uint8_t page, const uint8_t holeCount, const int x,
+                              const int y) {
+  if (page >= holeStripPageCount(holeCount)) return -1;
+  for (uint8_t index = 0; index < HOLE_STRIP_PAGE_SIZE; ++index) {
+    const fui::Rect cell = layout.cells[index];
+    if (x < cell.x || x >= cell.x + cell.width || y < cell.y || y >= cell.y + cell.height) continue;
+    const int hole = static_cast<int>(page) * HOLE_STRIP_PAGE_SIZE + index;
+    return hole < holeCount ? hole : -1;
+  }
+  return -1;
+}
+
 constexpr fui::Rect evenRow(const fui::Rect rect, const uint8_t count, const uint8_t index) {
   if (count == 0 || index >= count) return {};
   const int top = rect.y + (static_cast<int32_t>(rect.height) * index) / count;
