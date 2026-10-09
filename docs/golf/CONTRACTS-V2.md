@@ -2499,3 +2499,75 @@ Owner-side, on the device: flash, corner-tap the four footer cells on each scree
 three holes with side keys + Power, open the mark sheet and the course map, finish a round,
 confirm the 1.2 UI scale leaves no clipped text on Scoring and the Card, and check that
 round dates are right without a Wi-Fi sync (the Pro has an RTC).
+
+## 38. Touch scoring: tap-to-count and the hole strip (v7.1)
+
+Owner decisions after first use of the Pro. Touch boards only (`mappedInput.hasTouch()`);
+nothing here changes rendering or input on a board without touch. This section
+**supersedes** the §37.4 sentence that a counter-band tap "never changes a count".
+
+### 38.1 Tap-to-count on the selected row
+
+The three counter bands are `ScoringLayout::counters[0..2]`.
+
+* **A tap on a row that is not selected selects it** and does nothing else, wherever on
+  the row it lands. (Unchanged from §37.4.)
+* **A tap on the selected row** is classified by its horizontal position within the band:
+  * right third — **+1**, exactly the Up side key (`mutateCounter(true)`);
+  * left third — **-1**, exactly the Down side key (`removeOrDecrement()`, so it removes
+    the field's latest mark first, §12.4);
+  * centre third — **nothing**.
+* This applies to **all three rows** (Out 100, In 100, Putts), not only Putts.
+* **No visual.** No plus/minus glyphs, zone dividers, arrows or pressed-state highlight
+  are drawn. The row looks exactly as it does today.
+* No auto-repeat on touch: one tap, one step. The side keys keep their existing repeat.
+* Archived rounds stay read-only through the existing `rejectArchivedMutation()` path.
+
+The zone classifier is a constexpr function in `GolfUiLayout.h`, host-tested in
+`test/golf_layout`: thirds tile the band exactly, the boundaries are assigned
+deterministically, and a point outside the band is `None`.
+
+### 38.2 The hole strip
+
+**Tapping the hole band** (`ScoringLayout::hole`) opens a bottom sheet for jumping to any
+hole. It reuses the mark sheet's construction (bottom-anchored in the scoring safe rect,
+title row, HALF_REFRESH on open and close) and is mutually exclusive with it.
+
+* **Content.** One page of up to nine cells, drawn like the existing nine strip
+  (`drawNineStrip`): hole number above, that hole's score below (`.` when unscored, mark
+  superscript as today), current hole inverted. Cells are finger-sized: at least 56 px
+  tall. Page 0 is holes 1-9, page 1 is holes 10-18. A round of nine holes or fewer has one
+  page. The sheet opens on the page containing the current hole.
+* **Scroll.** A horizontal swipe changes page: swipe left shows the later holes, swipe
+  right the earlier ones; no wrap. The Up / Down side keys page too. A small text
+  indicator in the title row shows which page is showing (e.g. `1-9` / `10-18`); it is the
+  only affordance — no arrow buttons.
+* **Jump.** Tapping a cell makes that hole current and closes the sheet. Tapping the
+  current hole just closes it.
+* **Cancel.** A tap outside the sheet, the Back footer cell, or the Back edge-swipe closes
+  it and changes nothing. Test Back before the page swipe so an edge swipe is never read as
+  paging.
+* **Footer while open:** Back only.
+
+**The jump is a rules function**, not activity code: `golfJumpToHole(GolfRound&, uint8_t
+hole)` in `src/golf/GolfRules.{h,cpp}`, host-tested. It sets `currentHole`, keeps
+`currentPlayer`, returns false and changes nothing for `hole >= holeCount`. The activity
+wraps it exactly as `changeTurn` wraps `advanceGolfTurn` (`GolfScoringActivity.cpp:512-534`):
+under `RenderLock`, `resetTurnState()` on change, then `markDirtyForIdle()`,
+`flushDirty()` because the hole changed, `requestUpdate()`. It must not seed or alter any
+score on either the hole left or the hole entered.
+
+Page geometry and the cell hit-test are constexpr in `GolfUiLayout.h` and host-tested:
+nine cells tile the width, cells beyond `holeCount` on the last page are inert, page count
+is 1 for <= 9 holes and 2 for 10-18.
+
+### 38.3 Acceptance
+
+1. `pio run -e golf-x4pro` and `pio run -e golf` build with no new warnings.
+2. All host tests pass, including new tests for the tap zones, the strip geometry and
+   `golfJumpToHole`.
+3. With `hasTouch()` false nothing changes: the hole strip cannot open and no tap path runs.
+4. The only upstream file that may be touched is `lib/I18n/translations/*.yaml` (Scorecard
+   keys only), and only if a new user-facing string is needed.
+5. One tap produces exactly one action: a tap that selects a row does not also count; a tap
+   that opens or closes a sheet does not also reach the row or cell beneath it.
