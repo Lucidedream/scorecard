@@ -2634,3 +2634,304 @@ ignored, so it cannot count a stroke.
 Same builds, tests, formatting and scope checks as §38.3, plus: no reference to the removed
 sheet remains (`grep -n "holeStripOpen\|HoleStripLayout\|drawHoleStrip"` is empty), §38.1
 behaviour is unchanged, and the mark sheet is unaffected.
+
+## 40. One course, one file, built from nines; the round picks its front and back nine (v7)
+
+*Added 2026-10-20. Owner request: pick which nine is played out and which in (and swap
+them); store each course as a single JSON instead of one file per tee. Owner decisions:
+convert old files with a script and drop v1 support; Lake Hill Dragon and Phoenix stay
+two separate courses; the front and back nine must be different nines.*
+
+This supersedes §30.2 (multi-file tee merge), §32.2's per-file tee resolution, the
+Sanyang flash-alternate special case, and §34.4's same-name row dedup. Everything in §35
+(longest-first tee order) and §32.7 (default tee) still holds, applied to the new model.
+
+The §37 X4 Pro target and touch controls, §38 touch scoring, and §39 in-place
+hole navigation remain in effect. The nine picker uses `GolfUiListActivity` and its
+touch footer; tee-info tabs and map paging support every course nine. Scoring strips
+keep round hole order; only map image lookup uses course hole numbers.
+
+### 40.1 Course file schema v2
+
+```json
+{
+  "v": 2,
+  "name": "Sanyang Golf Club",
+  "nines": [
+    { "name": "Out", "par": [4,5,3,4,5,3,4,4,4], "si": [15,7,13,11,9,17,3,1,5] },
+    { "name": "In",  "par": [4,4,5,3,4,4,4,3,5], "si": [6,12,18,16,10,14,2,4,8] }
+  ],
+  "tees": [
+    { "name": "Blue",  "yards": [[325,510,144,290,510,170,427,430,390],
+                                 [400,395,520,175,365,375,385,165,490]] },
+    { "name": "White", "yards": [[...9...], [...9...]] }
+  ]
+}
+```
+
+Rules — any violation rejects the whole file (`LOG_ERR` naming the file and reason, the
+course is skipped, exactly as an invalid v1 file is today):
+
+| Field | Rule |
+| --- | --- |
+| `v` | Must be `2`. A `"v": 1` file is rejected with `LOG_ERR("GOLF", "Skipped course %s: v1 course files are no longer supported; convert with scripts/golf_convert_courses_v2.py", ...)`. |
+| `name` | Required, 1..39 bytes, single line. |
+| `nines` | Required, 1..`GOLF_MAX_NINES` (4) entries, in course order (index 0 is the course's own front nine). |
+| `nines[].name` | Required, 1..11 bytes, single line, no comma, unique within the file (case-sensitive). |
+| `nines[].par` | Required, exactly 9 entries, each 3..6 — except that `par` may be all zeros only for the built-in Template course (built-ins are not parsed, so in practice SD files need 3..6). |
+| `nines[].si` | Optional. When present: exactly 9 entries, unique within the nine, each 1..9 if the course has exactly one nine, else 1..18. Duplicates *across* nines are allowed (27-hole clubs often number each nine odd- or even-only). |
+| `tees` | Optional, 0..`GOLF_MAX_TEES` (6) entries. |
+| `tees[].name` | Required, 1..11 bytes, `golfTeeStringValid`, unique within the file. |
+| `tees[].yards` | Optional. When present: exactly one array per nine (same count and order as `nines`), each exactly 9 entries, each 1..999. Absent means a yardless (selection-only) tee. |
+
+A file with no `tees` (or an empty array) loads with two synthesized yardless tees,
+`Blue` and `White`, so it stays playable (the §32.2 label-less behaviour, kept).
+
+Unknown extra fields are ignored. Course files stay at `/golf/courses/*.json`; the
+filename is not significant beyond the `.json` extension.
+
+### 40.2 In-memory model (`GolfCourse.h`)
+
+```cpp
+inline constexpr uint8_t GOLF_HOLES_PER_NINE = 9;
+inline constexpr uint8_t GOLF_MAX_NINES = 4;
+inline constexpr uint8_t GOLF_NINE_NAME_CAPACITY = 12;
+inline constexpr uint8_t GOLF_NO_NINE = UINT8_MAX;
+
+struct GolfNine {
+  char name[GOLF_NINE_NAME_CAPACITY];
+  uint8_t par[GOLF_HOLES_PER_NINE];
+  uint8_t si[GOLF_HOLES_PER_NINE];
+  bool hasSi;
+};
+
+struct GolfCourseTee {                // replaces the old resolved-tee struct of the same name
+  char name[GOLF_TEE_CAPACITY];
+  bool hasYards;
+  uint16_t yards[GOLF_MAX_NINES][GOLF_HOLES_PER_NINE];
+};
+
+struct GolfCourse {
+  char courseName[40];
+  uint8_t nineCount;                  // 1..GOLF_MAX_NINES
+  uint8_t teeCount;                   // 1..GOLF_MAX_TEES after Blue/White synthesis
+  GolfNine nines[GOLF_MAX_NINES];
+  GolfCourseTee tees[GOLF_MAX_TEES];  // longest-first (§35) once loaded
+};
+```
+
+`GolfCourse` grows from 128 bytes to roughly 700. It must **never** be a stack local
+(CLAUDE.md: < 256 bytes of locals). Hold it as an activity member (activities are heap
+objects) or in one `makeUniqueNoThrow<GolfCourse>()` scratch allocated once per scan,
+never per file. Replace the old `static_assert(sizeof(GolfCourse) == 128)` with the real
+size, and drop `GolfPlayerSetupActivity`'s `sizeof(GolfCourse) <= 256` assert.
+
+**Removed** (no longer meaningful with one file per course): `GolfCourseTeeSet`,
+`CourseStore::resolveAllTees`, `golfResolveAllTeesFrom`, `CourseStore::resolveTee`,
+`CourseStore::defaultTee`, `CourseStore::initializeGolfPlayerSelection`,
+`CourseStore::applyGolfCourse`, `golfResolveTeeCourse`, `golfResolveBuiltInTeeYardages`,
+`golfBuiltInTeeNames`, `SANYANG_WHITE_YARDS` as a separate array, `GolfTeeResolution`,
+and the `GolfCourse::tees`/`yards`/`si`/`hasYards`/`hasSi`/`holeCount` single-tee fields.
+Every consumer reads `GolfCourse::tees[]` directly.
+
+### 40.3 Parsing is pure and host-testable
+
+`CourseStore::load()` becomes a thin SD wrapper around a new pure parser in
+`src/golf/GolfCourseParse.{h,cpp}`:
+
+```cpp
+// Parses and validates one v2 course document. On success fills `course` (tees synthesized
+// per §40.1 and sorted per §35) and returns valid=true; on failure leaves `course`
+// untouched and returns the first violation.
+GolfCourseValidationResult golfParseCourseJson(JsonVariantConst doc, GolfCourse& course);
+```
+
+`GolfCourseValidate` is rewritten to the §40.1 rules (keep the result struct and the
+error/field name helpers; add whatever error/field enumerators the new rules need, e.g.
+`NineCount`, `NineName`, `TeeName`, `Duplicate`, `Version`). Tee sorting reuses
+`golfTeeSortsBefore` (§35), now comparing total yardage across all `nineCount` nines.
+
+### 40.4 Built-in courses
+
+`CourseBuiltIns.h` holds `inline constexpr GolfCourse GOLF_BUILT_IN_COURSES[]` in the new
+shape (flash `.rodata`), same table order and same §7.1 override rule (an SD file whose
+`name` equals a built-in's replaces it in that slot):
+
+* **Sanyang Golf Club** — Out/In, SI as today, tees **Blue** (current primary row) and
+  **White** (current `SANYANG_WHITE_YARDS`), both with yards. Keep the existing
+  per-nine and total `static_assert` sums against the new arrays.
+* **MoganShan Gowin** — Out/In, no SI, tee Blue with yards (keep its sum asserts).
+* **Pebble Beach** — Out/In, no SI, tee Blue yardless.
+* **Template course** — Out/In, par all zero, no SI, tees Blue and White yardless (the
+  synthesized pair, written out literally since built-ins are not parsed).
+
+Built-in tees must be listed already longest-first so no runtime sort is needed.
+
+### 40.5 Enumeration and lists
+
+`CourseStore::enumerate(files, capacity)` keeps its signature and semantics (built-ins
+after SD in the scan, overrides inherit the slot), but validates each SD file through one
+heap scratch `GolfCourse`. Two SD files with the same `name`: the first in sort order
+wins, the other is dropped with `LOG_ERR("GOLF", "Duplicate course name %s in %s", ...)`.
+`golfSortAndDedupCourses` becomes `golfSortCourses` over a lightweight summary:
+
+```cpp
+struct GolfCourseSummary {
+  GolfCourseFile file;
+  char courseName[40];
+  uint8_t nineCount;
+  uint16_t defaultPar;            // par of the default round (nine 0 + nine 1, or nine 0 alone)
+  char teeList[24];               // golfFormatTeeList output, longest-first
+};
+```
+
+`GolfSetupActivity` and `GolfCourseMapListActivity` hold `GolfCourseSummary[GOLF_MAX_COURSES]`
+(≈ 2.6 KB) instead of `GolfCourse[GOLF_MAX_COURSES]` (would be ≈ 22 KB). Row subtitle:
+`STR_GOLF_COURSE_ROW_FORMAT` with hole count = `9 * nineCount` and the tee list; value =
+par of the default round. `CourseStore::findByName(name, file, course)` returns the file
+and the loaded course (used by the map browser and tee-info page, which are entered by
+name).
+
+### 40.6 Composing a round from two nines
+
+```cpp
+struct GolfNineSelection {
+  uint8_t front = 0;
+  uint8_t back = 1;               // GOLF_NO_NINE for a one-nine course (9-hole round)
+};
+
+// Default: {0, 1} when nineCount >= 2, {0, GOLF_NO_NINE} when nineCount == 1.
+GolfNineSelection golfDefaultNineSelection(const GolfCourse& course);
+// front < nineCount; back < nineCount and != front, or back == GOLF_NO_NINE iff nineCount == 1.
+bool golfNineSelectionValid(const GolfCourse& course, GolfNineSelection selection);
+// Writes `round = {}` + player defaults, courseName, dateYmd, holeCount (9 or 18),
+// par[], si[]/hasSi and round.nines[]. Returns false (round untouched) on an invalid selection.
+bool golfComposeRound(const GolfCourse& course, GolfNineSelection selection, uint16_t dateYmd, GolfRound& round);
+// The tee's yards for the selection, laid out as round holes 0..holeCount; false if yardless.
+bool golfComposeTeeYards(const GolfCourse& course, uint8_t teeIndex, GolfNineSelection selection,
+                         uint16_t (&yards)[GOLF_MAX_HOLES]);
+// The default tee for a new round: "Blue", else "White", else tees[0] (§32.7 on the new model).
+const char* golfDefaultTee(const GolfCourse& course);
+```
+
+**Stroke index.** `round.hasSi` is true only when every played nine has `hasSi` **and**
+the composed `si[0..holeCount)` is a permutation of `1..holeCount` (the existing round
+rule in `sharedSiIsCanonical`). Otherwise `hasSi = false` and `si[]` is zeroed, with a
+`LOG_INF`. An 18-hole course swapped In-then-Out keeps its SI (still a permutation).
+
+These live in `CourseOrder` (or a new `GolfCourseCompose.{h,cpp}`), pure and
+host-tested.
+
+### 40.7 The round remembers which nines it played
+
+`GolfRound` gains `uint8_t nines[2]` — course nine indices of round holes 0..8 and 9..17
+(`nines[1] = GOLF_NO_NINE` for a 9-hole round). Update the `sizeof` static_asserts.
+
+Round file and `state.json` get an optional `"nines":[a,b]` (`[a]` for 9 holes), written
+by `RoundArchive` and `GolfRoundStore`. **No version bump**: the field is additive and
+optional; when absent (every existing file) it decodes as the identity `[0,1]` / `[0]`,
+and pre-§40 firmware simply ignores it. The decoder rejects a present-but-malformed
+value (wrong length for `holeCount`, an index ≥ `GOLF_MAX_NINES`, or two equal indices).
+`index.csv` is unchanged.
+
+`golfCourseHoleNumber(const GolfRound& round, uint8_t roundHole)` returns the 1-based
+**course** hole number: `round.nines[roundHole / 9] * 9 + roundHole % 9 + 1`.
+
+### 40.8 Course-map images use the course hole number
+
+Images stay at `/golf/maps/<slug>/hole-N.bmp`, but **N is the course hole number**
+(1..`9 * nineCount`), so existing 18-hole map folders keep working unchanged for the
+default Out/In order. `GolfScoringActivity::openCourseMap` passes both the round hole
+(for the "Hole N" title, which is what the player is scoring) and
+`golfCourseHoleNumber()` (for the image). `GolfCourseMapBrowserActivity` pages through
+all `9 * nineCount` course holes; its hole band shows the nine name before the hole
+number (e.g. "In · 3") when `nineCount >= 2`.
+
+### 40.9 Tee-info page shows one tab per nine
+
+`GolfCourseTeeInfoActivity` keeps the §35.1 `fui::table` grid, but its tabs become one
+per nine (label = `nines[i].name`; no tabs for a one-nine course) instead of Front/Back.
+Rows: hole header (course hole numbers), Par, SI (only when that nine `hasSi`), one row
+per tee; total column labelled `STR_GOLF_TOTAL_SHORT`.
+
+`pickGlanceTees` (§34.1) and `golfFormatTeeList` take `const GolfCourse&` and index into
+`course.tees`; their selection rules are unchanged.
+
+### 40.10 The nine picker (new screen)
+
+Flow: Course list → **Nine picker** (only when `nineCount >= 2`) → Player setup →
+Scoring. A one-nine course skips the picker with `{0, GOLF_NO_NINE}`.
+
+`GolfNineSelectActivity(GolfCourseFile file, GolfNineSelection initial)` is a
+`GolfUiListActivity` that loads its own `GolfCourse` member via `CourseStore::load(file, …)`
+in `onEnter` (load failure: `LOG_ERR`, header shows `STR_GOLF_COURSE_LOAD_ERROR`, only Back
+works). It has two phases:
+
+**Rows phase** — header: course name; header subtitle: `STR_GOLF_CHOOSE_NINES` ("Choose
+nines"). Four rows:
+
+| Row | Label | Value / subtitle | Confirm |
+| --- | --- | --- | --- |
+| 0 | `STR_GOLF_FRONT_NINE` | nine name; subtitle "Par 36 · 3,196 yds" for the longest tee with yards (par only when none) | opens the nine list for the front slot |
+| 1 | `STR_GOLF_BACK_NINE` | same, for the back nine | opens the nine list for the back slot |
+| 2 | `STR_GOLF_SWAP_NINES` ("Swap front and back") | — | swaps front/back in place, re-renders, focus stays |
+| 3 | `STR_GOLF_CONTINUE` ("Continue") | — | `openGolfPlayerSetup(file, selection)` |
+
+**Nine list phase** — header subtitle: `STR_GOLF_FRONT_NINE` / `STR_GOLF_BACK_NINE` for the
+slot being chosen; one row per course nine (label = name, value = par total, subtitle as
+above), focus pre-set to the slot's current nine. Choosing the nine already in the
+**other** slot swaps the two (so front != back always holds, no disabled rows). Choosing
+returns to the rows phase. Back in the nine list returns to the rows phase unchanged.
+
+Back in the rows phase returns to the course list (`openGolfSetup`). Use the existing
+`GolfUiListActivity` / `golfui` chrome, footer and focus conventions of
+`GolfPlayerSetupActivity`; reuse existing i18n keys where they exist and add only the new
+ones above (English text as given; other languages fall back).
+
+### 40.11 Player setup takes the selection
+
+`GolfPlayerSetupActivity(GolfCourseFile file, GolfNineSelection selection)` loads its own
+`GolfCourse` member in `onEnter` (same failure handling as 40.10). Tee rows iterate
+`course.tees[0..teeCount)` (all enabled; every course tee is valid). Default tee:
+`golfDefaultTee`. `completeRound` calls `golfComposeRound` then, per enabled player,
+`golfComposeTeeYards` for the chosen tee (zeroed yards when yardless). Back from the
+count/players phase returns to the nine picker with the same selection when
+`nineCount >= 2`, else to the course list.
+
+Navigation (`GolfNavigation.h`): `openGolfNineSelect(manager, renderer, input, file,
+selection)`; `openGolfPlayerSetup(manager, renderer, input, file, selection)`. Both carry
+only the 49-byte file handle and the 2-byte selection, never a `GolfCourse`.
+
+### 40.12 Converting the owner's files
+
+`scripts/golf_convert_courses_v2.py <in_dir> <out_dir>`:
+
+* Reads every `*.json` in `in_dir`; skips (with a printed reason) anything that is not a
+  valid v1 course per CONTRACTS §5/§9 (e.g. the deliberately incomplete
+  `sanyang-suzhou.json` template) and anything already `"v": 2` (copied through unchanged).
+* Groups v1 files by exact `name`. Within a group, `holes`, `par` and `si` must agree; if
+  they don't, the group is reported as an error and not written.
+* Emits one v2 file per group at `<out_dir>/<slug(name)>.json` (slug per CONTRACTS §5):
+  18-hole → nines `Out` (holes 1–9) and `In` (10–18); 9-hole → one nine `Out`. SI is split
+  per nine as-is. Tees in input filename order, yards split per nine, `yards` omitted for
+  a file with none; a v1 file with no `tees` label contributes no tee (the firmware
+  synthesizes Blue/White).
+* Never overwrites an existing output file unless `--force`. Prints a one-line summary per
+  output (name, nines, tees). Stdlib only, Python 3.9+.
+
+`docs/golf/examples/` is converted with it: one v2 file per course replaces the per-tee
+files (Sanyang, Dragon, Phoenix, MoganShan, Pebble Beach, example-course), the
+incomplete Sanyang template is rewritten by hand as a v2 template that still deliberately
+fails to load, and `docs/golf/examples/README.md` documents the v2 schema (§40.1) and the
+conversion command.
+
+### 40.13 Tests
+
+Host tests (`test/golf_*`, run the same way the existing 13 golf suites run) must cover:
+the parser accepting every v2 file in `docs/golf/examples/` (except the template) and
+rejecting each §40.1 violation including v1; Blue/White synthesis; tee sort across nines;
+`golfDefaultNineSelection`, `golfNineSelectionValid`, `golfComposeRound` (default order,
+swapped order keeps SI, 27-hole duplicate-SI combination drops SI, 9-hole course);
+`golfComposeTeeYards`; `golfCourseHoleNumber`; round JSON `nines` round-trip, absence →
+identity, and malformed rejection. Existing tests for removed APIs are rewritten against
+the new ones, not deleted wholesale.
