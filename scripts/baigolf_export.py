@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Export a personal baigolf cache to an offline SD catalog (§41.3)."""
 import argparse
+import colorsys
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import datetime
 import re
@@ -19,6 +20,24 @@ REGIONS = dict(zip(
 COLORS = dict(zip('黑 金 蓝 白 红 黄 绿 银'.split(), 'Black Gold Blue White Red Yellow Green Silver'.split()))
 PRIORITY = 'Black Gold Blue White Green Yellow Red Orange'.split()
 SCORES = 'green_fairway course_diff caddie_service price_exp club_facilities catering_qlty'.split()
+
+WHITE_SATURATION_MAX = 0.18
+WHITE_VALUE_MIN = 0.75
+WATER_HUE_MIN = 0.45
+WATER_HUE_MAX = 0.72
+WATER_SATURATION_MIN = 0.30
+SAND_HUE_MIN = 0.08
+SAND_HUE_MAX = 0.17
+SAND_VALUE_MIN = 0.60
+GRASS_HUE_MIN = 0.17
+GRASS_HUE_MAX = 0.45
+WHITE_TONE = 255
+WATER_TONE = 20
+SAND_TONE = 245
+GRASS_TONE_BASE = 60
+GRASS_TONE_RANGE = 190
+GRASS_VALUE_EXPONENT = 1.6
+OTHER_TONE_RANGE = 200
 
 
 def pillow():
@@ -187,10 +206,31 @@ def image_holes(images, nine_count):
     return {}
 
 
+def hsv_tone(hue, saturation, value):
+    """Apply §41.3 classes in order, rounding the resulting tone to a byte."""
+    if saturation < WHITE_SATURATION_MAX and value > WHITE_VALUE_MIN:
+        return WHITE_TONE
+    if WATER_HUE_MIN < hue < WATER_HUE_MAX and saturation > WATER_SATURATION_MIN:
+        return WATER_TONE
+    if SAND_HUE_MIN < hue < SAND_HUE_MAX and value > SAND_VALUE_MIN:
+        return SAND_TONE
+    if GRASS_HUE_MIN <= hue <= GRASS_HUE_MAX:
+        return round(GRASS_TONE_BASE + GRASS_TONE_RANGE * value ** GRASS_VALUE_EXPONENT)
+    return round(OTHER_TONE_RANGE * value)
+
+
+def tone_map(image):
+    Image = pillow()
+    rgb = image.convert('RGB')
+    tones = bytes(hsv_tone(*colorsys.rgb_to_hsv(red / 255, green / 255, blue / 255))
+                  for red, green, blue in struct.iter_unpack('BBB', rgb.tobytes()))
+    return Image.frombytes('L', rgb.size, tones)
+
+
 def bitmap(source, bpp):
     Image = pillow()
     with Image.open(source) as original:
-        image = original.convert('L')
+        image = tone_map(original)
     scale = min(480 / image.width, 640 / image.height)
     image = image.resize((max(1, round(image.width * scale)), max(1, round(image.height * scale))), Image.Resampling.LANCZOS)
     width, height = image.size

@@ -161,6 +161,40 @@ class CatalogTests(unittest.TestCase):
         for pattern in ('{} 洞', '第{}洞', 'Hole {}', 'H {}', '第{}号洞', '{}号'):
             self.assertEqual(len(ex.image_holes(self.images([pattern.format(i) for i in range(1, 19)]), 2)), 18)
 
+    def mapped_tones(self, colors):
+        image = ex.pillow().new('RGB', (len(colors), 1))
+        image.putdata(colors)
+        mapped = ex.tone_map(image)
+        self.assertEqual(mapped.mode, 'L')
+        return list(mapped.tobytes())
+
+    def test_tone_map_path_or_white(self):
+        self.assertEqual(self.mapped_tones([(255, 255, 255), (224, 224, 224), (220, 240, 240)]),
+                         [255, 255, 255])
+
+    def test_tone_map_water(self):
+        self.assertEqual(self.mapped_tones([(0, 128, 255), (0, 128, 128)]), [20, 20])
+
+    def test_tone_map_sand(self):
+        self.assertEqual(self.mapped_tones([(255, 192, 0), (204, 153, 0)]), [245, 245])
+
+    def test_tone_map_grass_or_trees(self):
+        self.assertEqual(self.mapped_tones([(0, 255, 0), (0, 128, 0), (0, 64, 0)]), [250, 123, 81])
+
+    def test_tone_map_other(self):
+        self.assertEqual(self.mapped_tones([(255, 0, 0), (128, 0, 0), (0, 0, 0)]), [200, 100, 0])
+
+    def test_tone_map_class_boundaries_and_precedence(self):
+        self.assertEqual(ex.hsv_tone(0.6, 0.17, 0.8), 255)
+        self.assertEqual(ex.hsv_tone(0.6, 0.18, 0.8), 160)
+        self.assertEqual(ex.hsv_tone(0, 0, 0.75), 150)
+        self.assertEqual(ex.hsv_tone(0.6, 0.30, 0.5), 100)
+        self.assertEqual(ex.hsv_tone(0.72, 1, 1), 200)
+        self.assertEqual(ex.hsv_tone(0.08, 1, 1), 200)
+        self.assertEqual(ex.hsv_tone(0.12, 1, 0.60), 120)
+        self.assertEqual(ex.hsv_tone(0.17, 1, 1), 250)
+        self.assertEqual(ex.hsv_tone(0.45, 1, 1), 250)
+
     def test_bitmap_headers_pixels_and_scaling(self):
         Image = ex.pillow()
         image = Image.new('L', (3, 5), 255)
