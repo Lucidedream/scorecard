@@ -2935,3 +2935,240 @@ swapped order keeps SI, 27-hole duplicate-SI combination drops SI, 9-hole course
 `golfComposeTeeYards`; `golfCourseHoleNumber`; round JSON `nines` round-trip, absence →
 identity, and malformed rejection. Existing tests for removed APIs are rewritten against
 the new ones, not deleted wholesale.
+
+## 41. A course catalog from baigolf.com, browsed by region (v8)
+
+*Added 2026-10-24. Design and research: `docs/golf/design/v8-course-catalog.md`.*
+
+Owner decisions: **China only** (the sitemap's 中国 group: 442 courses, 31 regions);
+**English names**; **hole maps for every course**; the 5-point user rating with review
+count, plus category scores on Course info; and the **same picker in New round** as in
+Course Map.
+
+### 41.1 Provenance: nothing scraped enters the repo
+
+baigolf's terms allow copying for personal, non-commercial use only and forbid
+republishing; `Lucidedream/scorecard` is public. Therefore:
+
+* The repo holds only code and **synthetic** test fixtures: invented names and numbers,
+  never a copied baigolf response or image.
+* The scrape cache defaults to `~/golf-catalog-cache/`. Both tools **refuse** a `--cache`
+  or `--out` path inside a git work tree (`git -C <path> rev-parse` succeeds), and say why.
+* Images keep the baigolf watermark. The catalog screens credit `tr(STR_GOLF_DATA_BAIGOLF)`
+  ("Data: baigolf.com").
+* Network politeness: one request at a time, at least `--delay` seconds apart (default 2.0,
+  minimum 1.0), User-Agent `scorecard-catalog/1 (personal use)`. Each URL is fetched once
+  and cached. On HTTP 403/429 or a non-JSON API reply, it backs off 60 s, retries twice,
+  then stops with a resumable error. It never runs requests in parallel.
+
+### 41.2 `scripts/baigolf_scrape.py` (network → cache)
+
+`python3 scripts/baigolf_scrape.py [--cache DIR] [--ids 533,611] [--no-images]
+[--refresh-details] [--delay S] [--limit N]`
+
+1. `sitemap.php` → `cache/sitemap.html`, parsed into `cache/sitemap.json`:
+   `[{"id": 533, "region_zh": "江苏", "name_zh": "…"}]` for the course links between the
+   h2 `中国` (under the h1 `高尔夫球场`) and the next h2 or h1 only, with h3 = region. On
+   2026-10-24 that is exactly **442** unique ids in 31 regions. Each id is listed once;
+   a duplicate or a link outside that span is a parser bug. `--ids` restricts to those
+   ids.
+2. Per course: POST `api.php?_mod=BaiGolfOrder&_cmd=GET_GOLF_COURSE_DETAIL`
+   (`golf_course_id`, `language=zh-cn`, `playDate` = tomorrow, `currency_type=CNY`) →
+   `cache/detail/<id>.json`. Then POST `api.php?_mod=BaiGolfCourse&_cmd=getScorecards`
+   (`golf_course_id`, `language=zh-cn`) → `cache/scorecards/<id>.json`. A cached file
+   is reused unless `--refresh-details`; `succeed != 1` is recorded in
+   `cache/errors.json` and the course is skipped.
+3. Images (unless `--no-images`): each `ball_path_img_list[].images_url` without its
+   `?x-oss-process=…` query → `cache/images/<id>/<image id>.png`. Writes go to a temp
+   file and are renamed, so an interrupted run never leaves a partial file.
+4. Progress goes to stdout as one line per course: `[n/total] <id> ok|skip|error <reason>`.
+
+### 41.3 `scripts/baigolf_export.py` (cache → SD tree)
+
+`python3 scripts/baigolf_export.py [--cache DIR] --out ROOT [--bpp 2|8] [--force]`
+writes under `ROOT` (an SD card root or a staging folder):
+
+```
+golf/catalog/regions.txt
+golf/catalog/index.dat
+golf/catalog/courses/bg-<id>.json
+golf/maps/bg-<id>/hole-<N>.bmp
+```
+
+It is deterministic: the same cache produces byte-identical output. It never touches
+`golf/courses/`, `golf/rounds/` or any other path. Without `--force` it refuses to
+overwrite an existing `golf/catalog/`. It writes `cache/export-report.txt` listing every
+skipped course with its reason, every name that was shortened, and suggested
+owner-course duplicates: a name in `ROOT/golf/courses/*.json` sharing two or more
+significant words with a catalog name.
+
+**Course file** `bg-<id>.json` is a §40 v2 file plus two fields the parser treats as
+unknown today:
+
+```json
+{"v":2,"name":"Sanyang Golf & Country Club","maps":"bg-533",
+ "baigolf":{"id":533,"region":"Jiangsu","rating":42,"reviews":37,
+            "scores":[40,43,41,42,39,38],"holes":18,"par":72,"yards":6850,
+            "designer":"Example Designs","opened":2004},
+ "nines":[{"name":"Out","par":[…],"si":[…]},{"name":"In","par":[…],"si":[…]}],
+ "tees":[{"name":"Black","yards":[[…],[…]]}]}
+```
+
+* **Nines:** one per scorecard table, in API order. A table with 18 holes splits into Out
+  and In. Each nine has exactly 9 holes, taken from the first 9 values; the `TOTAL`
+  column is dropped. A course with 0 or more than 4 nines, or any par outside 3..6, is
+  skipped.
+* **Nine names**, in this order: NFKC; strip a trailing ` COURSE`/` Course`; an all-caps
+  word becomes Title case (`OUT`→`Out`, `OCEAN`→`Ocean`). The result must be unique,
+  1–11 bytes and comma-free; otherwise nines are named `Nine 1`…`Nine 4`.
+* **SI:** from the HDCP row, only when every nine's HDCP passes the §40 SI rules.
+  Otherwise `si` is omitted on every nine.
+* **Tees:** every row except `HOLE`, `Par`, `HDCP`, `N/D`. Chinese colour names map to
+  English (黑 Black, 金 Gold, 蓝 Blue, 白 White, 红 Red, 黄 Yellow, 绿 Green, 银 Silver).
+  Any other name must already pass `golfTeeStringValid` and fit 11 bytes, or the tee is
+  dropped (reported).
+  - A tee with a 1..999 yard value for **every** hole of **every** nine keeps `yards`.
+  - A tee with anything else becomes yardless: no `yards` field.
+  - Keep at most 6 tees, the longest first (the §35 order).
+  - No tees left means `tees` is omitted (§40 synthesises Blue/White).
+* **Name** (English, ≤39 bytes, unique, no `|`, `,`, CR or LF): start from
+  `course_name_en`, else `golf_course_name_en`; missing both means the course is skipped.
+  1. NFKC, then collapse whitespace; `&` gets a space on each side.
+  2. Drop a leading region English name (`Jiangsu Sanyang…` → `Sanyang…`) when at least two
+     words remain.
+  3. If still over 39 bytes, apply in order until it fits: `Golf & Country Club`→`G&CC`,
+     `Golf and Country Club`→`G&CC`, `International`→`Intl`, `Country Club`→`CC`,
+     `Golf Club`→`GC`, then cut at the last space at or before byte 39 and trim trailing
+     `&`, `-` or spaces.
+  4. Duplicates, compared case-insensitively, get ` 2`, ` 3` … appended in id order,
+     shortening the base to fit.
+* **`baigolf`:** `id` (the sitemap id) always.
+  - `region`: the English region name.
+  - `rating` (`eval_score_avg`×10, rounded) and `reviews` (`total_eval.peop_total`), only
+    when reviews > 0.
+  - `scores` ×10, rounded, in the order green_fairway, course_diff, caddie_service,
+    price_exp, club_facilities, catering_qlty; only when all six are present.
+  - `holes`, `par`, `yards` (from `yardage`, else `distance`) when positive.
+  - `designer`: only when ASCII and ≤31 bytes.
+  - `opened`: a four-digit year.
+* **`maps`:** always `bg-<id>`, which is always ≤15 bytes of `[a-z0-9-]`.
+
+**Hole images:**
+* Matching titles: each title is NFKC-normalised, whitespace is removed, and a leading
+  `第`/`Hole`/`H` and a trailing `号洞`/`洞`/`号` are stripped (case-insensitive). The result
+  is matched against `^([A-Za-z]?)(\d+)$`, so `1 洞`, `第1洞`, `Hole 1`, `B1` and `Ｃ1` all
+  match. Others (the overview) are ignored.
+* Which image is which hole:
+  - If every match has no letter and the numbers are exactly 1..9×nineCount, the number is
+    the course hole.
+  - Otherwise, if the letter groups (in first-appearance order) number exactly
+    `nineCount`, each holding 1..9, group *g* hole *h* → course hole 9g+h.
+  - Anything else exports no maps for that course (reported); `maps` stays set.
+* Conversion: PNG → RGB → **colour-aware tone map** → fit within **480×640**, keeping
+  the aspect ratio, scaling up or down (LANCZOS). Plain luminance makes water and grass
+  the same grey on a 4-level panel, so each source pixel's tone comes from its HSV class,
+  tested in this order (h, s, v in 0..1):
+  - path or white: s < 0.18 and v > 0.75 → 255;
+  - water: 0.45 < h < 0.72 and s > 0.30 → 20;
+  - sand: 0.08 < h < 0.17 and v > 0.60 → 245;
+  - grass or trees: 0.17 ≤ h ≤ 0.45 → 60 + 190·v^1.6 (fairways and greens lighter than
+    rough and trees);
+  - anything else: 200·v.
+  The thresholds are module constants with one host test per class.
+  - `--bpp 2` (default): Floyd–Steinberg to 4 levels; 2-bit BMP with palette 0=black,
+    1=dark, 2=light, 3=white.
+  - `--bpp 8`: 8-bit grayscale palette BMP.
+  - Both are BI_RGB, bottom-up, rows padded to 4 bytes, readable by
+    `lib/GfxRenderer/Bitmap.cpp`.
+
+**`regions.txt`:**
+* Line 1 is `# golf-catalog 1 <YYYY-MM-DD> <regions> <courses>`.
+* Then one line per region with at least one exported course, sorted by English name:
+  `<idx>|<English name>|<count>|<first record>`, where `idx` is the two-digit, 0-based line
+  order.
+* Region English names come from a fixed table in the exporter covering all 31 China
+  sitemap groups (中国台湾→Taiwan, 香港→Hong Kong, 澳门→Macau, 内蒙古→Inner Mongolia, …).
+  An unknown region fails the export loudly.
+
+**`index.dat`:** one **96-byte** record per exported course, sorted by region `idx`, then
+name (case-insensitive), then id. All ASCII except the name field (UTF-8, here ASCII).
+
+| Offset | Bytes | Field |
+|---|---|---|
+| 0 | 8 | id, zero-padded decimal |
+| 9 | 2 | region idx |
+| 12 | 1 | nine count `1`–`4` |
+| 14 | 3 | course par (default Out/In for ≥2 nines), zero-padded |
+| 18 | 2 | rating ×10 `00`–`50`, or `--` |
+| 21 | 5 | reviews, zero-padded, capped 99999 |
+| 27 | 1 | `Y` if at least one hole map was exported, else `N` |
+| 29 | 40 | name, space-padded |
+| 70 | 25 | spaces (reserved) |
+| 95 | 1 | `\n` |
+
+Bytes 8, 11, 13, 17, 20, 26, 28, 69 are `|`. Record *k* starts at byte 96·k.
+
+### 41.4 Firmware: catalog courses are first-class (P2)
+
+* `GolfCourse` gains `char mapsDir[16]`. The v2 parser reads optional `maps`
+  (`[a-z0-9-]{1,15}`, else the file is rejected) and optional `baigolf` (`id`, `rating`,
+  `reviews`, `scores`, `region` ≤23 bytes, `yards`, `designer`, `opened`). Every
+  `/golf/maps/...` lookup uses `mapsDir` when set, else `golfSlug(name)`, so existing
+  map folders keep working.
+* `GolfCourseFile` records its source (built-in / owner `/golf/courses` / catalog
+  `/golf/catalog/courses`), and `CourseStore::load` honours it.
+* `CourseStore::findByName` searches built-ins, then owner files, then the catalog (a
+  sequential `index.dat` name scan, then loading `bg-<id>.json`), so rounds, resume and
+  History work for catalog courses unchanged.
+* Memory: catalog screens hold `regions.txt` (≤64 regions × 32 B) and, per open region,
+  a `uint16_t` record list (≤512 entries) plus one page of rows. They never hold more
+  than one page of names.
+
+### 41.5 Firmware: the picker (P2 for Course Map, P3 for New round)
+
+One picker, `GolfCoursePickerActivity(mode)`, where mode is `Browse` (Course Map) or
+`Play` (New round). All levels are `GolfUiListActivity` lists (button + touch footer).
+
+1. **Hub** rows:
+   * **Recent**, shown when it has entries: up to 5 distinct course names, newest first,
+     from `/golf/rounds/index.csv` across all players, each resolved by `findByName`;
+     unresolved names are hidden. Courses are listed directly under the Recent row.
+   * **My courses**: built-ins + `/golf/courses`, today's list.
+   * **By region**: shown when `regions.txt` loads.
+   With no catalog and no Recent, the hub is skipped and My courses opens directly.
+2. **Regions:** `<name>` with the count as detail; the footer credits baigolf.
+3. **Region courses:** row 1 is a sort toggle, `Sort: Rating` / `Sort: Name`
+   (`STR_GOLF_SORT_RATING`/`STR_GOLF_SORT_NAME`), default Rating. Rating order is
+   descending, unrated last, ties by name.
+   * Each course row has the name and the detail line
+     `tr(STR_GOLF_CATALOG_ROW_FORMAT)` → `4.2/5 (37) · 27 holes`. An unrated course shows
+     `tr(STR_GOLF_NO_RATING)` in place of the rating; a course with maps flag `N` appends
+     ` · no maps`.
+4. Picking a course: `Browse` → **Course info**; `Play` → the existing start flow (nine
+   picker when nineCount ≥2, else player setup). Back returns one level.
+
+**Course info** (`GolfCourseInfoActivity`, read-only; also reachable for owner courses,
+which show only the facts they have):
+* Header: the course name.
+* Facts: region · holes · par · yards; the rating line `4.2/5 from 37 reviews`; the six
+  category scores as label + bar + value; designer and year when present.
+* Rows: **Hole maps** (the existing browser), **Tee info** (the existing page), **Play
+  this course** (the existing start flow, P3).
+
+All new user-facing text uses `tr()` (English YAML; other languages fall back).
+
+### 41.6 Acceptance for P1
+
+* Host tests `python3 scripts/test_baigolf_export.py` run on synthetic fixtures under
+  `scripts/fixtures/baigolf/`. They cover every bullet in §41.3: nine split and naming,
+  SI drop, tee mapping and yardless, name shortening and dedupe, image title mapping for
+  numeric, lettered and full-width titles, and the overview ignored. They also cover
+  byte-exact `index.dat` offsets and sort, `regions.txt`, determinism, and the refusal to
+  write inside a git work tree.
+* A host CTest `golf_catalog_check` (in `test/`) takes a directory from the
+  `GOLF_CATALOG_DIR` environment variable (skips when unset) and parses every
+  `golf/catalog/courses/*.json` with the firmware's v2 parser. Every file must parse.
+* A live smoke run, `--ids 533,589,611,605,623`, exports all five. Course 611 has nines
+  Ocean/Lake/Quarry with par and Black/Blue/Red yards equal to the owner's hand-entered
+  `~/golf-sd-backup/2026-10-24-courses-v2/nine-dragons-hill.json` (read-only, not
+  copied into the repo), and 27 maps.
