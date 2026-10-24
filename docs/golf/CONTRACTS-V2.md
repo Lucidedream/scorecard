@@ -3036,10 +3036,15 @@ unknown today:
   1. NFKC, then collapse whitespace; `&` gets a space on each side.
   2. Drop a leading region English name (`Jiangsu Sanyang…` → `Sanyang…`) when at least two
      words remain.
-  3. If still over 39 bytes, apply in order until it fits: `Golf & Country Club`→`G&CC`,
-     `Golf and Country Club`→`G&CC`, `International`→`Intl`, `Country Club`→`CC`,
-     `Golf Club`→`GC`, then cut at the last space at or before byte 39 and trim trailing
-     `&`, `-` or spaces.
+  3. If still over 39 bytes, apply in order until it fits:
+     - remove bracketed segments `(…)` (ASCII parentheses after NFKC), last first, while
+       one stays outside brackets;
+     - `Golf & Country Club`→`G&CC`, `Golf and Country Club`→`G&CC`,
+       `International`→`Intl`, `Country Club`→`CC`, `Golf Club`→`GC`;
+     - then cut at the last space at or before byte 39. If an unmatched `(` remains, cut
+       before it. Trim trailing `&`, `-`, `(` or spaces.
+     A name under 39 bytes keeps its brackets (`Mission Hills Haikou Golf Course 3(The
+     Vintage)` is shortened only because it is too long).
   4. Duplicates, compared case-insensitively, get ` 2`, ` 3` … appended in id order,
      shortening the base to fit.
 * **`baigolf`:** `id` (the sitemap id) always.

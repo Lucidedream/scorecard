@@ -136,6 +136,55 @@ class CatalogTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.build()
 
+    def test_name_removes_parentheses_before_abbreviations(self):
+        cases = [
+            ('Imaginary Golf Course (formerly Heron Golf Course)', 'Imaginary Golf Course'),
+            ('Imaginary Heron Lakeside Course (new course)', 'Imaginary Heron Lakeside Course'),
+            ('Imaginary International Golf Club (formerly Heron)', 'Imaginary International Golf Club'),
+            ('Imaginary Golf Course (old) (new extension)', 'Imaginary Golf Course (old)'),
+            ('Imaginary Golf Course (old (renamed) course)', 'Imaginary Golf Course'),
+        ]
+        for source, expected in cases:
+            with self.subTest(source=source):
+                self.detail['course_name_en'] = source
+                self.assertEqual(self.build()['name'], expected)
+
+    def test_short_names_keep_parentheses_after_normalization(self):
+        for source, expected in [('Heron Course (new course)', 'Heron Course (new course)'),
+                                 ('Heron Course （Old）', 'Heron Course (Old)'),
+                                 ('Heron 3(The Vintage)', 'Heron 3(The Vintage)')]:
+            with self.subTest(source=source):
+                self.detail['course_name_en'] = source
+                self.assertEqual(self.build()['name'], expected)
+
+    def test_cut_and_duplicate_suffix_never_leave_open_parentheses(self):
+        self.assertEqual(ex.shorten('Imaginary Heron Course 3(The Vintage)', 30), 'Imaginary Heron Course 3')
+        self.assertEqual(ex.shorten('Imaginary Course (old name) Extra Words', 32), 'Imaginary Course (old name)')
+        self.assertEqual(ex.shorten('Heron (old (original) name) Extra Words', 20), 'Heron')
+        self.assertEqual(ex.remove_parenthesized('(Only the invented course name)', 12), '(Only the invented course name)')
+        name = 'Heron Golf Course (' + 'A' * 19 + ')'
+        self.assertEqual(len(name), 39)
+        self.detail['course_name_en'] = name
+        self.cache_course(7001)
+        self.cache_course(7002)
+        courses = ex.export(self.cache, self.out)
+        self.assertEqual([c['name'] for c in courses], [name, 'Heron Golf Course 2'])
+
+    def test_numbered_parenthetical_courses_stay_distinct_after_dedupe(self):
+        for cid, number, nickname in [(7001, 3, 'The Vintage'), (7002, 9, 'The Preserve'), (7003, 3, 'The Vintage')]:
+            detail = copy.deepcopy(self.detail)
+            detail['course_name_en'] = f'Imaginary Hills Valley Golf Course {number}({nickname})'
+            self.cache_course(cid, detail=detail)
+        courses = ex.export(self.cache, self.out)
+        names = {c['baigolf']['id']: c['name'] for c in courses}
+        self.assertEqual(names, {7001: 'Imaginary Hills Valley Golf Course 3',
+                                 7002: 'Imaginary Hills Valley Golf Course 9',
+                                 7003: 'Imaginary Hills Valley Golf Course 3 2'})
+        self.assertEqual(len(set(name.casefold() for name in names.values())), 3)
+        for name in names.values():
+            self.assertLessEqual(len(name.encode()), 39)
+            self.assertEqual(name.count('('), name.count(')'))
+
     def test_metadata(self):
         meta = self.build()['baigolf']
         self.assertEqual((meta['rating'], meta['reviews'], meta['scores']), (43, 17, [38] * 6))

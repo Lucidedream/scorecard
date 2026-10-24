@@ -70,7 +70,38 @@ def shorten(value, limit):
     prefix = value.encode()[:limit].decode('utf-8', errors='ignore')
     if ' ' in prefix:
         prefix = prefix.rsplit(' ', 1)[0]
-    return prefix.rstrip(' &-')
+    openings = []
+    for index, char in enumerate(prefix):
+        if char == '(':
+            openings.append(index)
+        elif char == ')' and openings:
+            openings.pop()
+    if openings:
+        prefix = prefix[:openings[0]]
+    return prefix.rstrip(' &-(')
+
+
+def remove_parenthesized(value, limit):
+    spans, opening, depth = [], 0, 0
+    for index, char in enumerate(value):
+        if char == '(':
+            if depth == 0:
+                opening = index
+            depth += 1
+        elif char == ')' and depth:
+            depth -= 1
+            if depth == 0:
+                spans.append((opening, index + 1))
+    outside = value
+    for start, end in reversed(spans):
+        outside = outside[:start] + outside[end:]
+    if not outside.strip():
+        return value
+    for start, end in reversed(spans):
+        if len(value.encode()) <= limit:
+            break
+        value = ' '.join((value[:start] + value[end:]).split())
+    return value
 
 
 def course_name(detail, region):
@@ -82,6 +113,7 @@ def course_name(detail, region):
         rest = name[len(region):].strip()
         if len(rest.split()) >= 2:
             name = rest
+    name = remove_parenthesized(name, 39)
     for old, new in [('Golf & Country Club', 'G&CC'), ('Golf and Country Club', 'G&CC'),
                      ('International', 'Intl'), ('Country Club', 'CC'), ('Golf Club', 'GC')]:
         if len(name.encode()) > 39:
