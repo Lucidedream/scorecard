@@ -9,6 +9,7 @@ class HalFrontlight {
   static HalFrontlight& getInstance() { return instance; }
 
   void begin(uint8_t brightness, uint8_t warmth, bool on);
+  void prepareForDeepSleep();
 
   bool present() const { return manager.present(); }
   bool hasColorTemperature() const { return manager.hasColorTemperature(); }
@@ -29,6 +30,7 @@ class HalFrontlight {
   // toggling back on restores it.
   uint8_t lastBrightness = 60;
   bool lit = false;
+  bool begun = false;
 
   static HalFrontlight instance;
 };
