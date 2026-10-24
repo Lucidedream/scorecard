@@ -740,3 +740,11 @@ STR_GOLF_TEE_YARDS_JOIN_FORMAT: "%s · %s"
 STR_GOLF_COURSES_UNAVAILABLE: "Courses could not be read. Check the SD card."
 STR_GOLF_COURSES_COUNT_ONE: "1 course available."
 STR_GOLF_COURSES_COUNT_FORMAT: "%u courses available."
+
+STR_GOLF_COURSE_LOAD_ERROR: "Could not load course"
+
+STR_GOLF_CHOOSE_NINES: "Choose nines"
+STR_GOLF_SWAP_NINES: "Swap front and back"
+STR_GOLF_CONTINUE: "Continue"
+STR_GOLF_NINE_DETAIL_FORMAT: "Par %u · %s yds"
+STR_GOLF_NINE_PAR_FORMAT: "Par %u"

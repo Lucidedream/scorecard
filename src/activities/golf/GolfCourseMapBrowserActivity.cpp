@@ -33,10 +33,10 @@ GolfCourseMapBrowserActivity::GolfCourseMapBrowserActivity(GfxRenderer& renderer
 
 void GolfCourseMapBrowserActivity::onEnter() {
   Activity::onEnter();
-  if (!CourseStore::resolveAllTees(courseName, teeSet)) {
+  if (!CourseStore::findByName(courseName, courseFile, course)) {
     LOG_ERR("GOLF", "Course map browser: course not found: %s", courseName);
   }
-  holeCount = teeSet.primary.holeCount;
+  holeCount = (9 * course.nineCount);
   // golfSlug's ASCII-only fallback is intentionally shared by non-ASCII course names (CONTRACTS-V2 §25).
   slugValid = golfSlug(courseName, courseSlug, sizeof(courseSlug));
   currentHole = 0;
@@ -57,6 +57,18 @@ void GolfCourseMapBrowserActivity::loop() {
   if (input.wasReleased(golfui::FooterAction::Back)) {
     finish();
     return;
+  }
+  if (mappedInput.hasTouch()) {
+    const auto swipe = mappedInput.wasSwipe();
+    if (swipe == MappedInputManager::SwipeDir::Left) {
+      changeHole(1);
+      return;
+    }
+    if (swipe == MappedInputManager::SwipeDir::Right) {
+      changeHole(-1);
+      return;
+    }
+    if (swipe != MappedInputManager::SwipeDir::None) return;
   }
   const int frontDelta = input.releasedFrontNavigationDelta();
   if (frontDelta != 0) {
@@ -86,13 +98,13 @@ void GolfCourseMapBrowserActivity::openTeeInfo() {
 bool GolfCourseMapBrowserActivity::formatTeeYardageLine(const uint8_t hole, char* output, const size_t size) const {
   output[0] = '\0';
   const GolfCourseTee* picked[2];
-  const uint8_t pickedCount = pickGlanceTees(teeSet, picked);
+  const uint8_t pickedCount = pickGlanceTees(course, picked);
   bool any = false;
   for (uint8_t i = 0; i < pickedCount; ++i) {
     const GolfCourseTee& tee = *picked[i];
     char segment[40];
     if (snprintf(segment, sizeof(segment), tr(STR_GOLF_TEE_YARDS_FORMAT), golfTeeDisplayLabel(tee.name),
-                 static_cast<unsigned>(tee.yards[hole]), tr(STR_GOLF_YARDS_UNIT)) < 0) {
+                 static_cast<unsigned>(tee.yards[hole / 9][hole % 9]), tr(STR_GOLF_YARDS_UNIT)) < 0) {
       continue;
     }
     if (!any) {
@@ -119,12 +131,15 @@ void GolfCourseMapBrowserActivity::drawHoleBand(const freeink::ui::Rect rect) co
   // sits exactly on the baseline), so its baseline is its ink bottom. Start the
   // big digit there to keep the label and digit reading as one tight group.
   const int digitY = labelY + ascender;
-  renderer.drawText(UI_10_FONT_ID, rect.x + padding, labelY, tr(STR_GOLF_HOLE), true, EpdFontFamily::BOLD);
-  golfDrawLargeNumber(renderer, rect.x + rect.width / 4, digitY, digitHeight, static_cast<uint16_t>(currentHole + 1));
+  renderer.drawText(UI_10_FONT_ID, rect.x + padding, labelY,
+                    course.nineCount >= 2 ? course.nines[currentHole / 9].name : tr(STR_GOLF_HOLE), true,
+                    EpdFontFamily::BOLD);
+  golfDrawLargeNumber(renderer, rect.x + rect.width / 4, digitY, digitHeight,
+                      static_cast<uint16_t>(course.nineCount >= 2 ? currentHole % 9 + 1 : currentHole + 1));
 
   const int right = rect.x + rect.width - padding;
   int y = rect.y + 4;
-  const uint8_t par = currentHole < teeSet.primary.holeCount ? teeSet.primary.par[currentHole] : 0;
+  const uint8_t par = currentHole < (9 * course.nineCount) ? course.nines[currentHole / 9].par[currentHole % 9] : 0;
   char line[64];
   if (par != 0) {
     snprintf(line, sizeof(line), tr(STR_GOLF_LABEL_VALUE_FORMAT), tr(STR_GOLF_PAR), static_cast<unsigned>(par));
@@ -159,7 +174,7 @@ void GolfCourseMapBrowserActivity::renderHole() {
 
   renderer.clearScreen();
   golfui::drawHeader(renderer, chrome.header, courseName);
-  drawHoleBand(holeBand);
+  if (holeCount) drawHoleBand(holeBand);
   drawFooter();
 
   if (!slugValid) {

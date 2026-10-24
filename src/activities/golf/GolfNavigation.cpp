@@ -12,6 +12,7 @@
 
 #include "GolfHomeActivity.h"
 #include "GolfMessageActivity.h"
+#include "GolfNineSelectActivity.h"
 #include "GolfPlayerSetupActivity.h"
 #include "GolfRoundSummaryActivity.h"
 #include "GolfScoringActivity.h"
@@ -79,9 +80,20 @@ bool openGolfSetup(ActivityManager& manager, GfxRenderer& renderer, MappedInputM
   return replaceGolfActivity<GolfSetupActivity>(manager, renderer, mappedInput, "setup");
 }
 
+bool openGolfNineSelect(ActivityManager& manager, GfxRenderer& renderer, MappedInputManager& mappedInput,
+                        const GolfCourseFile& courseFile, GolfNineSelection selection) {
+  auto activity = makeUniqueNoThrow<GolfNineSelectActivity>(renderer, mappedInput, courseFile, selection);
+  if (!activity) {
+    LOG_ERR("GOLF", "OOM: nine picker activity");
+    return false;
+  }
+  manager.replaceActivity(std::move(activity));
+  return true;
+}
+
 bool openGolfPlayerSetup(ActivityManager& manager, GfxRenderer& renderer, MappedInputManager& mappedInput,
-                         const GolfCourseFile& courseFile, const GolfCourse& course) {
-  auto activity = makeUniqueNoThrow<GolfPlayerSetupActivity>(renderer, mappedInput, courseFile, course);
+                         const GolfCourseFile& courseFile, GolfNineSelection selection) {
+  auto activity = makeUniqueNoThrow<GolfPlayerSetupActivity>(renderer, mappedInput, courseFile, selection);
   if (!activity) {
     LOG_ERR("GOLF", "OOM: player setup activity");
     return false;

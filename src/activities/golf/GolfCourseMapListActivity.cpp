@@ -22,23 +22,33 @@ void GolfCourseMapListActivity::onEnter() {
 }
 
 void GolfCourseMapListActivity::loadCourses() {
-  const GolfCourseListResult result = CourseStore::enumerate(files, GOLF_MAX_COURSES);
-  overflow = result.overflow;
-  loadedCount = 0;
-  for (uint8_t i = 0; i < result.count; ++i) {
-    GolfCourse course{};
-    if (CourseStore::load(files[i], course)) {
-      files[loadedCount] = files[i];
-      courses[loadedCount++] = course;
-    }
+  auto files = makeUniqueNoThrow<GolfCourseFile[]>(GOLF_MAX_COURSES);
+  auto scratch = makeUniqueNoThrow<GolfCourse>();
+  courseCount = 0;
+  if (!files || !scratch) {
+    LOG_ERR("GOLF", "OOM: course list scratch");
+    noCourses = true;
+    return;
   }
-  courseCount = golfSortAndDedupCourses(files, courses, loadedCount, primaryIndex);
-
+  const auto result = CourseStore::enumerate(files.get(), GOLF_MAX_COURSES);
+  overflow = result.overflow;
+  for (uint8_t i = 0; i < result.count; ++i) {
+    if (!CourseStore::load(files[i], *scratch)) continue;
+    auto& summary = courses[courseCount++];
+    summary = {};
+    summary.file = files[i];
+    memcpy(summary.courseName, scratch->courseName, sizeof(summary.courseName));
+    summary.nineCount = scratch->nineCount;
+    for (uint8_t n = 0; n < scratch->nineCount && n < 2; ++n)
+      for (uint8_t par : scratch->nines[n].par) summary.defaultPar += par;
+    golfFormatTeeList(*scratch, summary.teeList, sizeof(summary.teeList));
+  }
+  golfSortCourses(courses, courseCount);
   noCourses = courseCount == 0;
   uint8_t row = 0;
   for (; row < courseCount; ++row) {
     rows[row] = {};
-    rows[row].label = courses[primaryIndex[row]].courseName;
+    rows[row].label = courses[row].courseName;
     formatCourseRow(row);
     rows[row].subtitle = courseDetails[row];
     rows[row].value = parLabels[row];
@@ -53,15 +63,10 @@ void GolfCourseMapListActivity::loadCourses() {
 
 void GolfCourseMapListActivity::formatCourseRow(const uint8_t row) {
   if (row >= courseCount) return;
-  const GolfCourse& course = courses[primaryIndex[row]];
-  GolfCourseTeeSet teeSet{};
-  golfResolveAllTeesFrom(files, courses, loadedCount, course.courseName, teeSet);
-  char tees[24]{};
-  golfFormatTeeList(teeSet, tees, sizeof(tees));
-  snprintf(courseDetails[row], sizeof(courseDetails[row]), tr(STR_GOLF_COURSE_ROW_FORMAT), course.holeCount, tees);
-
-  uint16_t par = 0;
-  for (uint8_t hole = 0; hole < course.holeCount; ++hole) par += course.par[hole];
+  const GolfCourseSummary& course = courses[row];
+  snprintf(courseDetails[row], sizeof(courseDetails[row]), tr(STR_GOLF_COURSE_ROW_FORMAT), 9 * course.nineCount,
+           course.teeList);
+  const uint16_t par = course.defaultPar;
   char parValue[8]{};
   if (par == 0) {
     snprintf(parValue, sizeof(parValue), "%s", tr(STR_GOLF_EM_DASH));
@@ -80,7 +85,7 @@ const char* GolfCourseMapListActivity::headerTitle() const {
 void GolfCourseMapListActivity::activateIndex(const int index) {
   app.clearTapFlash();
   if (index < 0 || index >= courseCount) return;
-  const GolfCourse& course = courses[primaryIndex[index]];
+  const GolfCourseSummary& course = courses[index];
   auto browser = makeUniqueNoThrow<GolfCourseMapBrowserActivity>(renderer, mappedInput, course.courseName);
   if (!browser) {
     LOG_ERR("GOLF", "OOM: course map browser activity");

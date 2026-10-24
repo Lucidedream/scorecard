@@ -9,7 +9,7 @@
 class GolfCourseMapActivity final : public Activity {
  public:
   GolfCourseMapActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, uint8_t holeIndex, uint8_t holeCount,
-                        const char* courseName);
+                        const char* courseName, uint8_t courseHoleNumber);
 
   void onEnter() override;
   void onExit() override;
@@ -18,6 +18,7 @@ class GolfCourseMapActivity final : public Activity {
  private:
   uint8_t holeIndex;
   uint8_t holeCount;
+  uint8_t courseHoleNumber;
   char courseName[40]{};
   char courseSlug[GOLF_SLUG_BUFFER_SIZE]{};
   bool slugValid = false;

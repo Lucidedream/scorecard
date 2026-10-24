@@ -14,8 +14,12 @@
 #include "fontIds.h"
 
 GolfCourseMapActivity::GolfCourseMapActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                             const uint8_t holeIndex, const uint8_t holeCount, const char* courseName)
-    : Activity("GolfCourseMap", renderer, mappedInput), holeIndex(holeIndex), holeCount(holeCount) {
+                                             const uint8_t holeIndex, const uint8_t holeCount, const char* courseName,
+                                             uint8_t courseHoleNumber)
+    : Activity("GolfCourseMap", renderer, mappedInput),
+      holeIndex(holeIndex),
+      holeCount(holeCount),
+      courseHoleNumber(courseHoleNumber) {
   snprintf(this->courseName, sizeof(this->courseName), "%s", courseName != nullptr ? courseName : "");
 }
 
@@ -75,8 +79,7 @@ void GolfCourseMapActivity::loadAndRender() {
   renderer.clearScreen();
   drawChrome();
 
-  const GolfCourseMapImageResult result =
-      golfRenderCourseMapImage(renderer, courseSlug, static_cast<uint8_t>(holeIndex + 1), layout.body);
+  const GolfCourseMapImageResult result = golfRenderCourseMapImage(renderer, courseSlug, courseHoleNumber, layout.body);
   switch (result) {
     case GolfCourseMapImageResult::Rendered:
       return;

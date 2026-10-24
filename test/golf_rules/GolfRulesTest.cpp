@@ -2,7 +2,7 @@
 
 #include <cstring>
 
-#include "CourseStore.h"
+#include "CourseOrder.h"
 #include "GolfRules.h"
 
 namespace {
@@ -112,26 +112,27 @@ TEST_F(GolfRulesTest, InitializesStableDefaultNamesWithoutEnablingPlayers) {
 
 TEST_F(GolfRulesTest, CourseApplySnapshotsSharedStrokeIndexAndDefaults) {
   memcpy(course.courseName, "Course", sizeof("Course"));
-  course.holeCount = 18;
-  course.par[0] = 4;
-  course.si[0] = 7;
-  course.hasSi = true;
+  course.nineCount = 2;
+  course.nines[0].par[0] = 4;
+  course.nines[0].si[0] = 7;
+  course.nines[0].hasSi = course.nines[1].hasSi = true;
+  for (int h = 0; h < 18; ++h) course.nines[h / 9].si[h % 9] = h + 1;
 
-  CourseStore::applyGolfCourse(course, round, 0);
+  golfComposeRound(course, golfDefaultNineSelection(course), 0, round);
   EXPECT_STREQ(round.courseName, "Course");
   EXPECT_EQ(round.par[0], 4);
   EXPECT_TRUE(round.hasSi);
-  EXPECT_EQ(round.si[0], 7);
+  EXPECT_EQ(round.si[0], 1);
   EXPECT_STREQ(round.players[0].name, "Noah");
 }
 
 TEST_F(GolfRulesTest, CourseApplyLeavesMissingStrokeIndexZeroed) {
-  course.holeCount = 9;
-  course.si[0] = 7;
-  course.hasSi = false;
+  course.nineCount = 1;
+  course.nines[0].si[0] = 7;
+  course.nines[0].hasSi = false;
   round.si[0] = 18;
 
-  CourseStore::applyGolfCourse(course, round, 0);
+  golfComposeRound(course, golfDefaultNineSelection(course), 0, round);
   EXPECT_FALSE(round.hasSi);
   EXPECT_EQ(round.si[0], 0);
 }

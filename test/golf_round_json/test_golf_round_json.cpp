@@ -289,3 +289,76 @@ TEST(GolfRoundJson, V6TeeCopiesStraightInFromV5Fixture) {
 }
 
 }  // namespace
+
+TEST(GolfRoundNines, RoundTripSwappedForStateAndArchive) {
+  auto original = makeFixtureRound();
+  original.nines[0] = 2;
+  original.nines[1] = 0;
+  JsonDocument doc;
+  serializeRound(original, 6, doc);
+  golfAddJsonHoleArray(doc, "nines", original.nines, 2);
+  for (bool state : {false, true}) {
+    GolfRound out{};
+    ASSERT_EQ(decode(doc, state, out), GolfRoundDecodeStatus::Ok);
+    EXPECT_EQ(out.nines[0], 2);
+    EXPECT_EQ(out.nines[1], 0);
+    EXPECT_EQ(golfCourseHoleNumber(out, 0), 19);
+  }
+}
+TEST(GolfRoundNines, MissingFieldDefaultsToIdentityForEveryVersion) {
+  for (int version : {4, 5, 6}) {
+    auto original = makeFixtureRound();
+    JsonDocument doc;
+    serializeRound(original, version, doc);
+    for (int holes : {9, 18}) {
+      doc["holes"] = holes;
+      doc["par"].as<JsonArray>().clear();
+      doc["si"].as<JsonArray>().clear();
+      for (int h = 0; h < holes; ++h) {
+        doc["par"].as<JsonArray>().add(4);
+        doc["si"].as<JsonArray>().add(0);
+      }
+      for (auto p : doc["players"].as<JsonArray>())
+        for (const char* key : {"yards", "putts", "in100", "out100", "penalties", "fairways", "bunkers"}) {
+          auto arr = p[key].as<JsonArray>();
+          while (arr.size() > static_cast<size_t>(holes)) arr.remove(arr.size() - 1);
+          while (!arr.isNull() && arr.size() < static_cast<size_t>(holes)) {
+            if (strcmp(key, "penalties") == 0)
+              arr.add<JsonArray>();
+            else
+              arr.add(0);
+          }
+        }
+      GolfRound out{};
+      ASSERT_EQ(decode(doc, false, out), GolfRoundDecodeStatus::Ok);
+      EXPECT_EQ(out.nines[0], 0);
+      EXPECT_EQ(out.nines[1], holes == 9 ? GOLF_NO_NINE : 1);
+    }
+  }
+}
+TEST(GolfRoundNines, OneNineRoundTrip) {
+  auto original = makeFixtureRound();
+  original.holeCount = 9;
+  original.nines[0] = 3;
+  original.nines[1] = GOLF_NO_NINE;
+  JsonDocument doc;
+  serializeRound(original, 6, doc);
+  golfAddJsonHoleArray(doc, "nines", original.nines, 1);
+  GolfRound out{};
+  ASSERT_EQ(decode(doc, false, out), GolfRoundDecodeStatus::Ok);
+  EXPECT_EQ(out.nines[0], 3);
+  EXPECT_EQ(out.nines[1], GOLF_NO_NINE);
+}
+TEST(GolfRoundNines, RejectsMalformedPresentField) {
+  auto original = makeFixtureRound();
+  JsonDocument doc;
+  serializeRound(original, 6, doc);
+  for (const char* json :
+       {"null", "0", "[]", "[0]", "[0,1,2]", "[0,0]", "[-1,1]", "[0,4]", "[0,255]", "[0,1.5]", "[0,\"1\"]"}) {
+    JsonDocument value;
+    ASSERT_FALSE(deserializeJson(value, json));
+    doc["nines"].set(value.as<JsonVariantConst>());
+    GolfRound out{};
+    EXPECT_NE(decode(doc, false, out), GolfRoundDecodeStatus::Ok) << json;
+  }
+}

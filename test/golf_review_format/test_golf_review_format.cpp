@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <cstring>
+#include <memory>
 
 #include "GolfNavigation.h"
 #include "GolfReviewFormat.h"
@@ -115,7 +116,8 @@ TEST(GolfTeeDisplayLabel, TranslatesBuiltInTeesAndPassesFreeFormThrough) {
 }
 
 TEST(GolfFormatTeeList, JoinsNamesAndEllipsizesWhenOverBudget) {
-  GolfCourseTeeSet set{};
+  auto storage = std::make_unique<GolfCourse>();
+  auto& set = *storage;
   char out[24];
 
   golfFormatTeeList(set, out, sizeof(out));

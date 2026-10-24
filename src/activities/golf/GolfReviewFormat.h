@@ -17,7 +17,7 @@ const char* golfTeeDisplayLabel(const char* tee);
 // Joins a course's tee display labels into `output` for a course-list subtitle
 // (CONTRACTS-V2 §32.3), e.g. "Blue · White · Black". An empty set prints an em dash;
 // names that overrun `size` are truncated with an ellipsis.
-void golfFormatTeeList(const GolfCourseTeeSet& teeSet, char* output, size_t size);
+void golfFormatTeeList(const GolfCourse& teeSet, char* output, size_t size);
 
 size_t golfUtf8PrefixLength(std::string_view text, size_t limit);
 bool golfPlayerNameHasVisibleText(std::string_view name);

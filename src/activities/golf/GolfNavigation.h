@@ -5,7 +5,7 @@
 class ActivityManager;
 class GfxRenderer;
 class MappedInputManager;
-struct GolfCourse;
+struct GolfNineSelection;
 struct GolfCourseFile;
 
 // Front previous/next follows the rendered orientation. Side Up/Down callers
@@ -34,8 +34,10 @@ constexpr GolfHomeEntryDecision golfDecideHomeEntry(const bool archiveMarkedAtEn
 
 bool openGolfHome(ActivityManager& manager, GfxRenderer& renderer, MappedInputManager& mappedInput);
 bool openGolfSetup(ActivityManager& manager, GfxRenderer& renderer, MappedInputManager& mappedInput);
+bool openGolfNineSelect(ActivityManager& manager, GfxRenderer& renderer, MappedInputManager& mappedInput,
+                        const GolfCourseFile& courseFile, GolfNineSelection selection);
 bool openGolfPlayerSetup(ActivityManager& manager, GfxRenderer& renderer, MappedInputManager& mappedInput,
-                         const GolfCourseFile& courseFile, const GolfCourse& course);
+                         const GolfCourseFile& courseFile, GolfNineSelection selection);
 bool openGolfScoring(ActivityManager& manager, GfxRenderer& renderer, MappedInputManager& mappedInput);
 bool resumeGolfRound(ActivityManager& manager, GfxRenderer& renderer, MappedInputManager& mappedInput);
 bool finishGolfRound(ActivityManager& manager, GfxRenderer& renderer, MappedInputManager& mappedInput);

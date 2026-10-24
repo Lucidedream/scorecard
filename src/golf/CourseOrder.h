@@ -1,56 +1,16 @@
 #pragma once
-
 #if defined(CROSSPOINT_GOLF)
-
 #include "CourseStore.h"
-#include "GolfCourse.h"
-
-// Case-insensitive, strcmp-style comparison of two course display names.
 int golfCompareCourseNames(const char* left, const char* right);
-
-// CONTRACTS-V2 §7 / §7.1 course list ordering, as a pure predicate:
-//   * Built-in courses sort first, in fixed table order.
-//   * An SD file that overrides a built-in inherits that built-in's slot; its
-//     builtInIndex is carried through by CourseStore::enumerate(), so it compares
-//     equal to the built-in it replaces.
-//   * SD courses that override nothing sort alphabetically (case-insensitive) after
-//     every built-in.
-bool golfCourseSortsBefore(const GolfCourseFile& lhsFile, const GolfCourse& lhs, const GolfCourseFile& rhsFile,
-                           const GolfCourse& rhs);
-
-// CONTRACTS-V2 §34.4: the shared load body behind the new-round course picker
-// (GolfSetupActivity) and the read-only course browser (GolfCourseMapListActivity). Given
-// `count` already-enumerated-and-loaded (file, course) pairs, stable-insertion-sorts them
-// in place by golfCourseSortsBefore(), then collapses each adjacent run of byte-identical
-// courseName into one row: primaryIndex[0..return) receives each run's first (primary)
-// index into the reordered arrays. Returns the deduped row count. `primaryIndex` must have
-// room for `count` entries; `count` must not exceed GOLF_MAX_COURSES.
-uint8_t golfSortAndDedupCourses(GolfCourseFile* files, GolfCourse* courses, uint8_t count, uint8_t* primaryIndex);
-
-// The pure merge behind CourseStore::resolveAllTees(), factored out so it can be exercised
-// with in-memory fixtures (no SD/HalStorage dependency): gathers every tee available for
-// `courseName` across `count` already-loaded (file, course) pairs, e.g. the output of
-// CourseStore::enumerate() + load(). The first matching entry supplies primary/primaryFile.
-// Tees are appended in entry order, deduped by name, capped at GOLF_MAX_TEES; each is
-// resolved via CourseStore::resolveTee() against the entry that named it. Returns false
-// when no entry matches courseName.
-bool golfResolveAllTeesFrom(const GolfCourseFile* files, const GolfCourse* courses, uint8_t count,
-                            const char* courseName, GolfCourseTeeSet& result);
-
-// CONTRACTS-V2 §35. Strict-weak ordering for two resolved tees, longest-first:
-//   1. A tee with `hasYards` sorts before a tee without (yardless tees sink).
-//   2. Both have yardage: larger total 18-slot yardage first.
-//   3. Equal totals, or both yardless: golf-conventional name priority
-//      {Black, Gold, Blue, White, Green, Yellow, Red, Orange} (case-insensitive),
-//      any other name after those.
-//   4. Equal priority: strcmp(a.name, b.name) < 0, for a deterministic result.
-// golfResolveAllTeesFrom() applies this to result.tees before returning, so every
-// downstream view iterates the set longest-first without re-sorting.
+void golfSortCourses(GolfCourseSummary* courses, uint8_t count);
 bool golfTeeSortsBefore(const GolfCourseTee& a, const GolfCourseTee& b);
-
-// CONTRACTS-V2 §32.7: the tee a fresh round pre-selects for player 1. "Blue" when the set has
-// a tee named "Blue", else "White" when present, else the first tee's name, else "" for an
-// empty set. Case-sensitive name match; does not gate on hasYards.
-const char* golfDefaultTeeForSet(const GolfCourseTeeSet& teeSet);
-
+const char* golfDefaultTee(const GolfCourse& course);
+constexpr GolfNineSelection golfDefaultNineSelection(const uint8_t nineCount) {
+  return {0, nineCount >= 2 ? uint8_t{1} : GOLF_NO_NINE};
+}
+GolfNineSelection golfDefaultNineSelection(const GolfCourse& course);
+bool golfNineSelectionValid(const GolfCourse& course, GolfNineSelection selection);
+bool golfComposeRound(const GolfCourse& course, GolfNineSelection selection, uint16_t dateYmd, GolfRound& round);
+bool golfComposeTeeYards(const GolfCourse& course, uint8_t teeIndex, GolfNineSelection selection,
+                         uint16_t (&yards)[GOLF_MAX_HOLES]);
 #endif

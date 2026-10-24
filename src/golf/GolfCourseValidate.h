@@ -1,39 +1,28 @@
 #pragma once
-
-#include <cstdint>
-
 #include "GolfCourse.h"
-
-enum class GolfCourseField : uint8_t { None, Par, Yards, StrokeIndex };
-
+enum class GolfCourseField : uint8_t { None, Name, Nines, NineName, Tees, TeeName, Par, Yards, StrokeIndex };
 enum class GolfCourseValidationError : uint8_t {
   None,
-  HoleCount,
+  Version,
+  Name,
+  NineCount,
+  TeeCount,
+  Duplicate,
   ArrayLength,
   ParRange,
   YardageRange,
   StrokeIndexRange,
   StrokeIndexDuplicate,
-  UnexpectedOptionalData,
-  TrailingEntry,
+  UnexpectedOptionalData
 };
-
-struct GolfCourseArrayLengths {
-  uint16_t par;
-  uint16_t yards;
-  uint16_t si;
-};
-
 struct GolfCourseValidationResult {
   bool valid;
   GolfCourseValidationError error;
   GolfCourseField field;
-  uint8_t hole;
-  uint16_t value;
-  uint16_t expected;
+  uint8_t hole = 0;
+  uint16_t value = 0;
+  uint16_t expected = 0;
 };
-
 GolfCourseValidationResult validateGolfCourse(const GolfCourse& course);
-GolfCourseValidationResult validateGolfCourse(const GolfCourse& course, const GolfCourseArrayLengths& lengths);
 const char* golfCourseValidationErrorName(GolfCourseValidationError error);
 const char* golfCourseFieldName(GolfCourseField field);

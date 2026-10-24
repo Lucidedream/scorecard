@@ -5,6 +5,10 @@
 #include <type_traits>
 
 inline constexpr uint8_t GOLF_MAX_HOLES = 18;
+inline constexpr uint8_t GOLF_HOLES_PER_NINE = 9;
+inline constexpr uint8_t GOLF_MAX_NINES = 4;
+inline constexpr uint8_t GOLF_NINE_NAME_CAPACITY = 12;
+inline constexpr uint8_t GOLF_NO_NINE = UINT8_MAX;
 inline constexpr uint8_t GOLF_MAX_PLAYERS = 4;
 inline constexpr uint8_t GOLF_MAX_PENALTIES_PER_HOLE = 8;
 
@@ -59,6 +63,7 @@ struct GolfRound {
   uint8_t holeCount;
   uint8_t currentHole;
   uint8_t currentPlayer;
+  uint8_t nines[2] = {0, 1};  // Course nine indices; nines[1] is GOLF_NO_NINE for nine holes.
 
   uint8_t par[MAX_HOLES];
   uint8_t si[MAX_HOLES];
@@ -102,10 +107,18 @@ inline bool golfDisablePlayer(GolfRound& round, const uint8_t slot) {
 
 static_assert(sizeof(GolfPlayerScore) == 150);
 static_assert(sizeof(GolfPlayer) == 222);
-static_assert(sizeof(GolfRound) == 970);
+static_assert(sizeof(GolfRound) == 972);
 static_assert(std::is_standard_layout_v<GolfPlayerScore>);
 static_assert(std::is_trivially_copyable_v<GolfPlayerScore>);
 static_assert(std::is_standard_layout_v<GolfPlayer>);
 static_assert(std::is_trivially_copyable_v<GolfPlayer>);
 static_assert(std::is_standard_layout_v<GolfRound>);
 static_assert(std::is_trivially_copyable_v<GolfRound>);
+
+inline uint8_t golfCourseHoleNumber(const GolfRound& round, uint8_t roundHole) {
+  const uint8_t nine = round.nines[roundHole / GOLF_HOLES_PER_NINE];
+  if (nine == GOLF_NO_NINE) {
+    return roundHole + 1;
+  }
+  return nine * GOLF_HOLES_PER_NINE + roundHole % GOLF_HOLES_PER_NINE + 1;
+}

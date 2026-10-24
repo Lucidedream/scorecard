@@ -16,7 +16,7 @@ const char* golfTeeDisplayLabel(const char* tee) {
   return tee;
 }
 
-void golfFormatTeeList(const GolfCourseTeeSet& teeSet, char* output, const size_t size) {
+void golfFormatTeeList(const GolfCourse& teeSet, char* output, const size_t size) {
   if (output == nullptr || size == 0) return;
   output[0] = '\0';
   if (teeSet.teeCount == 0) {

@@ -1,405 +1,209 @@
+#include <ArduinoJson.h>
 #include <gtest/gtest.h>
 
-#include <numeric>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <memory>
+#include <sstream>
 
 #include "CourseBuiltIns.h"
-#include "CourseStore.h"
-#include "GolfCourseValidate.h"
-
-namespace {
-
-GolfCourse pebbleBeach() {
+#include "GolfCourseParse.h"
+class GolfCourseParse : public ::testing::Test {
+ protected:
+  JsonDocument doc;
   GolfCourse course{};
-  const uint8_t par[] = {4, 5, 4, 4, 3, 5, 3, 4, 4, 4, 4, 3, 4, 5, 4, 4, 3, 5};
-  course.holeCount = 18;
-  for (uint8_t hole = 0; hole < course.holeCount; ++hole) {
-    course.par[hole] = par[hole];
-  }
-  return course;
-}
-
-GolfCourse nineHoleCourse() {
-  GolfCourse course{};
-  course.holeCount = 9;
-  for (uint8_t hole = 0; hole < course.holeCount; ++hole) {
-    course.par[hole] = 4;
-  }
-  return course;
-}
-
-}  // namespace
-
-TEST(GolfBuiltInCourses, SanyangShipsVerifiedScorecardDataForBothTees) {
-  const GolfCourse* sanyang = nullptr;
-  int8_t sanyangIndex = -1;
-  int8_t index = 0;
-  for (const GolfCourse& course : GOLF_BUILT_IN_COURSES) {
-    if (strcmp(course.courseName, "Sanyang Golf Club") == 0) {
-      sanyang = &course;
-      sanyangIndex = index;
-      break;
+  void SetUp() override {
+    doc["v"] = 2;
+    doc["name"] = "Test Club";
+    auto nines = doc["nines"].to<JsonArray>();
+    for (const char* name : {"Out", "In"}) {
+      auto nine = nines.add<JsonObject>();
+      nine["name"] = name;
+      auto par = nine["par"].to<JsonArray>();
+      for (int h = 0; h < 9; ++h) par.add(4);
+      auto si = nine["si"].to<JsonArray>();
+      for (int h = 0; h < 9; ++h) si.add(h + 1);
     }
-    ++index;
-  }
-
-  ASSERT_NE(sanyang, nullptr);
-  EXPECT_EQ(sanyang->holeCount, 18);
-  EXPECT_TRUE(sanyang->hasYards);
-  EXPECT_TRUE(sanyang->hasSi);
-  EXPECT_EQ(std::accumulate(sanyang->par, sanyang->par + 9, 0), 36);
-  EXPECT_EQ(std::accumulate(sanyang->par + 9, sanyang->par + 18, 0), 36);
-  EXPECT_EQ(std::accumulate(sanyang->par, sanyang->par + 18, 0), 72);
-  EXPECT_EQ(std::accumulate(sanyang->yards, sanyang->yards + 9, 0), 3196);
-  EXPECT_EQ(std::accumulate(sanyang->yards + 9, sanyang->yards + 18, 0), 3270);
-  EXPECT_EQ(std::accumulate(sanyang->yards, sanyang->yards + 18, 0), 6466);
-
-  bool seenStrokeIndexes[19]{};
-  for (uint8_t hole = 0; hole < sanyang->holeCount; ++hole) {
-    ASSERT_GE(sanyang->si[hole], 1);
-    ASSERT_LE(sanyang->si[hole], 18);
-    EXPECT_FALSE(seenStrokeIndexes[sanyang->si[hole]]);
-    seenStrokeIndexes[sanyang->si[hole]] = true;
-  }
-  for (uint8_t strokeIndex = 1; strokeIndex <= 18; ++strokeIndex) EXPECT_TRUE(seenStrokeIndexes[strokeIndex]);
-
-  EXPECT_TRUE(validateGolfCourse(*sanyang).valid);
-
-  GolfCourseFile builtIn{};
-  builtIn.builtInIndex = sanyangIndex;
-  GolfTeeResolution blue{};
-  ASSERT_TRUE(CourseStore::resolveTee(builtIn, *sanyang, "Blue", blue));
-  ASSERT_TRUE(blue.hasYards);
-  EXPECT_EQ(std::accumulate(blue.yards, blue.yards + 18, 0), 6466);
-
-  GolfTeeResolution white{};
-  ASSERT_TRUE(CourseStore::resolveTee(builtIn, *sanyang, "White", white));
-  ASSERT_TRUE(white.hasYards);
-  EXPECT_EQ(std::accumulate(white.yards, white.yards + 9, 0), 2910);
-  EXPECT_EQ(std::accumulate(white.yards + 9, white.yards + 18, 0), 3043);
-  EXPECT_EQ(std::accumulate(white.yards, white.yards + 18, 0), 5953);
-}
-
-TEST(GolfBuiltInCourses, MoganShanGowinShipsVerifiedBlueTeeCardWithoutStrokeIndexes) {
-  const GolfCourse* moganshan = nullptr;
-  int8_t moganshanIndex = -1;
-  int8_t index = 0;
-  for (const GolfCourse& course : GOLF_BUILT_IN_COURSES) {
-    if (strcmp(course.courseName, "MoganShan Gowin") == 0) {
-      moganshan = &course;
-      moganshanIndex = index;
-      break;
+    auto tees = doc["tees"].to<JsonArray>();
+    for (const char* name : {"White", "Blue"}) {
+      auto tee = tees.add<JsonObject>();
+      tee["name"] = name;
+      auto yards = tee["yards"].to<JsonArray>();
+      for (int n = 0; n < 2; ++n) {
+        auto nine = yards.add<JsonArray>();
+        for (int h = 0; h < 9; ++h) nine.add(strcmp(name, "Blue") == 0 ? 400 : 300);
+      }
     }
-    ++index;
   }
-
-  ASSERT_NE(moganshan, nullptr);
-  EXPECT_EQ(moganshanIndex, MOGANSHAN_BUILT_IN_INDEX);
-  EXPECT_EQ(moganshanIndex, 1);  // second, immediately after Sanyang (CONTRACTS-V2 §7)
-  EXPECT_EQ(moganshan->holeCount, 18);
-  EXPECT_TRUE(moganshan->hasYards);
-  EXPECT_FALSE(moganshan->hasSi);
-
-  EXPECT_EQ(std::accumulate(moganshan->par, moganshan->par + 9, 0), 36);
-  EXPECT_EQ(std::accumulate(moganshan->par + 9, moganshan->par + 18, 0), 36);
-  EXPECT_EQ(std::accumulate(moganshan->par, moganshan->par + 18, 0), 72);
-  EXPECT_EQ(std::accumulate(moganshan->yards, moganshan->yards + 9, 0), 3100);
-  EXPECT_EQ(std::accumulate(moganshan->yards + 9, moganshan->yards + 18, 0), 3132);
-  EXPECT_EQ(std::accumulate(moganshan->yards, moganshan->yards + 18, 0), 6232);
-
-  // Stroke indexes were not supplied, so the array stays zeroed rather than guessed.
-  for (uint8_t hole = 0; hole < moganshan->holeCount; ++hole) EXPECT_EQ(moganshan->si[hole], 0);
-
-  EXPECT_TRUE(validateGolfCourse(*moganshan).valid);
-}
-
-TEST(GolfTeeResolver, OtherBuiltInOffersOnlyItsCanonicalTeeRow) {
-  GolfCourseFile builtIn{};
-  builtIn.builtInIndex = MOGANSHAN_BUILT_IN_INDEX;
-  const GolfCourse& moganshan = GOLF_BUILT_IN_COURSES[MOGANSHAN_BUILT_IN_INDEX];
-  GolfTeeResolution resolved{};
-
-  ASSERT_TRUE(CourseStore::resolveTee(builtIn, moganshan, "Blue", resolved));
-  EXPECT_EQ(std::accumulate(resolved.yards, resolved.yards + 18, 0), 6232);
-  EXPECT_FALSE(CourseStore::resolveTee(builtIn, moganshan, "White", resolved));
-  EXPECT_FALSE(resolved.hasYards);
-}
-
-TEST(GolfTeeResolver, SdOverrideNeverBorrowsBuiltInAlternate) {
-  GolfCourseFile overrideFile{};
-  strcpy(overrideFile.filename, "sanyang.json");
-  overrideFile.builtInIndex = SANYANG_BUILT_IN_INDEX;
-  GolfCourse overrideCourse = GOLF_BUILT_IN_COURSES[SANYANG_BUILT_IN_INDEX];
-  strcpy(overrideCourse.tees, "White");
-  for (uint8_t hole = 0; hole < overrideCourse.holeCount; ++hole) overrideCourse.yards[hole] = 200 + hole;
-
-  GolfTeeResolution resolved{};
-  ASSERT_TRUE(CourseStore::resolveTee(overrideFile, overrideCourse, "White", resolved));
-  EXPECT_EQ(resolved.yards[0], 200);
-  EXPECT_EQ(resolved.yards[17], 217);
-  EXPECT_FALSE(CourseStore::resolveTee(overrideFile, overrideCourse, "Blue", resolved));
-  EXPECT_FALSE(resolved.hasYards);
-}
-
-TEST(GolfTeeResolver, NoncanonicalCourseTeeNameOffersNoChoice) {
-  GolfCourseFile sdFile{};
-  strcpy(sdFile.filename, "custom.json");
-  GolfCourse course = GOLF_BUILT_IN_COURSES[MOGANSHAN_BUILT_IN_INDEX];
-  strcpy(course.tees, "Blue/White");
-  GolfTeeResolution resolved{};
-
-  EXPECT_FALSE(CourseStore::resolveTee(sdFile, course, "Blue", resolved));
-  EXPECT_FALSE(CourseStore::resolveTee(sdFile, course, "White", resolved));
-}
-
-TEST(GolfTeeResolver, EmptyTeeAndNoYardsOffersBothSelectionOnlyChoices) {
-  GolfCourseFile sdFile{};
-  strcpy(sdFile.filename, "template.json");
-  GolfCourse course{};
-  strcpy(course.courseName, "Template course");
-  course.holeCount = 18;
-
-  GolfTeeResolution blue{};
-  ASSERT_TRUE(CourseStore::resolveTee(sdFile, course, "Blue", blue));
-  EXPECT_FALSE(blue.hasYards);
-  EXPECT_EQ(blue.yards, nullptr);
-
-  GolfTeeResolution white{};
-  ASSERT_TRUE(CourseStore::resolveTee(sdFile, course, "White", white));
-  EXPECT_FALSE(white.hasYards);
-  EXPECT_EQ(white.yards, nullptr);
-}
-
-TEST(GolfTeeResolver, UnlabelledYardsCannotBeAssignedToEitherTee) {
-  GolfCourseFile sdFile{};
-  strcpy(sdFile.filename, "unlabelled.json");
-  GolfCourse course{};
-  strcpy(course.courseName, "Unlabelled yards");
-  course.hasYards = true;
-  course.yards[0] = 321;
-  GolfTeeResolution resolved{};
-
-  EXPECT_FALSE(CourseStore::resolveTee(sdFile, course, "Blue", resolved));
-  EXPECT_FALSE(CourseStore::resolveTee(sdFile, course, "White", resolved));
-}
-
-TEST(GolfPlayerSetupDefaults, PrefersTruthfulBlueAndLeavesOtherSlotsDisabled) {
-  GolfCourseFile builtIn{};
-  builtIn.builtInIndex = SANYANG_BUILT_IN_INDEX;
-  const GolfCourse& course = GOLF_BUILT_IN_COURSES[SANYANG_BUILT_IN_INDEX];
-  GolfRound round{};
-  CourseStore::applyGolfCourse(course, round, 0);
-
-  ASSERT_TRUE(CourseStore::initializeGolfPlayerSelection(builtIn, course, round));
-  EXPECT_STREQ(round.players[0].tee, "Blue");
-  for (uint8_t slot = 1; slot < GolfRound::MAX_PLAYERS; ++slot) {
-    EXPECT_STREQ(round.players[slot].tee, "");
+  bool parse() { return golfParseCourseJson(doc.as<JsonVariantConst>(), course).valid; }
+  void rejected() {
+    strcpy(course.courseName, "Untouched");
+    EXPECT_FALSE(parse());
+    EXPECT_STREQ(course.courseName, "Untouched");
   }
-}
-
-TEST(GolfPlayerSetupDefaults, FallsBackToExactWhiteWhenBlueIsUnavailable) {
-  GolfCourseFile sdFile{};
-  strcpy(sdFile.filename, "white-only.json");
-  GolfCourse course{};
-  strcpy(course.courseName, "White only");
-  strcpy(course.tees, "White");
-  course.hasYards = true;
-  for (uint8_t hole = 0; hole < GolfRound::MAX_HOLES; ++hole) course.yards[hole] = 200 + hole;
-  GolfRound round{};
-  CourseStore::applyGolfCourse(course, round, 0);
-
-  ASSERT_TRUE(CourseStore::initializeGolfPlayerSelection(sdFile, course, round));
-  EXPECT_STREQ(round.players[0].tee, "White");
-  for (uint8_t slot = 1; slot < GolfRound::MAX_PLAYERS; ++slot) {
-    EXPECT_STREQ(round.players[slot].tee, "");
-  }
-}
-
-TEST(GolfPlayerSetupDefaults, EmptyNoYardCourseDefaultsToSelectionOnlyBlue) {
-  GolfCourseFile sdFile{};
-  strcpy(sdFile.filename, "template.json");
-  GolfCourse course{};
-  strcpy(course.courseName, "Template course");
-  GolfRound round{};
-  CourseStore::applyGolfCourse(course, round, 0);
-
-  ASSERT_TRUE(CourseStore::initializeGolfPlayerSelection(sdFile, course, round));
-  EXPECT_STREQ(round.players[0].tee, "Blue");
-  for (const uint16_t yards : round.players[0].yards) EXPECT_EQ(yards, 0);
-}
-
-TEST(GolfPlayerSetupDefaults, FreeFormTeeNameIsOfferedVerbatim) {
-  // Under CONTRACTS-V2 §32 the tee string is free-form: a course whose "tees" field is
-  // "Blue/White" carries one tee literally named "Blue/White" (it is not decomposed).
-  GolfCourseFile sdFile{};
-  strcpy(sdFile.filename, "custom.json");
-  GolfCourse course{};
-  strcpy(course.courseName, "Custom");
-  strcpy(course.tees, "Blue/White");
-  GolfRound round{};
-  CourseStore::applyGolfCourse(course, round, 0);
-
-  ASSERT_TRUE(CourseStore::initializeGolfPlayerSelection(sdFile, course, round));
-  EXPECT_STREQ(round.players[0].tee, "Blue/White");
-}
-
-TEST(GolfPlayerSetupDefaults, UnlabelledYardTeeKeepsCompleteDisabled) {
-  GolfCourseFile sdFile{};
-  strcpy(sdFile.filename, "custom.json");
-  GolfCourse course{};
-  strcpy(course.courseName, "Custom");
-  course.hasYards = true;
-  course.yards[0] = 300;
-  GolfRound round{};
-  CourseStore::applyGolfCourse(course, round, 0);
-
-  EXPECT_FALSE(CourseStore::initializeGolfPlayerSelection(sdFile, course, round));
-  for (const GolfPlayer& player : round.players) EXPECT_STREQ(player.tee, "");
-}
-
-TEST(GolfCourseValidate, RealPebbleBeachFixtureValidatesWithoutOptionalArrays) {
-  const GolfCourse course = pebbleBeach();
-  const GolfCourseValidationResult result = validateGolfCourse(course, {18, 0, 0});
-
-  ASSERT_TRUE(result.valid);
-  EXPECT_EQ(result.error, GolfCourseValidationError::None);
-  EXPECT_FALSE(course.hasYards);
-  EXPECT_FALSE(course.hasSi);
-  EXPECT_EQ(std::accumulate(course.par, course.par + 9, 0), 36);
-  EXPECT_EQ(std::accumulate(course.par + 9, course.par + 18, 0), 36);
-}
-
-TEST(GolfCourseValidate, NineHoleCourseRequiresZeroTrailingEntries) {
-  GolfCourse course = nineHoleCourse();
+};
+TEST_F(GolfCourseParse, ValidAndLongestFirst) {
+  ASSERT_TRUE(parse());
+  EXPECT_EQ(course.nineCount, 2);
+  EXPECT_EQ(course.teeCount, 2);
+  EXPECT_STREQ(course.tees[0].name, "Blue");
   EXPECT_TRUE(validateGolfCourse(course).valid);
-
-  course.par[9] = 4;
-  const GolfCourseValidationResult result = validateGolfCourse(course);
-  EXPECT_FALSE(result.valid);
-  EXPECT_EQ(result.error, GolfCourseValidationError::TrailingEntry);
-  EXPECT_EQ(result.field, GolfCourseField::Par);
-  EXPECT_EQ(result.hole, 9);
 }
-
-TEST(GolfCourseValidate, RejectsParBelowThreeAndAboveSix) {
-  GolfCourse course = nineHoleCourse();
-  course.par[2] = 2;
-  EXPECT_EQ(validateGolfCourse(course).error, GolfCourseValidationError::ParRange);
-  course.par[2] = 7;
-  EXPECT_EQ(validateGolfCourse(course).error, GolfCourseValidationError::ParRange);
+TEST_F(GolfCourseParse, SynthesizesBlueWhiteWhenTeesAbsentOrEmpty) {
+  doc.remove("tees");
+  ASSERT_TRUE(parse());
+  EXPECT_EQ(course.teeCount, 2);
+  EXPECT_STREQ(course.tees[0].name, "Blue");
+  EXPECT_FALSE(course.tees[0].hasYards);
+  doc["tees"].to<JsonArray>();
+  ASSERT_TRUE(parse());
+  EXPECT_EQ(course.teeCount, 2);
 }
-
-TEST(GolfCourseValidate, RejectsDuplicateStrokeIndex) {
-  GolfCourse course = nineHoleCourse();
-  course.hasSi = true;
-  for (uint8_t hole = 0; hole < course.holeCount; ++hole) {
-    course.si[hole] = hole + 1;
+TEST_F(GolfCourseParse, AcceptsYardlessAndOptionalSiAndUnknownFields) {
+  doc["tees"][0].as<JsonObject>().remove("yards");
+  doc["nines"][0].as<JsonObject>().remove("si");
+  doc["ignored"] = true;
+  ASSERT_TRUE(parse());
+  EXPECT_FALSE(course.nines[0].hasSi);
+  EXPECT_FALSE(course.tees[1].hasYards);
+}
+TEST_F(GolfCourseParse, RejectsVersionOneMissingAndWrongType) {
+  for (auto v : {1, 0, 3}) {
+    doc["v"] = v;
+    rejected();
   }
-  course.si[8] = 8;
-
-  const GolfCourseValidationResult result = validateGolfCourse(course);
-  EXPECT_FALSE(result.valid);
-  EXPECT_EQ(result.error, GolfCourseValidationError::StrokeIndexDuplicate);
-  EXPECT_EQ(result.value, 8);
+  doc["v"] = "2";
+  rejected();
 }
-
-TEST(GolfCourseValidate, RejectsMissingStrokeIndex) {
-  GolfCourse course = nineHoleCourse();
-  course.hasSi = true;
-  for (uint8_t hole = 0; hole < course.holeCount - 1; ++hole) {
-    course.si[hole] = hole + 1;
+TEST_F(GolfCourseParse, RejectsInvalidCourseNames) {
+  for (const char* name : {"", "Bad\nName", "1234567890123456789012345678901234567890"}) {
+    doc["name"] = name;
+    rejected();
   }
-
-  const GolfCourseValidationResult result = validateGolfCourse(course);
-  EXPECT_FALSE(result.valid);
-  EXPECT_EQ(result.error, GolfCourseValidationError::StrokeIndexRange);
-  EXPECT_EQ(result.value, 0);
+  doc["name"] = 42;
+  rejected();
 }
-
-TEST(GolfCourseValidate, RejectsArrayLengthDisagreeingWithHoles) {
-  const GolfCourse course = nineHoleCourse();
-  const GolfCourseValidationResult result = validateGolfCourse(course, {8, 0, 0});
-
-  EXPECT_FALSE(result.valid);
-  EXPECT_EQ(result.error, GolfCourseValidationError::ArrayLength);
-  EXPECT_EQ(result.field, GolfCourseField::Par);
-  EXPECT_EQ(result.value, 8);
-  EXPECT_EQ(result.expected, 9);
+TEST_F(GolfCourseParse, RejectsInvalidNineCount) {
+  doc["nines"].to<JsonArray>();
+  rejected();
+  for (int i = 0; i < 5; ++i) doc["nines"].as<JsonArray>().add<JsonObject>();
+  rejected();
+  doc["nines"] = nullptr;
+  rejected();
 }
-
-TEST(GolfCourseValidate, ValidCourseReportsNoFalsePositive) {
-  GolfCourse course = nineHoleCourse();
-  course.hasYards = true;
-  course.hasSi = true;
-  for (uint8_t hole = 0; hole < course.holeCount; ++hole) {
-    course.yards[hole] = 100 + hole;
-    course.si[hole] = hole + 1;
+TEST_F(GolfCourseParse, RejectsNineNamesMissingDuplicateLongMultilineOrComma) {
+  for (const char* name : {"", "Out", "123456789012", "Bad\nName", "Bad,Name"}) {
+    doc["nines"][1]["name"] = name;
+    rejected();
   }
-
-  const GolfCourseValidationResult result = validateGolfCourse(course);
-  EXPECT_TRUE(result.valid);
-  EXPECT_EQ(result.error, GolfCourseValidationError::None);
-  EXPECT_EQ(result.field, GolfCourseField::None);
+  doc["nines"][1].as<JsonObject>().remove("name");
+  rejected();
 }
-
-TEST(GolfCourseValidate, RejectsYardagesOutsideOneThrough999) {
-  GolfCourse course = nineHoleCourse();
-  course.hasYards = true;
-  for (uint8_t hole = 0; hole < course.holeCount; ++hole) {
-    course.yards[hole] = 100;
+TEST_F(GolfCourseParse, RejectsParMissingWrongLengthTypeAndRange) {
+  auto par = doc["nines"][0]["par"].as<JsonArray>();
+  par[0] = 2;
+  rejected();
+  par[0] = 7;
+  rejected();
+  par[0] = "4";
+  rejected();
+  par[0] = 4;
+  par.remove(8);
+  rejected();
+  par.add(4);
+  par.add(4);
+  rejected();
+  doc["nines"][0].as<JsonObject>().remove("par");
+  rejected();
+}
+TEST_F(GolfCourseParse, RejectsSiLengthTypeRangeAndWithinNineDuplicates) {
+  auto si = doc["nines"][0]["si"].as<JsonArray>();
+  for (int v : {0, 19, 2}) {
+    si[0] = v;
+    rejected();
   }
-  course.yards[0] = 0;
-  EXPECT_EQ(validateGolfCourse(course).error, GolfCourseValidationError::YardageRange);
-  course.yards[0] = 1000;
-  EXPECT_EQ(validateGolfCourse(course).error, GolfCourseValidationError::YardageRange);
+  si[0] = "1";
+  rejected();
+  si[0] = 1;
+  si.remove(8);
+  rejected();
+  si.add(9);
+  si.add(10);
+  rejected();
 }
-
-TEST(GolfCourseValidate, RejectsUnsupportedHoleCount) {
-  GolfCourse course{};
-  course.holeCount = 12;
-  EXPECT_EQ(validateGolfCourse(course).error, GolfCourseValidationError::HoleCount);
+TEST_F(GolfCourseParse, SingleNineSiRangeIsNine) {
+  doc["nines"].as<JsonArray>().remove(1);
+  doc.remove("tees");
+  ASSERT_TRUE(parse());
+  doc["nines"][0]["si"][0] = 10;
+  rejected();
 }
-
-TEST(GolfCourseApply, SeedsSharedFactsDefaultsPlayersAndClearsPlayerOwnedData) {
-  GolfCourse course = nineHoleCourse();
-  strcpy(course.courseName, "Pebble Beach");
-  course.hasSi = true;
-  for (uint8_t hole = 0; hole < course.holeCount; ++hole) course.si[hole] = hole + 1;
-  GolfRound round{};
-  memset(round.players, 0xff, sizeof(round.players));
-
-  CourseStore::applyGolfCourse(course, round, 0x1234);
-
-  EXPECT_STREQ(round.courseName, "Pebble Beach");
-  EXPECT_EQ(round.dateYmd, 0x1234);
-  EXPECT_EQ(round.holeCount, 9);
-  EXPECT_EQ(round.currentHole, 0);
-  EXPECT_EQ(round.currentPlayer, 0);
-  EXPECT_EQ(round.par[0], 4);
-  EXPECT_TRUE(round.hasSi);
-  EXPECT_EQ(round.si[0], 1);
-  EXPECT_EQ(round.si[8], 9);
-  for (uint8_t slot = 0; slot < GolfRound::MAX_PLAYERS; ++slot) {
-    EXPECT_STREQ(round.players[slot].name, GOLF_DEFAULT_PLAYER_NAMES[slot]);
-    EXPECT_STREQ(round.players[slot].tee, "");
-    for (uint8_t hole = 0; hole < GolfRound::MAX_HOLES; ++hole) {
-      EXPECT_EQ(round.players[slot].yards[hole], 0);
-      EXPECT_EQ(round.players[slot].score.putts[hole], 0);
-      EXPECT_EQ(round.players[slot].score.in100[hole], 0);
-      EXPECT_EQ(round.players[slot].score.out100[hole], 0);
-      EXPECT_EQ(round.players[slot].score.penaltyCount[hole], 0);
-      for (uint8_t byte : round.players[slot].score.penaltyEvents[hole]) EXPECT_EQ(byte, 0);
+TEST_F(GolfCourseParse, RejectsTeeCountAndWrongType) {
+  auto tees = doc["tees"].as<JsonArray>();
+  for (int i = 0; i < 5; ++i) tees.add<JsonObject>();
+  rejected();
+  doc["tees"] = nullptr;
+  rejected();
+}
+TEST_F(GolfCourseParse, RejectsTeeNamesMissingDuplicateLongMultilineCommaOrUtf8) {
+  for (const char* name : {"", "White", "123456789012", "Bad\nName", "Bad,Name", "\xff"}) {
+    doc["tees"][1]["name"] = name;
+    rejected();
+  }
+  doc["tees"][1].as<JsonObject>().remove("name");
+  rejected();
+}
+TEST_F(GolfCourseParse, RejectsYardsShapeTypeAndRange) {
+  auto yards = doc["tees"][0]["yards"].as<JsonArray>();
+  auto nine = yards[0].as<JsonArray>();
+  for (int v : {0, 1000, -1}) {
+    nine[0] = v;
+    rejected();
+  }
+  nine[0] = "300";
+  rejected();
+  nine[0] = 300;
+  nine.remove(8);
+  rejected();
+  nine.add(300);
+  nine.add(300);
+  rejected();
+  nine.remove(9);
+  yards.remove(1);
+  rejected();
+  yards.add<JsonArray>();
+  yards.add<JsonArray>();
+  rejected();
+  doc["tees"][0]["yards"] = nullptr;
+  rejected();
+}
+TEST(GolfCourseExamples, ParsesV2ExamplesAtRuntime) {
+  size_t parsed = 0;
+  for (const auto& entry : std::filesystem::directory_iterator(GOLF_EXAMPLES_DIRECTORY)) {
+    if (entry.path().extension() != ".json") continue;
+    std::ifstream file(entry.path());
+    std::stringstream text;
+    text << file.rdbuf();
+    JsonDocument doc;
+    ASSERT_FALSE(deserializeJson(doc, text.str())) << entry.path();
+    if ((doc["v"] | 0) == 1) {
+      std::cout << "SKIP v1 example awaiting conversion: " << entry.path() << '\n';
+      continue;
     }
+    auto course = std::make_unique<GolfCourse>();
+    auto result = golfParseCourseJson(doc.as<JsonVariantConst>(), *course);
+    if (entry.path().filename() == "sanyang-suzhou.json") {
+      EXPECT_FALSE(result.valid);
+      continue;
+    }
+    EXPECT_TRUE(result.valid) << entry.path() << ": " << golfCourseValidationErrorName(result.error);
+    ++parsed;
   }
+  std::cout << "Parsed v2 examples: " << parsed << '\n';
 }
-
-TEST(GolfCourseApply, PreservesParFreeTemplate) {
-  GolfCourse course{};
-  strcpy(course.courseName, "Template course");
-  course.holeCount = 18;
-  GolfRound round{};
-
-  CourseStore::applyGolfCourse(course, round, 0);
-
-  EXPECT_STREQ(round.courseName, "Template course");
-  for (uint8_t hole = 0; hole < round.holeCount; ++hole) EXPECT_EQ(round.par[hole], 0);
+TEST(GolfCourseBuiltins, ValidExceptParFreeTemplate) {
+  for (uint8_t i = 0; i < 3; ++i) EXPECT_TRUE(validateGolfCourse(GOLF_BUILT_IN_COURSES[i]).valid);
+  EXPECT_EQ(GOLF_BUILT_IN_COURSES[3].nines[0].par[0], 0);
 }

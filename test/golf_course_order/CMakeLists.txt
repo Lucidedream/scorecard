@@ -6,3 +6,5 @@ target_link_libraries(golf_course_order_tests PRIVATE GTest::gtest_main crosspoi
 target_include_directories(golf_course_order_tests PRIVATE ${REPO_ROOT}/src/golf)
 target_compile_definitions(golf_course_order_tests PRIVATE CROSSPOINT_GOLF=1)
 gtest_discover_tests(golf_course_order_tests)
+
+target_include_directories(golf_course_order_tests PRIVATE ${REPO_ROOT}/test/minibidi_arabic/stubs)

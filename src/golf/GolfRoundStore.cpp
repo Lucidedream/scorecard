@@ -88,6 +88,7 @@ void GolfRoundStore::toJson(JsonDocument& doc) const {
   }
   doc["course"] = round.courseName;
   doc["holes"] = round.holeCount;
+  golfAddJsonHoleArray(doc, "nines", round.nines, round.holeCount / 9);
   doc["currentHole"] = round.currentHole;
   doc["currentPlayer"] = round.currentPlayer;
   golfAddJsonHoleArray(doc, "par", round.par, round.holeCount);

@@ -585,7 +585,7 @@ void GolfScoringActivity::openCourseMap() {
   if (!flushDirty()) return;
   const GolfRound& round = GOLF_ROUND_STORE.getRound();
   auto map = makeUniqueNoThrow<GolfCourseMapActivity>(renderer, mappedInput, round.currentHole, round.holeCount,
-                                                      round.courseName);
+                                                      round.courseName, golfCourseHoleNumber(round, round.currentHole));
   if (!map) {
     LOG_ERR("GOLF", "OOM: course map");
     return;

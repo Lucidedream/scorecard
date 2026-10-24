@@ -20,25 +20,22 @@
 
 namespace fui = freeink::ui;
 
-static_assert(sizeof(GolfCourse) <= 256, "Tee selection must stay within the embedded stack budget");
-
 GolfPlayerSetupActivity::GolfPlayerSetupActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                  const GolfCourseFile& selectedCourseFile,
-                                                 const GolfCourse& selectedCourse)
+                                                 GolfNineSelection selectedNines)
     : GolfUiListActivity("GolfPlayerSetup", renderer, mappedInput),
       courseFile(selectedCourseFile),
-      course(selectedCourse) {
-  CourseStore::applyGolfCourse(course, draft, 0);
-  CourseStore::initializeGolfPlayerSelection(courseFile, course, draft);
-  golfSetTeeString(defaultTee, draft.players[0].tee);
-}
+      selection(selectedNines) {}
 
 void GolfPlayerSetupActivity::onEnter() {
   phase = Phase::Count;
-  if (!CourseStore::resolveAllTees(course.courseName, teeSet)) {
-    LOG_ERR("GOLF", "Player setup: no tees resolved for %s", course.courseName);
+  loadFailed = !CourseStore::load(courseFile, course) || !golfComposeRound(course, selection, 0, draft);
+  if (loadFailed) {
+    LOG_ERR("GOLF", "Player setup: course load failed");
+    UiListActivity::onEnter();
+    return;
   }
-  if (teeSet.teeCount > 0) golfSetTeeString(defaultTee, golfDefaultTeeForSet(teeSet));
+  golfSetTeeString(defaultTee, golfDefaultTee(course));
   golfSetPlayerCount(draft, playerCount, 1, defaultTee);
   editingPlayer = 0;
   saveFailed = false;
@@ -50,24 +47,25 @@ void GolfPlayerSetupActivity::onEnter() {
 }
 
 uint8_t GolfPlayerSetupActivity::teeRowCount() const {
-  const uint8_t tees = teeSet.teeCount < GOLF_MAX_TEES ? teeSet.teeCount : GOLF_MAX_TEES;
+  const uint8_t tees = course.teeCount < GOLF_MAX_TEES ? course.teeCount : GOLF_MAX_TEES;
   return static_cast<uint8_t>(1 + tees);
 }
 
 const GolfCourseTee* GolfPlayerSetupActivity::findTee(const char* name) const {
   if (name == nullptr) return nullptr;
-  for (uint8_t i = 0; i < teeSet.teeCount; ++i) {
-    if (strcmp(teeSet.tees[i].name, name) == 0) return &teeSet.tees[i];
+  for (uint8_t i = 0; i < course.teeCount; ++i) {
+    if (strcmp(course.tees[i].name, name) == 0) return &course.tees[i];
   }
   return nullptr;
 }
 
 int GolfPlayerSetupActivity::listCount() const {
-  if (phase == Phase::Count) return 0;
+  if (loadFailed || phase == Phase::Count) return 0;
   return phase == Phase::Players ? playerCount + 1 : teeRowCount();
 }
 
 const char* GolfPlayerSetupActivity::headerTitle() const {
+  if (loadFailed) return tr(STR_GOLF_COURSE_LOAD_ERROR);
   if (saveFailed) return tr(STR_GOLF_SAVE_ERROR);
   if (teeResolutionFailed) return tr(STR_GOLF_TEE_UNAVAILABLE_ERROR);
   if (phase == Phase::Count) return course.courseName;
@@ -100,9 +98,9 @@ void GolfPlayerSetupActivity::initializeTeeRows() {
     freeink::ui::ListItem& row = teeRows[i + 1];
     row = {};
     row.actionValue = i + 1;
-    if (i < teeSet.teeCount) {
-      row.label = golfTeeDisplayLabel(teeSet.tees[i].name);
-      row.enabled = teeSet.tees[i].resolved;
+    if (i < course.teeCount) {
+      row.label = golfTeeDisplayLabel(course.tees[i].name);
+      row.enabled = true;
     } else {
       row.enabled = false;
     }
@@ -126,6 +124,7 @@ int GolfPlayerSetupActivity::nextFocusableIndex(const int current, const int dir
 }
 
 void GolfPlayerSetupActivity::navigateButtons() {
+  if (loadFailed) return;
   if (phase == Phase::Count) {
     buttonNavigator.onNextRelease([this] { stepPlayerCount(1); });
     buttonNavigator.onPreviousRelease([this] { stepPlayerCount(-1); });
@@ -157,7 +156,7 @@ void GolfPlayerSetupActivity::activateIndex(const int index) {
       return;
     }
     const uint8_t teeIndex = static_cast<uint8_t>(index - 1);
-    if (teeIndex < teeSet.teeCount) selectTee(teeSet.tees[teeIndex].name);
+    if (teeIndex < course.teeCount) selectTee(course.tees[teeIndex].name);
     return;
   }
 
@@ -208,8 +207,8 @@ void GolfPlayerSetupActivity::openTeeChoice(const uint8_t player) {
     closeRouting();
     // Pre-select the row whose tee name matches this player's current tee.
     int selected = 0;
-    for (uint8_t i = 0; i < teeSet.teeCount; ++i) {
-      if (strcmp(draft.players[player].tee, teeSet.tees[i].name) == 0) {
+    for (uint8_t i = 0; i < course.teeCount; ++i) {
+      if (strcmp(draft.players[player].tee, course.tees[i].name) == 0) {
         selected = i + 1;
         break;
       }
@@ -251,6 +250,7 @@ void GolfPlayerSetupActivity::onBackButton() {
     returnToPlayers();
     return;
   }
+
   if (phase == Phase::Players) {
     {
       RenderLock lock(*this);
@@ -263,10 +263,15 @@ void GolfPlayerSetupActivity::onBackButton() {
     requestUpdate();
     return;
   }
-  openGolfSetup(activityManager, renderer, mappedInput);
+  if (!loadFailed && course.nineCount >= 2) {
+    openGolfNineSelect(activityManager, renderer, mappedInput, courseFile, selection);
+  } else {
+    openGolfSetup(activityManager, renderer, mappedInput);
+  }
 }
 
 void GolfPlayerSetupActivity::onFooterConfirm() {
+  if (loadFailed) return;
   if (phase == Phase::Count) {
     switch (golfPlayerSetupNext(playerCount)) {
       case GolfPlayerSetupNext::ReviewRoster:
@@ -279,6 +284,7 @@ void GolfPlayerSetupActivity::onFooterConfirm() {
 }
 
 void GolfPlayerSetupActivity::onFooterPrevious() {
+  if (loadFailed) return;
   if (phase == Phase::Count) {
     stepPlayerCount(-1);
     return;
@@ -287,6 +293,7 @@ void GolfPlayerSetupActivity::onFooterPrevious() {
 }
 
 void GolfPlayerSetupActivity::onFooterNext() {
+  if (loadFailed) return;
   if (phase == Phase::Count) {
     stepPlayerCount(1);
     return;
@@ -335,15 +342,13 @@ void GolfPlayerSetupActivity::completeRound() {
     const uint8_t firstPlayer = golfFirstEnabledPlayer(draft);
     if (firstPlayer == GolfRound::NO_PLAYER) return;
 
-    // Match each player's tee against the resolved course set before changing any
-    // yardages. The set already carries a value copy of each tee's yardage row, so no
-    // second resolver pass or large per-player GolfCourse copy is needed.
+    // Validate every tee before changing player yardages.
     const GolfCourseTee* playerTee[GolfRound::MAX_PLAYERS]{};
     for (uint8_t slot = 0; slot < GolfRound::MAX_PLAYERS; ++slot) {
       const GolfPlayer& player = draft.players[slot];
       if (!golfPlayerIsEnabled(player)) continue;
       playerTee[slot] = findTee(player.tee);
-      if (playerTee[slot] == nullptr || !playerTee[slot]->resolved) {
+      if (playerTee[slot] == nullptr) {
         LOG_ERR("GOLF", "Unavailable tee %s for player slot %u", player.tee, static_cast<unsigned>(slot));
         teeResolutionFailed = true;
         saveFailed = false;
@@ -353,13 +358,30 @@ void GolfPlayerSetupActivity::completeRound() {
     }
 
     if (teesValid) {
+      struct PlayerSelection {
+        char name[GolfPlayer::NAME_CAPACITY];
+        char tee[GOLF_TEE_CAPACITY];
+      };
+      PlayerSelection players[GOLF_MAX_PLAYERS]{};
+      for (uint8_t slot = 0; slot < GOLF_MAX_PLAYERS; ++slot) {
+        memcpy(players[slot].name, draft.players[slot].name, sizeof(players[slot].name));
+        memcpy(players[slot].tee, draft.players[slot].tee, sizeof(players[slot].tee));
+      }
+      if (!golfComposeRound(course, selection, draft.dateYmd, draft)) {
+        LOG_ERR("GOLF", "Invalid nine selection at round creation");
+        return;
+      }
+      for (uint8_t slot = 0; slot < GOLF_MAX_PLAYERS; ++slot) {
+        memcpy(draft.players[slot].name, players[slot].name, sizeof(players[slot].name));
+        memcpy(draft.players[slot].tee, players[slot].tee, sizeof(players[slot].tee));
+      }
       draft.currentHole = 0;
       draft.currentPlayer = firstPlayer;
       for (uint8_t slot = 0; slot < GolfRound::MAX_PLAYERS; ++slot) {
         GolfPlayer& player = draft.players[slot];
         memset(player.yards, 0, sizeof(player.yards));
         if (golfPlayerIsEnabled(player) && playerTee[slot] != nullptr && playerTee[slot]->hasYards) {
-          memcpy(player.yards, playerTee[slot]->yards, sizeof(player.yards));
+          golfComposeTeeYards(course, static_cast<uint8_t>(playerTee[slot] - course.tees), selection, player.yards);
         }
       }
       saveFailed = false;
@@ -392,6 +414,7 @@ void GolfPlayerSetupActivity::drawChrome() {
 }
 
 golfui::FooterLabels GolfPlayerSetupActivity::golfFooterLabels() const {
+  if (loadFailed) return {tr(STR_BACK), "", "", ""};
   const char* confirm = tr(STR_SELECT);
   const char* previous = tr(STR_DIR_UP);
   const char* next = tr(STR_DIR_DOWN);
@@ -406,6 +429,7 @@ golfui::FooterLabels GolfPlayerSetupActivity::golfFooterLabels() const {
 }
 
 void GolfPlayerSetupActivity::buildScreen(UiScreen& screen) {
+  if (loadFailed) return;
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto layout = golfui::chromeLayout(renderer, mappedInput, screen.frame().safeRect(), metrics.topPadding);
   screen.setContentMargin(layout.contentMargins);

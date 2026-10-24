@@ -17,7 +17,7 @@
 //
 // Tees without yardage are never shown. Writes the picks to out[0..return) and
 // nulls the remainder; the return value is 0, 1 or 2.
-inline uint8_t pickGlanceTees(const GolfCourseTeeSet& teeSet, const GolfCourseTee* out[2]) {
+inline uint8_t pickGlanceTees(const GolfCourse& teeSet, const GolfCourseTee* out[2]) {
   out[0] = nullptr;
   out[1] = nullptr;
   uint8_t count = 0;

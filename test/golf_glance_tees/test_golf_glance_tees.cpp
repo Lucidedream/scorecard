@@ -2,27 +2,29 @@
 
 #include <cstdio>
 #include <initializer_list>
+#include <memory>
 #include <utility>
 
 #include "GolfGlanceTees.h"
 
 namespace {
 
-GolfCourseTeeSet makeSet(std::initializer_list<std::pair<const char*, bool>> tees) {
-  GolfCourseTeeSet set{};
+std::unique_ptr<GolfCourse> makeSet(std::initializer_list<std::pair<const char*, bool>> tees) {
+  auto storage = std::make_unique<GolfCourse>();
+  auto& set = *storage;
   for (const auto& tee : tees) {
     GolfCourseTee& slot = set.tees[set.teeCount++];
     std::snprintf(slot.name, sizeof(slot.name), "%s", tee.first);
-    slot.resolved = true;
     slot.hasYards = tee.second;
   }
-  return set;
+  return storage;
 }
 
 }  // namespace
 
 TEST(PickGlanceTees, SingleTeeShowsOne) {
-  const GolfCourseTeeSet set = makeSet({{"White", true}});
+  auto storage = makeSet({{"White", true}});
+  const auto& set = *storage;
   const GolfCourseTee* out[2];
   EXPECT_EQ(pickGlanceTees(set, out), 1);
   EXPECT_STREQ(out[0]->name, "White");
@@ -30,7 +32,8 @@ TEST(PickGlanceTees, SingleTeeShowsOne) {
 }
 
 TEST(PickGlanceTees, TwoTeesShowBoth) {
-  const GolfCourseTeeSet set = makeSet({{"White", true}, {"Yellow", true}});
+  auto storage = makeSet({{"White", true}, {"Yellow", true}});
+  const auto& set = *storage;
   const GolfCourseTee* out[2];
   EXPECT_EQ(pickGlanceTees(set, out), 2);
   EXPECT_STREQ(out[0]->name, "White");
@@ -38,7 +41,8 @@ TEST(PickGlanceTees, TwoTeesShowBoth) {
 }
 
 TEST(PickGlanceTees, TwoTeesSkipTheOneWithoutYards) {
-  const GolfCourseTeeSet set = makeSet({{"White", false}, {"Yellow", true}});
+  auto storage = makeSet({{"White", false}, {"Yellow", true}});
+  const auto& set = *storage;
   const GolfCourseTee* out[2];
   EXPECT_EQ(pickGlanceTees(set, out), 1);
   EXPECT_STREQ(out[0]->name, "Yellow");
@@ -46,7 +50,8 @@ TEST(PickGlanceTees, TwoTeesSkipTheOneWithoutYards) {
 }
 
 TEST(PickGlanceTees, FourTeesPreferBlueThenRed) {
-  const GolfCourseTeeSet set = makeSet({{"Black", true}, {"White", true}, {"Blue", true}, {"Red", true}});
+  auto storage = makeSet({{"Black", true}, {"White", true}, {"Blue", true}, {"Red", true}});
+  const auto& set = *storage;
   const GolfCourseTee* out[2];
   EXPECT_EQ(pickGlanceTees(set, out), 2);
   EXPECT_STREQ(out[0]->name, "Blue");
@@ -54,7 +59,8 @@ TEST(PickGlanceTees, FourTeesPreferBlueThenRed) {
 }
 
 TEST(PickGlanceTees, MoreThanTwoWithoutBlueOrRedShowsFirstTwo) {
-  const GolfCourseTeeSet set = makeSet({{"Black", true}, {"White", true}, {"Yellow", true}});
+  auto storage = makeSet({{"Black", true}, {"White", true}, {"Yellow", true}});
+  const auto& set = *storage;
   const GolfCourseTee* out[2];
   EXPECT_EQ(pickGlanceTees(set, out), 2);
   EXPECT_STREQ(out[0]->name, "Black");
@@ -62,7 +68,8 @@ TEST(PickGlanceTees, MoreThanTwoWithoutBlueOrRedShowsFirstTwo) {
 }
 
 TEST(PickGlanceTees, MoreThanTwoSkipsTeeWithoutYardsWhenToppingUp) {
-  const GolfCourseTeeSet set = makeSet({{"Black", false}, {"White", true}, {"Yellow", true}});
+  auto storage = makeSet({{"Black", false}, {"White", true}, {"Yellow", true}});
+  const auto& set = *storage;
   const GolfCourseTee* out[2];
   EXPECT_EQ(pickGlanceTees(set, out), 2);
   EXPECT_STREQ(out[0]->name, "White");
@@ -70,7 +77,8 @@ TEST(PickGlanceTees, MoreThanTwoSkipsTeeWithoutYardsWhenToppingUp) {
 }
 
 TEST(PickGlanceTees, BlueWithoutYardsIsNotPickedRedIsKeptThenToppedUp) {
-  const GolfCourseTeeSet set = makeSet({{"Black", true}, {"Blue", false}, {"Red", true}, {"White", true}});
+  auto storage = makeSet({{"Black", true}, {"Blue", false}, {"Red", true}, {"White", true}});
+  const auto& set = *storage;
   const GolfCourseTee* out[2];
   EXPECT_EQ(pickGlanceTees(set, out), 2);
   EXPECT_STREQ(out[0]->name, "Red");
@@ -78,7 +86,8 @@ TEST(PickGlanceTees, BlueWithoutYardsIsNotPickedRedIsKeptThenToppedUp) {
 }
 
 TEST(PickGlanceTees, MoreThanTwoAllWithoutYardsShowsNone) {
-  const GolfCourseTeeSet set = makeSet({{"Black", false}, {"White", false}, {"Yellow", false}});
+  auto storage = makeSet({{"Black", false}, {"White", false}, {"Yellow", false}});
+  const auto& set = *storage;
   const GolfCourseTee* out[2];
   EXPECT_EQ(pickGlanceTees(set, out), 0);
   EXPECT_EQ(out[0], nullptr);

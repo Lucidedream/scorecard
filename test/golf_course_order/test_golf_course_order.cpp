@@ -1,483 +1,141 @@
 #include <gtest/gtest.h>
 
-#include <cstdio>
 #include <cstring>
-#include <initializer_list>
-#include <string>
-#include <vector>
 
 #include "CourseBuiltIns.h"
 #include "CourseOrder.h"
-#include "CourseStore.h"
-
-namespace {
-
-struct Entry {
-  GolfCourseFile file;
-  GolfCourse course;
+class CourseComposition : public ::testing::Test {
+ protected:
+  GolfCourse course = GOLF_BUILT_IN_COURSES[0];
+  GolfRound round{};
 };
-
-Entry builtInEntry(uint8_t index) {
-  Entry entry{};
-  entry.file = {};
-  entry.file.builtInIndex = static_cast<int8_t>(index);
-  entry.course = GOLF_BUILT_IN_COURSES[index];
-  return entry;
+TEST(GolfCourseOrder, BuiltinsAndOverridesKeepSlotsThenAlphabetical) {
+  GolfCourseSummary rows[6]{};
+  const char* names[] = {"zulu", "Template course", "alpha", "Sanyang Golf Club", "MoganShan Gowin", "Pebble Beach"};
+  int8_t slots[] = {-1, 3, -1, 0, 1, 2};
+  for (int i = 0; i < 6; ++i) {
+    strcpy(rows[i].courseName, names[i]);
+    rows[i].file.builtInIndex = slots[i];
+  }
+  strcpy(rows[3].file.filename, "override.json");
+  golfSortCourses(rows, 6);
+  EXPECT_STREQ(rows[0].file.filename, "override.json");
+  for (int i = 0; i < 4; ++i) EXPECT_EQ(rows[i].file.builtInIndex, i);
+  EXPECT_STREQ(rows[4].courseName, "alpha");
+  EXPECT_STREQ(rows[5].courseName, "zulu");
 }
-
-// An SD file. builtInIndex == -1 for a file that overrides nothing; otherwise the table
-// slot of the built-in it overrides, as CourseStore::enumerate() now carries through.
-Entry sdEntry(const char* filename, const char* courseName, int8_t builtInIndex = -1) {
-  Entry entry{};
-  entry.file = {};
-  std::snprintf(entry.file.filename, sizeof(entry.file.filename), "%s", filename);
-  entry.file.builtInIndex = builtInIndex;
-  std::snprintf(entry.course.courseName, sizeof(entry.course.courseName), "%s", courseName);
-  return entry;
+TEST(GolfCourseOrder, NamesCompareWithoutCase) {
+  EXPECT_EQ(golfCompareCourseNames("ALPHA", "alpha"), 0);
+  EXPECT_LT(golfCompareCourseNames("alpha", "Beta"), 0);
 }
-
-// An SD tee file: carries a tee label and, optionally, yardages -- the shape
-// docs/golf/examples/sanyang-suzhou.json / -white.json actually take.
-Entry sdTeeEntry(const char* filename, const char* courseName, const char* tee, const uint16_t* yards = nullptr) {
-  Entry entry = sdEntry(filename, courseName);
-  std::snprintf(entry.course.tees, sizeof(entry.course.tees), "%s", tee);
-  entry.course.holeCount = 18;
-  entry.course.hasYards = yards != nullptr;
-  if (yards != nullptr) std::memcpy(entry.course.yards, yards, sizeof(entry.course.yards[0]) * entry.course.holeCount);
-  return entry;
+TEST(GolfCourseOrder, YardageAcrossEveryNineWinsBeforeNamePriority) {
+  GolfCourseTee a{}, b{};
+  strcpy(a.name, "White");
+  strcpy(b.name, "Black");
+  a.hasYards = b.hasYards = true;
+  a.yards[3][8] = 999;
+  b.yards[0][0] = 998;
+  EXPECT_TRUE(golfTeeSortsBefore(a, b));
+  EXPECT_FALSE(golfTeeSortsBefore(b, a));
+  b.yards[0][0] = 999;
+  EXPECT_TRUE(golfTeeSortsBefore(b, a));
+  b.hasYards = false;
+  EXPECT_TRUE(golfTeeSortsBefore(a, b));
 }
-
-// Mirrors GolfSetupActivity::loadCourses(): a stable insertion sort keyed on
-// golfCourseSortsBefore().
-void sortEntries(std::vector<Entry>& entries) {
-  for (size_t i = 1; i < entries.size(); ++i) {
-    const Entry value = entries[i];
-    size_t position = i;
-    while (position > 0 &&
-           golfCourseSortsBefore(value.file, value.course, entries[position - 1].file, entries[position - 1].course)) {
-      entries[position] = entries[position - 1];
-      --position;
-    }
-    entries[position] = value;
+TEST(GolfCourseOrder, EqualYardlessUsesConventionalThenLexicalOrder) {
+  GolfCourseTee a{}, b{};
+  strcpy(a.name, "Gold");
+  strcpy(b.name, "Blue");
+  EXPECT_TRUE(golfTeeSortsBefore(a, b));
+  strcpy(a.name, "Custom A");
+  strcpy(b.name, "Custom B");
+  EXPECT_TRUE(golfTeeSortsBefore(a, b));
+  EXPECT_FALSE(golfTeeSortsBefore(a, a));
+}
+TEST_F(CourseComposition, DefaultSelectionAndRound) {
+  auto s = golfDefaultNineSelection(course);
+  EXPECT_EQ(s.front, 0);
+  EXPECT_EQ(s.back, 1);
+  ASSERT_TRUE(golfComposeRound(course, s, 123, round));
+  EXPECT_EQ(round.holeCount, 18);
+  EXPECT_EQ(round.dateYmd, 123);
+  EXPECT_STREQ(round.courseName, course.courseName);
+  EXPECT_STREQ(round.players[0].name, "Noah");
+  EXPECT_TRUE(round.hasSi);
+  EXPECT_EQ(round.par[9], course.nines[1].par[0]);
+  EXPECT_EQ(golfCourseHoleNumber(round, 0), 1);
+  EXPECT_EQ(golfCourseHoleNumber(round, 17), 18);
+}
+TEST_F(CourseComposition, SwappingKeepsCanonicalSiAndMapsImages) {
+  ASSERT_TRUE(golfComposeRound(course, {1, 0}, 0, round));
+  EXPECT_TRUE(round.hasSi);
+  EXPECT_EQ(round.si[0], 6);
+  EXPECT_EQ(round.si[9], 15);
+  EXPECT_EQ(golfCourseHoleNumber(round, 0), 10);
+  EXPECT_EQ(golfCourseHoleNumber(round, 9), 1);
+}
+TEST_F(CourseComposition, InvalidSelectionLeavesRoundUntouched) {
+  round.dateYmd = 456;
+  for (auto s : {GolfNineSelection{0, 0}, GolfNineSelection{2, 1}, GolfNineSelection{0, GOLF_NO_NINE}}) {
+    EXPECT_FALSE(golfNineSelectionValid(course, s));
+    EXPECT_FALSE(golfComposeRound(course, s, 0, round));
+    EXPECT_EQ(round.dateYmd, 456);
   }
 }
-
-std::vector<std::string> orderedNames(std::vector<Entry> entries) {
-  sortEntries(entries);
-  std::vector<std::string> names;
-  for (const Entry& entry : entries) names.push_back(entry.course.courseName);
-  return names;
+TEST_F(CourseComposition, ThreeNinesWithDuplicateSiDropsSi) {
+  course.nineCount = 3;
+  course.nines[2] = course.nines[0];
+  strcpy(course.nines[2].name, "Third");
+  ASSERT_TRUE(golfComposeRound(course, {0, 2}, 0, round));
+  EXPECT_FALSE(round.hasSi);
+  for (auto si : round.si) EXPECT_EQ(si, 0);
+  EXPECT_EQ(golfCourseHoleNumber(round, 9), 19);
+}
+TEST_F(CourseComposition, OneNineHasNineHoleRoundAndCanonicalSi) {
+  course.nineCount = 1;
+  for (int h = 0; h < 9; ++h) course.nines[0].si[h] = h + 1;
+  auto s = golfDefaultNineSelection(course);
+  EXPECT_EQ(s.back, GOLF_NO_NINE);
+  ASSERT_TRUE(golfComposeRound(course, s, 0, round));
+  EXPECT_EQ(round.holeCount, 9);
+  EXPECT_TRUE(round.hasSi);
+  EXPECT_EQ(round.nines[1], GOLF_NO_NINE);
+  EXPECT_FALSE(golfNineSelectionValid(course, {0, 1}));
+}
+TEST_F(CourseComposition, ComposeTeeYardsUsesSelectionAndZeroesUnusedHoles) {
+  uint16_t yards[GOLF_MAX_HOLES]{};
+  ASSERT_TRUE(golfComposeTeeYards(course, 1, {1, 0}, yards));
+  EXPECT_EQ(yards[0], 360);
+  EXPECT_EQ(yards[9], 310);
+  course.nineCount = 1;
+  ASSERT_TRUE(golfComposeTeeYards(course, 0, {0, GOLF_NO_NINE}, yards));
+  EXPECT_EQ(yards[9], 0);
+  course.tees[0].hasYards = false;
+  EXPECT_FALSE(golfComposeTeeYards(course, 0, {0, GOLF_NO_NINE}, yards));
+  EXPECT_FALSE(golfComposeTeeYards(course, 6, {0, GOLF_NO_NINE}, yards));
+}
+TEST_F(CourseComposition, DefaultTeeBlueThenWhiteThenFirst) {
+  EXPECT_STREQ(golfDefaultTee(course), "Blue");
+  strcpy(course.tees[0].name, "Black");
+  EXPECT_STREQ(golfDefaultTee(course), "White");
+  course.teeCount = 1;
+  EXPECT_STREQ(golfDefaultTee(course), "Black");
+  course.teeCount = 0;
+  EXPECT_STREQ(golfDefaultTee(course), "");
+}
+TEST_F(CourseComposition, TemplateStaysParFreeAndYardless) {
+  course = GOLF_BUILT_IN_COURSES[3];
+  ASSERT_TRUE(golfComposeRound(course, {0, 1}, 0, round));
+  for (auto p : round.par) EXPECT_EQ(p, 0);
+  EXPECT_FALSE(round.hasSi);
+  EXPECT_EQ(course.teeCount, 2);
 }
 
-bool resolveAllTees(const std::vector<Entry>& entries, const char* courseName, GolfCourseTeeSet& result) {
-  std::vector<GolfCourseFile> files;
-  std::vector<GolfCourse> courses;
-  for (const Entry& entry : entries) {
-    files.push_back(entry.file);
-    courses.push_back(entry.course);
-  }
-  return golfResolveAllTeesFrom(files.data(), courses.data(), static_cast<uint8_t>(files.size()), courseName, result);
-}
-
-std::vector<std::string> teeNames(const GolfCourseTeeSet& set) {
-  std::vector<std::string> names;
-  for (uint8_t i = 0; i < set.teeCount; ++i) names.emplace_back(set.tees[i].name);
-  return names;
-}
-
-const GolfCourseTee* findTee(const GolfCourseTeeSet& set, const char* name) {
-  for (uint8_t i = 0; i < set.teeCount; ++i) {
-    if (std::strcmp(set.tees[i].name, name) == 0) return &set.tees[i];
-  }
-  return nullptr;
-}
-
-struct Yards18 {
-  uint16_t v[18];
-};
-
-// 18 holes at one flat yardage: total = 18 * value, for equal / unequal-total cases.
-Yards18 flat(uint16_t value) {
-  Yards18 y{};
-  for (uint16_t& hole : y.v) hole = value;
-  return y;
-}
-
-// A single resolved tee, for golfTeeSortsBefore() unit tests.
-GolfCourseTee makeTee(const char* name, const uint16_t* yards) {
-  GolfCourseTee tee{};
-  std::snprintf(tee.name, sizeof(tee.name), "%s", name);
-  tee.resolved = true;
-  tee.hasYards = yards != nullptr;
-  if (yards != nullptr) std::memcpy(tee.yards, yards, sizeof(tee.yards));
-  return tee;
-}
-
-// A tee set built straight from a list of names, no SD/resolution involved.
-GolfCourseTeeSet teeSetOf(std::initializer_list<const char*> names) {
-  GolfCourseTeeSet set{};
-  for (const char* name : names) {
-    std::snprintf(set.tees[set.teeCount].name, sizeof(set.tees[set.teeCount].name), "%s", name);
-    ++set.teeCount;
-  }
-  return set;
-}
-
-}  // namespace
-
-TEST(GolfCourseOrder, BuiltInsSortBeforeUnrelatedSdCourses) {
-  const Entry builtIn = builtInEntry(SANYANG_BUILT_IN_INDEX);
-  const Entry sd = sdEntry("aardvark.json", "Aardvark Links");
-
-  EXPECT_TRUE(golfCourseSortsBefore(builtIn.file, builtIn.course, sd.file, sd.course));
-  EXPECT_FALSE(golfCourseSortsBefore(sd.file, sd.course, builtIn.file, builtIn.course));
-}
-
-TEST(GolfCourseOrder, BuiltInsKeepTableOrderAndNeverResort) {
-  const Entry sanyang = builtInEntry(SANYANG_BUILT_IN_INDEX);
-  const Entry moganshan = builtInEntry(MOGANSHAN_BUILT_IN_INDEX);
-
-  EXPECT_TRUE(golfCourseSortsBefore(sanyang.file, sanyang.course, moganshan.file, moganshan.course));
-  EXPECT_FALSE(golfCourseSortsBefore(moganshan.file, moganshan.course, sanyang.file, sanyang.course));
-}
-
-TEST(GolfCourseOrder, UnrelatedSdCoursesSortAlphabeticallyCaseInsensitive) {
-  const Entry lower = sdEntry("b.json", "banff springs");
-  const Entry upper = sdEntry("a.json", "Augusta National");
-
-  EXPECT_TRUE(golfCourseSortsBefore(upper.file, upper.course, lower.file, lower.course));
-  EXPECT_FALSE(golfCourseSortsBefore(lower.file, lower.course, upper.file, upper.course));
-}
-
-TEST(GolfCourseOrder, BuiltInOnlyListStaysInTableOrder) {
-  // Fed in reverse; the sort must restore Sanyang, MoganShan, Pebble Beach, Template.
-  std::vector<Entry> entries;
-  for (int8_t index = GOLF_BUILT_IN_COURSE_COUNT - 1; index >= 0; --index) {
-    entries.push_back(builtInEntry(static_cast<uint8_t>(index)));
-  }
-
-  EXPECT_EQ(orderedNames(entries),
-            (std::vector<std::string>{"Sanyang Golf Club", "MoganShan Gowin", "Pebble Beach", "Template course"}));
-}
-
-TEST(GolfCourseOrder, BuiltInsFirstThenSdCoursesAlphabetically) {
-  std::vector<Entry> entries;
-  // Enumerate order: SD files (directory order) first, then non-overridden built-ins.
-  entries.push_back(sdEntry("standrews.json", "St Andrews"));
-  entries.push_back(sdEntry("augusta.json", "Augusta National"));
-  for (uint8_t index = 0; index < GOLF_BUILT_IN_COURSE_COUNT; ++index) entries.push_back(builtInEntry(index));
-
-  EXPECT_EQ(orderedNames(entries), (std::vector<std::string>{"Sanyang Golf Club", "MoganShan Gowin", "Pebble Beach",
-                                                             "Template course", "Augusta National", "St Andrews"}));
-}
-
-TEST(GolfCourseOrder, SdOverrideLandsInItsBuiltInsSlotNotAmongSdCourses) {
-  std::vector<Entry> entries;
-  // A corrected Sanyang plus an unrelated SD course, then the other built-ins.
-  entries.push_back(sdEntry("Sanyang Golf Club.json", "Sanyang Golf Club", SANYANG_BUILT_IN_INDEX));
-  entries.push_back(sdEntry("augusta.json", "Augusta National"));
-  entries.push_back(builtInEntry(MOGANSHAN_BUILT_IN_INDEX));
-  entries.push_back(builtInEntry(2));  // Pebble Beach
-  entries.push_back(builtInEntry(3));  // Template course
-
-  sortEntries(entries);
-
-  const std::vector<std::string> expected{"Sanyang Golf Club", "MoganShan Gowin", "Pebble Beach", "Template course",
-                                          "Augusta National"};
-  std::vector<std::string> names;
-  for (const Entry& entry : entries) names.push_back(entry.course.courseName);
-  EXPECT_EQ(names, expected);
-
-  // The course in Sanyang's slot is the SD override, not the flash built-in.
-  EXPECT_STREQ(entries[0].file.filename, "Sanyang Golf Club.json");
-  EXPECT_EQ(entries[0].file.builtInIndex, SANYANG_BUILT_IN_INDEX);
-}
-
-TEST(GolfCourseOrder, SdOverrideOfAMiddleBuiltInKeepsThatPosition) {
-  std::vector<Entry> entries;
-  entries.push_back(sdEntry("pebble.json", "Pebble Beach", 2));
-  entries.push_back(sdEntry("zzz.json", "Zzz Country Club"));
-  entries.push_back(builtInEntry(SANYANG_BUILT_IN_INDEX));
-  entries.push_back(builtInEntry(MOGANSHAN_BUILT_IN_INDEX));
-  entries.push_back(builtInEntry(3));  // Template course
-
-  EXPECT_EQ(orderedNames(entries), (std::vector<std::string>{"Sanyang Golf Club", "MoganShan Gowin", "Pebble Beach",
-                                                             "Template course", "Zzz Country Club"}));
-}
-
-// Runs the shared load body (CONTRACTS-V2 §34.4) behind both the new-round course picker
-// and the read-only course browser: sort + collapse adjacent same-name runs.
-struct DedupedList {
-  std::vector<GolfCourseFile> files;
-  std::vector<GolfCourse> courses;
-  uint8_t primaryIndex[GOLF_MAX_COURSES]{};
-  uint8_t rowCount = 0;
-
-  std::vector<std::string> rowNames() const {
-    std::vector<std::string> names;
-    for (uint8_t row = 0; row < rowCount; ++row) names.emplace_back(courses[primaryIndex[row]].courseName);
-    return names;
-  }
-};
-
-DedupedList sortAndDedup(const std::vector<Entry>& entries) {
-  DedupedList out;
-  for (const Entry& entry : entries) {
-    out.files.push_back(entry.file);
-    out.courses.push_back(entry.course);
-  }
-  out.rowCount = golfSortAndDedupCourses(out.files.data(), out.courses.data(), static_cast<uint8_t>(out.files.size()),
-                                         out.primaryIndex);
-  return out;
-}
-
-TEST(GolfCourseOrder, SanyangFourTeeFilesCollapseToOneRowKeyedOnFirstFile) {
-  // Four Sanyang tee files (Black/Blue/White/Red, all "Sanyang Golf Club") plus two
-  // unrelated SD courses collapse to three deduped rows.
-  const std::vector<Entry> entries{
-      sdTeeEntry("sanyang-black.json", "Sanyang Golf Club", "Black"),
-      sdTeeEntry("sanyang-blue.json", "Sanyang Golf Club", "Blue"),
-      sdTeeEntry("sanyang-white.json", "Sanyang Golf Club", "White"),
-      sdTeeEntry("sanyang-red.json", "Sanyang Golf Club", "Red"),
-      sdEntry("moganshan.json", "MoganShan Golf Club"),
-      sdEntry("pebble.json", "Pebble Beach Golf Links"),
-  };
-
-  const DedupedList result = sortAndDedup(entries);
-
-  ASSERT_EQ(result.rowCount, 3);
-  EXPECT_EQ(result.rowNames(),
-            (std::vector<std::string>{"MoganShan Golf Club", "Pebble Beach Golf Links", "Sanyang Golf Club"}));
-  // The Sanyang row's primary is the first Sanyang file in enumerate order (Black); its
-  // par/si/holeCount are what a started round or map browse inherits.
-  EXPECT_STREQ(result.files[result.primaryIndex[2]].filename, "sanyang-black.json");
-  // Every Sanyang tee file is still present in the scratch arrays for tee resolution.
-  int sanyangEntries = 0;
-  for (const GolfCourse& course : result.courses) {
-    if (std::strcmp(course.courseName, "Sanyang Golf Club") == 0) ++sanyangEntries;
-  }
-  EXPECT_EQ(sanyangEntries, 4);
-}
-
-TEST(GolfResolveAllTees, TwoSdTeeFilesForSameCourseNameResolveBoth) {
-  constexpr uint16_t blueYards[18] = {380, 410, 190, 505, 340, 160, 420, 390, 530,
-                                      400, 175, 460, 350, 415, 200, 380, 145, 500};
-  constexpr uint16_t whiteYards[18] = {350, 390, 165, 480, 315, 140, 395, 365, 505,
-                                       375, 150, 435, 325, 390, 175, 355, 120, 475};
-  std::vector<Entry> entries;
-  entries.push_back(sdTeeEntry("club-blue.json", "Owner Links", "Blue", blueYards));
-  entries.push_back(sdTeeEntry("club-white.json", "Owner Links", "White", whiteYards));
-
-  GolfCourseTeeSet result{};
-  ASSERT_TRUE(resolveAllTees(entries, "Owner Links", result));
-  EXPECT_EQ(teeNames(result), (std::vector<std::string>{"Blue", "White"}));
-  const GolfCourseTee* blue = findTee(result, "Blue");
-  const GolfCourseTee* white = findTee(result, "White");
-  ASSERT_NE(blue, nullptr);
-  ASSERT_NE(white, nullptr);
-  EXPECT_TRUE(blue->resolved);
-  EXPECT_TRUE(white->resolved);
-  EXPECT_TRUE(blue->hasYards);
-  EXPECT_TRUE(white->hasYards);
-  EXPECT_EQ(blue->yards[0], 380);
-  EXPECT_EQ(white->yards[0], 350);
-  EXPECT_STREQ(result.primaryFile.filename, "club-blue.json");
-}
-
-TEST(GolfResolveAllTees, OneFileResolvesOnlyThatTee) {
-  std::vector<Entry> entries;
-  entries.push_back(sdTeeEntry("club-blue.json", "Owner Links", "Blue"));
-  entries.push_back(sdEntry("unrelated.json", "Some Other Course"));
-
-  GolfCourseTeeSet result{};
-  ASSERT_TRUE(resolveAllTees(entries, "Owner Links", result));
-  EXPECT_EQ(teeNames(result), (std::vector<std::string>{"Blue"}));
-}
-
-TEST(GolfResolveAllTees, SanyangFourSdTeeFilesGatherInFileOrderWithYardages) {
-  constexpr uint16_t blackYards[18] = {347, 530, 195, 328, 540, 196, 460, 450, 420,
-                                       430, 462, 545, 205, 400, 415, 410, 198, 518};
-  constexpr uint16_t blueYards[18] = {325, 510, 144, 290, 510, 170, 427, 430, 390,
-                                      400, 395, 520, 175, 365, 375, 385, 165, 490};
-  constexpr uint16_t whiteYards[18] = {310, 470, 122, 265, 490, 153, 389, 371, 340,
-                                       360, 360, 495, 150, 332, 350, 370, 156, 470};
-  constexpr uint16_t redYards[18] = {233, 441, 100, 200, 392, 98,  312, 322, 320,
-                                     305, 320, 435, 115, 305, 310, 320, 120, 441};
-  std::vector<Entry> entries;
-  entries.push_back(sdTeeEntry("sanyang-black.json", "Sanyang Golf Club", "Black", blackYards));
-  entries.push_back(sdTeeEntry("sanyang-blue.json", "Sanyang Golf Club", "Blue", blueYards));
-  entries.push_back(sdTeeEntry("sanyang-white.json", "Sanyang Golf Club", "White", whiteYards));
-  entries.push_back(sdTeeEntry("sanyang-red.json", "Sanyang Golf Club", "Red", redYards));
-
-  GolfCourseTeeSet result{};
-  ASSERT_TRUE(resolveAllTees(entries, "Sanyang Golf Club", result));
-  EXPECT_EQ(teeNames(result), (std::vector<std::string>{"Black", "Blue", "White", "Red"}));
-  EXPECT_EQ(findTee(result, "Black")->yards[0], 347);
-  EXPECT_EQ(findTee(result, "Blue")->yards[0], 325);
-  EXPECT_EQ(findTee(result, "White")->yards[0], 310);
-  EXPECT_EQ(findTee(result, "Red")->yards[0], 233);
-  for (uint8_t i = 0; i < result.teeCount; ++i) {
-    EXPECT_TRUE(result.tees[i].resolved);
-    EXPECT_TRUE(result.tees[i].hasYards);
-  }
-  EXPECT_STREQ(result.primaryFile.filename, "sanyang-black.json");
-}
-
-TEST(GolfResolveAllTees, TeeListIsCappedAtGolfMaxTees) {
-  std::vector<Entry> entries;
-  const char* names[7] = {"T1", "T2", "T3", "T4", "T5", "T6", "T7"};
-  for (int i = 0; i < 7; ++i) {
-    char filename[32];
-    std::snprintf(filename, sizeof(filename), "many-%d.json", i);
-    entries.push_back(sdTeeEntry(filename, "Many Tees", names[i]));
-  }
-
-  GolfCourseTeeSet result{};
-  ASSERT_TRUE(resolveAllTees(entries, "Many Tees", result));
-  EXPECT_EQ(result.teeCount, GOLF_MAX_TEES);
-  EXPECT_EQ(teeNames(result), (std::vector<std::string>{"T1", "T2", "T3", "T4", "T5", "T6"}));
-}
-
-TEST(GolfResolveAllTees, BuiltInSanyangYieldsBluePlusWhiteFromFlash) {
-  std::vector<Entry> entries;
-  entries.push_back(builtInEntry(SANYANG_BUILT_IN_INDEX));
-  entries.push_back(builtInEntry(MOGANSHAN_BUILT_IN_INDEX));
-
-  GolfCourseTeeSet result{};
-  ASSERT_TRUE(resolveAllTees(entries, "Sanyang Golf Club", result));
-  EXPECT_EQ(teeNames(result), (std::vector<std::string>{"Blue", "White"}));
-  EXPECT_EQ(findTee(result, "Blue")->yards[0], GOLF_BUILT_IN_COURSES[SANYANG_BUILT_IN_INDEX].yards[0]);
-  EXPECT_EQ(findTee(result, "White")->yards[0], SANYANG_WHITE_YARDS[0]);
-}
-
-TEST(GolfResolveAllTees, BuiltInMoganShanYieldsOnlyBlue) {
-  std::vector<Entry> entries;
-  entries.push_back(builtInEntry(MOGANSHAN_BUILT_IN_INDEX));
-
-  GolfCourseTeeSet result{};
-  ASSERT_TRUE(resolveAllTees(entries, "MoganShan Gowin", result));
-  EXPECT_EQ(teeNames(result), (std::vector<std::string>{"Blue"}));
-  EXPECT_TRUE(findTee(result, "Blue")->hasYards);
-}
-
-TEST(GolfResolveAllTees, LabelLessCourseKeepsSelectionOnlyBlueWhite) {
-  std::vector<Entry> entries;
-  entries.push_back(builtInEntry(3));  // Template course: no tee label, no yardage
-
-  GolfCourseTeeSet result{};
-  ASSERT_TRUE(resolveAllTees(entries, "Template course", result));
-  EXPECT_EQ(teeNames(result), (std::vector<std::string>{"Blue", "White"}));
-  EXPECT_TRUE(findTee(result, "Blue")->resolved);
-  EXPECT_FALSE(findTee(result, "Blue")->hasYards);
-}
-
-TEST(GolfResolveAllTees, NoMatchingFileReturnsFalse) {
-  std::vector<Entry> entries;
-  entries.push_back(sdEntry("unrelated.json", "Some Other Course"));
-
-  GolfCourseTeeSet result{};
-  EXPECT_FALSE(resolveAllTees(entries, "Nonexistent Course", result));
-  EXPECT_EQ(result.teeCount, 0);
-}
-
-// CONTRACTS-V2 §32.7: the tee a fresh round pre-selects for player 1.
-TEST(GolfDefaultTeeForSet, PrefersBlueOverEverythingElse) {
-  EXPECT_STREQ(golfDefaultTeeForSet(teeSetOf({"Black", "Blue", "White", "Red"})), "Blue");
-}
-
-TEST(GolfDefaultTeeForSet, FallsBackToWhiteWhenNoBlue) {
-  EXPECT_STREQ(golfDefaultTeeForSet(teeSetOf({"Black", "White", "Red"})), "White");
-}
-
-TEST(GolfDefaultTeeForSet, FallsBackToFirstTeeWhenNeitherBlueNorWhite) {
-  EXPECT_STREQ(golfDefaultTeeForSet(teeSetOf({"Black", "Red"})), "Black");
-}
-
-TEST(GolfDefaultTeeForSet, SingleBlueTeeSet) { EXPECT_STREQ(golfDefaultTeeForSet(teeSetOf({"Blue"})), "Blue"); }
-
-TEST(GolfDefaultTeeForSet, EmptySetYieldsEmptyString) { EXPECT_STREQ(golfDefaultTeeForSet(GolfCourseTeeSet{}), ""); }
-
-TEST(GolfDefaultTeeForSet, FindsBlueEvenWhenNotFirst) {
-  EXPECT_STREQ(golfDefaultTeeForSet(teeSetOf({"Black", "White", "Blue", "Red"})), "Blue");
-}
-
-// CONTRACTS-V2 §35: strict-weak tee ordering, longest-first.
-TEST(GolfTeeSortsBefore, TeeWithYardageSortsBeforeYardlessTee) {
-  const Yards18 yards = flat(300);
-  const GolfCourseTee withYards = makeTee("Red", yards.v);   // low name priority
-  const GolfCourseTee yardless = makeTee("Black", nullptr);  // high name priority, no yardage
-  EXPECT_TRUE(golfTeeSortsBefore(withYards, yardless));
-  EXPECT_FALSE(golfTeeSortsBefore(yardless, withYards));
-}
-
-TEST(GolfTeeSortsBefore, LargerTotalYardageSortsFirst) {
-  const Yards18 longer = flat(420);
-  const Yards18 shorter = flat(400);
-  const GolfCourseTee white = makeTee("White", longer.v);  // lower name priority, but longer
-  const GolfCourseTee blue = makeTee("Blue", shorter.v);
-  EXPECT_TRUE(golfTeeSortsBefore(white, blue));
-  EXPECT_FALSE(golfTeeSortsBefore(blue, white));
-}
-
-TEST(GolfTeeSortsBefore, EqualYardageFallsBackToNamePriority) {
-  const Yards18 yards = flat(400);
-  const GolfCourseTee blue = makeTee("blue", yards.v);  // case-insensitive match
-  const GolfCourseTee white = makeTee("WHITE", yards.v);
-  EXPECT_TRUE(golfTeeSortsBefore(blue, white));
-  EXPECT_FALSE(golfTeeSortsBefore(white, blue));
-}
-
-TEST(GolfTeeSortsBefore, EqualPriorityFallsBackToAlphabetical) {
-  const Yards18 yards = flat(400);
-  const GolfCourseTee championship = makeTee("Championship", yards.v);  // neither name is listed
-  const GolfCourseTee members = makeTee("Members", yards.v);
-  EXPECT_TRUE(golfTeeSortsBefore(championship, members));
-  EXPECT_FALSE(golfTeeSortsBefore(members, championship));
-}
-
-TEST(GolfResolveAllTees, ResolvedTeesAreOrderedLongestFirstRegardlessOfFileOrder) {
-  const Yards18 black = flat(500);
-  const Yards18 blue = flat(450);
-  const Yards18 white = flat(400);
-  const Yards18 red = flat(350);
-  std::vector<Entry> entries;  // fed shortest-first; the resolve must reorder them
-  entries.push_back(sdTeeEntry("z-red.json", "Club", "Red", red.v));
-  entries.push_back(sdTeeEntry("y-white.json", "Club", "White", white.v));
-  entries.push_back(sdTeeEntry("x-black.json", "Club", "Black", black.v));
-  entries.push_back(sdTeeEntry("w-blue.json", "Club", "Blue", blue.v));
-
-  GolfCourseTeeSet result{};
-  ASSERT_TRUE(resolveAllTees(entries, "Club", result));
-  EXPECT_EQ(teeNames(result), (std::vector<std::string>{"Black", "Blue", "White", "Red"}));
-  // primary/primaryFile still come from the first matching file, unaffected by the tee sort.
-  EXPECT_STREQ(result.primaryFile.filename, "z-red.json");
-}
-
-TEST(GolfResolveAllTees, YardlessTeeSinksBelowTeesWithYardage) {
-  const Yards18 yards = flat(300);
-  std::vector<Entry> entries;
-  entries.push_back(sdTeeEntry("black.json", "Club", "Black"));  // no yardage
-  entries.push_back(sdTeeEntry("red.json", "Club", "Red", yards.v));
-
-  GolfCourseTeeSet result{};
-  ASSERT_TRUE(resolveAllTees(entries, "Club", result));
-  EXPECT_EQ(teeNames(result), (std::vector<std::string>{"Red", "Black"}));
-}
-
-TEST(GolfResolveAllTees, EqualYardageFallsBackToNamePriorityThenAlphabetical) {
-  const Yards18 yards = flat(400);
-
-  std::vector<Entry> byPriority;
-  byPriority.push_back(sdTeeEntry("a.json", "Club", "White", yards.v));
-  byPriority.push_back(sdTeeEntry("b.json", "Club", "Blue", yards.v));
-  GolfCourseTeeSet priorityResult{};
-  ASSERT_TRUE(resolveAllTees(byPriority, "Club", priorityResult));
-  EXPECT_EQ(teeNames(priorityResult), (std::vector<std::string>{"Blue", "White"}));
-
-  std::vector<Entry> unknownNames;
-  unknownNames.push_back(sdTeeEntry("c.json", "Range", "Sunset", yards.v));
-  unknownNames.push_back(sdTeeEntry("d.json", "Range", "Dawn", yards.v));
-  GolfCourseTeeSet alphaResult{};
-  ASSERT_TRUE(resolveAllTees(unknownNames, "Range", alphaResult));
-  EXPECT_EQ(teeNames(alphaResult), (std::vector<std::string>{"Dawn", "Sunset"}));
+TEST_F(CourseComposition, MissingNineFallsBackToRoundHoleNumber) {
+  round.nines[0] = GOLF_NO_NINE;
+  round.nines[1] = GOLF_NO_NINE;
+  EXPECT_EQ(golfCourseHoleNumber(round, 0), 1);
+  EXPECT_EQ(golfCourseHoleNumber(round, 8), 9);
+  EXPECT_EQ(golfCourseHoleNumber(round, 9), 10);
+  EXPECT_EQ(golfCourseHoleNumber(round, 17), 18);
 }

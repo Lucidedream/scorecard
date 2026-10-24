@@ -24,13 +24,13 @@ GolfCourseTeeInfoActivity::GolfCourseTeeInfoActivity(GfxRenderer& renderer, Mapp
 
 void GolfCourseTeeInfoActivity::onEnter() {
   Activity::onEnter();
-  resolved = CourseStore::resolveAllTees(courseName, teeSet);
+  resolved = CourseStore::findByName(courseName, courseFile, course);
   if (!resolved) LOG_ERR("GOLF", "Tee info: course not found: %s", courseName);
-  holeCount = teeSet.primary.holeCount;
+  holeCount = (9 * course.nineCount);
   activeTab = 0;
   firstPaint = true;
   resetUi();
-  if (resolved && teeSet.teeCount > 0) {
+  if (resolved && course.teeCount > 0) {
     app.on(ACTION_TAB, &GolfCourseTeeInfoActivity::tabTrampoline, this);
     app.setScreen(&GolfCourseTeeInfoActivity::screenTrampoline, this);
   }
@@ -38,8 +38,8 @@ void GolfCourseTeeInfoActivity::onEnter() {
 }
 
 void GolfCourseTeeInfoActivity::changeTab(const int delta) {
-  const uint8_t count = holeCount == 18 ? 2 : 1;
-  if (count == 1) return;
+  const uint8_t count = course.nineCount;
+  if (count < 2) return;
   {
     RenderLock lock(*this);
     activeTab = static_cast<uint8_t>((activeTab + count + delta) % count);
@@ -48,7 +48,7 @@ void GolfCourseTeeInfoActivity::changeTab(const int delta) {
 }
 
 void GolfCourseTeeInfoActivity::loop() {
-  const bool hasTabs = holeCount == 18;
+  const bool hasTabs = course.nineCount >= 2;
   golfui::FooterInput input(
       mappedInput, {tr(STR_BACK), "", hasTabs ? tr(STR_GOLF_PREVIOUS_TAB) : "", hasTabs ? tr(STR_GOLF_NEXT_TAB) : ""});
   if (input.wasReleased(golfui::FooterAction::Back)) {
@@ -77,7 +77,7 @@ void GolfCourseTeeInfoActivity::screenTrampoline(UiScreen& screen, void* user) {
 }
 
 void GolfCourseTeeInfoActivity::tabTrampoline(const fui::ActionEvent& event, void* user) {
-  if (event.value < 0 || event.value > 1) return;
+  if (event.value < 0 || event.value >= static_cast<GolfCourseTeeInfoActivity*>(user)->course.nineCount) return;
   auto* self = static_cast<GolfCourseTeeInfoActivity*>(user);
   {
     RenderLock lock(*self);
@@ -94,12 +94,12 @@ void GolfCourseTeeInfoActivity::buildScreen(UiScreen& screen) {
 
   const fui::Rect body = screen.body();
   fui::Rect tableRect = body;
-  if (holeCount == 18) {
-    segmentTabs[0] = {tr(STR_GOLF_FRONT_NINE), {}, {}, 0, activeTab == 0, true};
-    segmentTabs[1] = {tr(STR_GOLF_BACK_NINE), {}, {}, 1, activeTab == 1, true};
+  if (course.nineCount >= 2) {
+    for (uint8_t n = 0; n < course.nineCount; ++n)
+      segmentTabs[n] = {course.nines[n].name, {}, {}, n, activeTab == n, true};
     tabProps = {};
     tabProps.tabs = segmentTabs;
-    tabProps.count = 2;
+    tabProps.count = course.nineCount;
     tabProps.action = ACTION_TAB;
     tabProps.inputMask = fui::InputTouch;
     tabProps.text = screen.theme().smallText;
@@ -110,15 +110,12 @@ void GolfCourseTeeInfoActivity::buildScreen(UiScreen& screen) {
                           static_cast<int16_t>(body.height - tabHeight)};
   }
 
-  const uint8_t firstHole = holeCount == 18 && activeTab == 1 ? 9 : 0;
-  const char* totalHeader =
-      holeCount == 18 ? (firstHole == 0 ? tr(STR_GOLF_OUT) : tr(STR_GOLF_IN)) : tr(STR_GOLF_TOTAL_SHORT);
-  buildCard(screen, tableRect, firstHole, totalHeader);
+  buildCard(screen, tableRect, activeTab * 9, tr(STR_GOLF_TOTAL_SHORT));
 }
 
 void GolfCourseTeeInfoActivity::buildCard(UiScreen& screen, const fui::Rect tableRect, const uint8_t firstHole,
                                           const char* segmentLabel) {
-  const GolfCourse& primary = teeSet.primary;
+  const GolfNine& primary = course.nines[activeTab];
   const bool hasSiRow = primary.hasSi;
 
   for (uint8_t row = 0; row < MAX_TABLE_ROWS; ++row) {
@@ -136,8 +133,7 @@ void GolfCourseTeeInfoActivity::buildCard(UiScreen& screen, const fui::Rect tabl
   // Par.
   uint16_t parTotal = 0;
   for (uint8_t offset = 0; offset < 9; ++offset) {
-    const uint8_t hole = static_cast<uint8_t>(firstHole + offset);
-    const uint8_t par = hole < primary.holeCount ? primary.par[hole] : 0;
+    const uint8_t par = primary.par[offset];
     parTotal = static_cast<uint16_t>(parTotal + par);
     if (par != 0) snprintf(dataCells[row][offset], CELL_CAP, "%u", static_cast<unsigned>(par));
   }
@@ -147,23 +143,19 @@ void GolfCourseTeeInfoActivity::buildCard(UiScreen& screen, const fui::Rect tabl
   // Stroke index, only when the course carries it (no dash row otherwise).
   if (hasSiRow) {
     for (uint8_t offset = 0; offset < 9; ++offset) {
-      const uint8_t hole = static_cast<uint8_t>(firstHole + offset);
-      if (hole < primary.holeCount) {
-        snprintf(dataCells[row][offset], CELL_CAP, "%u", static_cast<unsigned>(primary.si[hole]));
-      }
+      snprintf(dataCells[row][offset], CELL_CAP, "%u", static_cast<unsigned>(primary.si[offset]));
     }
     ++row;
   }
 
   // One row per tee, already longest-first from CONTRACTS-V2 §35.
-  for (uint8_t tee = 0; tee < teeSet.teeCount && row < MAX_TABLE_ROWS; ++tee) {
-    const GolfCourseTee& entry = teeSet.tees[tee];
+  for (uint8_t tee = 0; tee < course.teeCount && row < MAX_TABLE_ROWS; ++tee) {
+    const GolfCourseTee& entry = course.tees[tee];
     uint32_t sum = 0;
     for (uint8_t offset = 0; offset < 9; ++offset) {
-      const uint8_t hole = static_cast<uint8_t>(firstHole + offset);
-      if (entry.hasYards && hole < primary.holeCount) {
-        sum += entry.yards[hole];
-        snprintf(dataCells[row][offset], CELL_CAP, "%u", static_cast<unsigned>(entry.yards[hole]));
+      if (entry.hasYards) {
+        sum += entry.yards[activeTab][offset];
+        snprintf(dataCells[row][offset], CELL_CAP, "%u", static_cast<unsigned>(entry.yards[activeTab][offset]));
       } else {
         snprintf(dataCells[row][offset], CELL_CAP, "%s", tr(STR_GOLF_EM_DASH));
       }
@@ -191,7 +183,7 @@ void GolfCourseTeeInfoActivity::buildCard(UiScreen& screen, const fui::Rect tabl
                                                     : "";
     if (rowLabel[0] == '\0') {
       const uint8_t teeIndex = static_cast<uint8_t>(index - (hasSiRow ? 3 : 2));
-      if (teeIndex < teeSet.teeCount) rowLabel = golfTeeDisplayLabel(teeSet.tees[teeIndex].name);
+      if (teeIndex < course.teeCount) rowLabel = golfTeeDisplayLabel(course.tees[teeIndex].name);
     }
 
     labelPointer[0] = rowLabel;
@@ -217,7 +209,7 @@ void GolfCourseTeeInfoActivity::buildCard(UiScreen& screen, const fui::Rect tabl
 }
 
 void GolfCourseTeeInfoActivity::drawFooter() const {
-  const bool hasTabs = holeCount == 18;
+  const bool hasTabs = course.nineCount >= 2;
   golfui::drawFooter(
       renderer, mappedInput,
       {tr(STR_BACK), "", hasTabs ? tr(STR_GOLF_PREVIOUS_TAB) : "", hasTabs ? tr(STR_GOLF_NEXT_TAB) : ""});
@@ -229,7 +221,7 @@ void GolfCourseTeeInfoActivity::render(RenderLock&&) {
   const auto layout = golfui::chromeLayout(renderer, mappedInput, metrics.topPadding);
   golfui::drawHeader(renderer, layout.header, tr(STR_GOLF_TEE_INFO_TITLE), courseName);
 
-  if (!resolved || teeSet.teeCount == 0) {
+  if (!resolved || course.teeCount == 0) {
     const fui::Rect body = layout.body;
     const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
     renderer.drawCenteredText(UI_12_FONT_ID, body.y + (body.height - lineHeight) / 2, tr(STR_GOLF_TEE_INFO_EMPTY),

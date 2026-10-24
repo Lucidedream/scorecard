@@ -694,7 +694,8 @@ bool writePlayer(ArchiveWriter& file, const GolfPlayer& player, const uint8_t ho
   }
   if (!writeText(file, ",\"course\":") || !writeJsonString(file, round.courseName)) return false;
   snprintf(metadata, sizeof(metadata), ",\"holes\":%u,\"par\":", static_cast<unsigned>(round.holeCount));
-  if (!writeText(file, metadata) || !writeArray(file, round.par, round.holeCount) ||
+  if (!writeText(file, metadata) || !writeArray(file, round.par, round.holeCount) || !writeText(file, ",\"nines\":") ||
+      !writeArray(file, round.nines, round.holeCount / 9) ||
       !writeText(file, round.hasSi ? ",\"hasSi\":true,\"si\":" : ",\"hasSi\":false,\"si\":") ||
       !writeArray(file, round.si, round.holeCount, !round.hasSi) || !writeText(file, ",\"players\":[")) {
     return false;

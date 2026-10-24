@@ -13,52 +13,13 @@
 
 #include "CourseBuiltIns.h"
 #include "CourseOrder.h"
-#include "GolfCourseValidate.h"
+#include "GolfCourseParse.h"
 #include "GolfDirectoryScan.h"
 
 namespace {
 
 constexpr char COURSE_DIRECTORY[] = "/golf/courses";
 constexpr char ROUNDS_DIRECTORY[] = "/golf/rounds";
-
-bool copyString(JsonVariantConst value, char* output, size_t capacity, bool required) {
-  if (value.isNull() && !required) {
-    output[0] = '\0';
-    return true;
-  }
-  if (!value.is<const char*>()) {
-    return false;
-  }
-  const char* source = value.as<const char*>();
-  const size_t length = strlen(source);
-  if ((required && length == 0) || length >= capacity || strpbrk(source, "\r\n") != nullptr) {
-    return false;
-  }
-  memcpy(output, source, length + 1);
-  return true;
-}
-
-template <typename T>
-bool readArray(JsonVariantConst value, T* output, uint16_t& length, uint16_t maximum) {
-  const JsonArrayConst array = value.as<JsonArrayConst>();
-  if (array.isNull()) {
-    length = 0;
-    return false;
-  }
-  length = array.size() > UINT16_MAX ? UINT16_MAX : static_cast<uint16_t>(array.size());
-  const uint16_t readCount = length < GolfRound::MAX_HOLES ? length : GolfRound::MAX_HOLES;
-  for (uint16_t hole = 0; hole < readCount; ++hole) {
-    if (!array[hole].is<int>()) {
-      return false;
-    }
-    const int item = array[hole].as<int>();
-    if (item < 0 || item > maximum) {
-      return false;
-    }
-    output[hole] = static_cast<T>(item);
-  }
-  return true;
-}
 
 bool hasJsonExtension(const char* filename) {
   const size_t length = strlen(filename);
@@ -80,58 +41,97 @@ void logValidationFailure(const char* filename, const GolfCourseValidationResult
 
 GolfCourseListResult CourseStore::enumerate(GolfCourseFile* files, uint8_t capacity) {
   GolfCourseListResult result{};
-  bool builtInOverridden[GOLF_BUILT_IN_COURSE_COUNT]{};
+  capacity = capacity > GOLF_MAX_COURSES ? GOLF_MAX_COURSES : capacity;
+  // Reuse one large course and bounded names across the directory scan.
+  auto scratch = makeUniqueNoThrow<GolfCourse>();
+  auto names = makeUniqueNoThrow<char[][sizeof(GolfCourse::courseName)]>(GOLF_MAX_COURSES);
+  if (!scratch || !names) {
+    LOG_ERR("GOLF", "OOM: course enumeration scratch");
+    return result;
+  }
+  bool overridden[GOLF_BUILT_IN_COURSE_COUNT]{};
   if (!Storage.ensureDirectoryExists("/golf") || !Storage.ensureDirectoryExists(COURSE_DIRECTORY) ||
       !Storage.ensureDirectoryExists(ROUNDS_DIRECTORY)) {
     LOG_ERR("GOLF", "Failed to create golf directories");
     return result;
   }
-  if (capacity > GOLF_MAX_COURSES) {
-    capacity = GOLF_MAX_COURSES;
-  }
-  HalFile directory = Storage.open(COURSE_DIRECTORY);
-
+  // SD files sort by filename; the lexicographically first file wins duplicate names.
+  // Built-ins fill free slots after SD files, retaining any overridden table slots.
   uint16_t jsonFiles = 0;
+  HalFile directory = Storage.open(COURSE_DIRECTORY);
   for (HalFile entry = directory && directory.isDirectory() ? directory.openNextFile() : HalFile{}; entry;
        entry = directory.openNextFile()) {
     if (entry.isDirectory()) {
       continue;
     }
     char filename[GOLF_COURSE_FILENAME_BUFFER_SIZE]{};
-    if (entry.getName(filename, sizeof(filename)) == 0 || golfIsHiddenSidecarFilename(filename) ||
+    if (!entry.getName(filename, sizeof(filename)) || golfIsHiddenSidecarFilename(filename) ||
         !hasJsonExtension(filename)) {
       continue;
     }
-    ++jsonFiles;
-    GolfCourse course{};
-    if (!load(filename, course)) {
+    if (++jsonFiles > GOLF_MAX_COURSES) {
+      result.overflow = true;
+    }
+    if (!load(filename, *scratch)) {
       continue;
     }
-    int8_t overrideIndex = -1;
-    for (uint8_t builtIn = 0; builtIn < GOLF_BUILT_IN_COURSE_COUNT; ++builtIn) {
-      if (strcmp(course.courseName, GOLF_BUILT_IN_COURSES[builtIn].courseName) == 0) {
-        builtInOverridden[builtIn] = true;
-        overrideIndex = static_cast<int8_t>(builtIn);
+    uint8_t duplicate = result.count;
+    for (uint8_t i = 0; i < result.count; ++i) {
+      if (strcmp(names[i], scratch->courseName) == 0) {
+        duplicate = i;
+        break;
       }
     }
-    if (files != nullptr && result.count < capacity) {
-      memcpy(files[result.count].filename, filename, sizeof(filename));
-      // CONTRACTS-V2 §7.1: an SD file overriding a built-in inherits its table slot.
-      files[result.count].builtInIndex = overrideIndex;
+    if (duplicate < result.count) {
+      if (strcmp(files[duplicate].filename, filename) < 0) {
+        LOG_ERR("GOLF", "Duplicate course name %s in %s", scratch->courseName, filename);
+        continue;
+      }
+      LOG_ERR("GOLF", "Duplicate course name %s in %s", scratch->courseName, files[duplicate].filename);
+      for (uint8_t i = duplicate + 1; i < result.count; ++i) {
+        files[i - 1] = files[i];
+        memcpy(names[i - 1], names[i], sizeof(GolfCourse::courseName));
+      }
+      --result.count;
+    }
+    uint8_t position = 0;
+    while (position < result.count && strcmp(files[position].filename, filename) < 0) {
+      ++position;
+    }
+    if (!files || !capacity || position >= capacity) {
+      result.overflow = true;
+      continue;
+    }
+    if (result.count < capacity) {
       ++result.count;
     } else {
       result.overflow = true;
     }
+    for (uint8_t i = result.count - 1; i > position; --i) {
+      files[i] = files[i - 1];
+      memcpy(names[i], names[i - 1], sizeof(GolfCourse::courseName));
+    }
+    files[position] = {};
+    strcpy(files[position].filename, filename);
+    strcpy(names[position], scratch->courseName);
+    for (uint8_t i = 0; i < GOLF_BUILT_IN_COURSE_COUNT; ++i) {
+      if (strcmp(scratch->courseName, GOLF_BUILT_IN_COURSES[i].courseName) == 0) {
+        files[position].builtInIndex = i;
+      }
+    }
   }
-  if (jsonFiles > GOLF_MAX_COURSES) {
-    result.overflow = true;
+  for (uint8_t i = 0; i < result.count; ++i) {
+    if (files[i].builtInIndex >= 0) {
+      overridden[files[i].builtInIndex] = true;
+    }
   }
-  for (uint8_t builtIn = 0; builtIn < GOLF_BUILT_IN_COURSE_COUNT; ++builtIn) {
-    if (builtInOverridden[builtIn]) continue;
-    if (files != nullptr && result.count < capacity) {
+  for (uint8_t i = 0; i < GOLF_BUILT_IN_COURSE_COUNT; ++i) {
+    if (overridden[i]) {
+      continue;
+    }
+    if (files && result.count < capacity) {
       files[result.count] = {};
-      files[result.count].builtInIndex = static_cast<int8_t>(builtIn);
-      ++result.count;
+      files[result.count++].builtInIndex = i;
     } else {
       result.overflow = true;
     }
@@ -159,31 +159,17 @@ bool CourseStore::load(const char* filename, GolfCourse& course) {
     return false;
   }
 
-  GolfCourse loaded{};
-  const int version = doc["v"] | 0;
-  const int holes = doc["holes"] | -1;
-  if (version != 1 || holes < 0 || holes > GolfRound::MAX_HOLES ||
-      !copyString(doc["name"], loaded.courseName, sizeof(loaded.courseName), true) ||
-      !copyString(doc["tees"], loaded.tees, sizeof(loaded.tees), false)) {
-    LOG_ERR("GOLF", "Skipped course %s: invalid metadata", filename);
-    return false;
-  }
-  loaded.holeCount = static_cast<uint8_t>(holes);
-  loaded.hasYards = !doc["yards"].isNull();
-  loaded.hasSi = !doc["si"].isNull();
-  GolfCourseArrayLengths lengths{};
-  if (!readArray(doc["par"], loaded.par, lengths.par, UINT8_MAX) ||
-      (loaded.hasYards && !readArray(doc["yards"], loaded.yards, lengths.yards, UINT16_MAX)) ||
-      (loaded.hasSi && !readArray(doc["si"], loaded.si, lengths.si, UINT8_MAX))) {
-    LOG_ERR("GOLF", "Skipped course %s: invalid array value", filename);
-    return false;
-  }
-  const GolfCourseValidationResult validation = validateGolfCourse(loaded, lengths);
+  const auto validation = golfParseCourseJson(doc.as<JsonVariantConst>(), course);
   if (!validation.valid) {
-    logValidationFailure(filename, validation);
+    if (doc["v"].is<int>() && doc["v"].as<int>() == 1) {
+      LOG_ERR(
+          "GOLF",
+          "Skipped course %s: v1 course files are no longer supported; convert with scripts/golf_convert_courses_v2.py",
+          filename);
+    } else
+      logValidationFailure(filename, validation);
     return false;
   }
-  course = loaded;
   return true;
 }
 
@@ -200,52 +186,21 @@ bool CourseStore::load(const GolfCourseFile& file, GolfCourse& course) {
   return false;
 }
 
-bool CourseStore::findByName(const char* courseName, GolfCourse& course) {
-  if (courseName == nullptr || courseName[0] == '\0') return false;
-  HalFile directory = Storage.open(COURSE_DIRECTORY);
-  for (HalFile entry = directory && directory.isDirectory() ? directory.openNextFile() : HalFile{}; entry;
-       entry = directory.openNextFile()) {
-    if (entry.isDirectory()) continue;
-    char filename[GOLF_COURSE_FILENAME_BUFFER_SIZE]{};
-    if (entry.getName(filename, sizeof(filename)) == 0 || golfIsHiddenSidecarFilename(filename) ||
-        !hasJsonExtension(filename))
-      continue;
-    GolfCourse candidate{};
-    if (load(filename, candidate) && strcmp(candidate.courseName, courseName) == 0) {
-      course = candidate;
-      return true;
-    }
-  }
-  for (const GolfCourse& builtIn : GOLF_BUILT_IN_COURSES) {
-    if (strcmp(builtIn.courseName, courseName) == 0) {
-      course = builtIn;
-      return true;
-    }
-  }
-  return false;
-}
-
-bool CourseStore::resolveAllTees(const char* courseName, GolfCourseTeeSet& result) {
-  result = {};
-  if (courseName == nullptr || courseName[0] == '\0') return false;
-
+bool CourseStore::findByName(const char* name, GolfCourseFile& file, GolfCourse& course) {
+  if (!name || !name[0]) return false;
   auto files = makeUniqueNoThrow<GolfCourseFile[]>(GOLF_MAX_COURSES);
-  auto courses = makeUniqueNoThrow<GolfCourse[]>(GOLF_MAX_COURSES);
-  if (!files || !courses) {
-    LOG_ERR("GOLF", "OOM: resolveAllTees scratch (%u courses)", GOLF_MAX_COURSES);
+  auto scratch = makeUniqueNoThrow<GolfCourse>();
+  if (!files || !scratch) {
+    LOG_ERR("GOLF", "OOM: find course scratch");
     return false;
   }
-
-  const GolfCourseListResult listResult = enumerate(files.get(), GOLF_MAX_COURSES);
-  uint8_t count = 0;
-  for (uint8_t i = 0; i < listResult.count; ++i) {
-    GolfCourse course{};
-    if (!load(files[i], course)) continue;
-    files[count] = files[i];
-    courses[count] = course;
-    ++count;
-  }
-  return golfResolveAllTeesFrom(files.get(), courses.get(), count, courseName, result);
+  auto result = enumerate(files.get(), GOLF_MAX_COURSES);
+  for (uint8_t i = 0; i < result.count; ++i)
+    if (load(files[i], *scratch) && strcmp(name, scratch->courseName) == 0) {
+      file = files[i];
+      course = *scratch;
+      return true;
+    }
+  return false;
 }
-
 #endif

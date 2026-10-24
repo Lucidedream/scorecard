@@ -1,115 +1,93 @@
 #include "GolfCourseValidate.h"
-
 #if defined(CROSSPOINT_GOLF)
+#include <cstring>
 
+#include "GolfRoundDecode.h"
 namespace {
-
-GolfCourseValidationResult validResult() {
-  return {true, GolfCourseValidationError::None, GolfCourseField::None, 0, 0, 0};
+bool nameValid(const char* name, size_t capacity, bool comma = false) {
+  return name[0] && memchr(name, 0, capacity) && !strpbrk(name, comma ? ",\r\n" : "\r\n");
 }
-
-GolfCourseValidationResult errorResult(GolfCourseValidationError error, GolfCourseField field, uint8_t hole,
-                                       uint16_t value, uint16_t expected = 0) {
-  return {false, error, field, hole, value, expected};
-}
-
 }  // namespace
-
-GolfCourseValidationResult validateGolfCourse(const GolfCourse& course) {
-  const uint16_t yardsLength = course.hasYards ? course.holeCount : 0;
-  const uint16_t siLength = course.hasSi ? course.holeCount : 0;
-  return validateGolfCourse(course, {course.holeCount, yardsLength, siLength});
+GolfCourseValidationResult validateGolfCourse(const GolfCourse& c) {
+  using E = GolfCourseValidationError;
+  using F = GolfCourseField;
+  if (!nameValid(c.courseName, sizeof(c.courseName))) return {false, E::Name, F::Name};
+  if (c.nineCount < 1 || c.nineCount > GOLF_MAX_NINES) return {false, E::NineCount, F::Nines};
+  if (c.teeCount < 1 || c.teeCount > GOLF_MAX_TEES) return {false, E::TeeCount, F::Tees};
+  for (uint8_t n = 0; n < c.nineCount; ++n) {
+    const auto& nine = c.nines[n];
+    if (!nameValid(nine.name, sizeof(nine.name), true)) return {false, E::Name, F::NineName};
+    for (uint8_t p = 0; p < n; ++p)
+      if (strcmp(nine.name, c.nines[p].name) == 0) return {false, E::Duplicate, F::NineName};
+    uint32_t seen = 0;
+    for (uint8_t h = 0; h < 9; ++h) {
+      if (nine.par[h] < 3 || nine.par[h] > 6) return {false, E::ParRange, F::Par, h, nine.par[h]};
+      if (nine.hasSi) {
+        const uint8_t si = nine.si[h];
+        if (si < 1 || si > (c.nineCount == 1 ? 9 : 18)) return {false, E::StrokeIndexRange, F::StrokeIndex, h, si};
+        if (seen & (1UL << si)) return {false, E::StrokeIndexDuplicate, F::StrokeIndex, h, si};
+        seen |= 1UL << si;
+      } else if (nine.si[h])
+        return {false, E::UnexpectedOptionalData, F::StrokeIndex, h, nine.si[h]};
+    }
+  }
+  for (uint8_t t = 0; t < c.teeCount; ++t) {
+    const auto& tee = c.tees[t];
+    if (!memchr(tee.name, 0, sizeof(tee.name)) || !golfTeeStringValid(tee.name)) return {false, E::Name, F::TeeName};
+    for (uint8_t p = 0; p < t; ++p)
+      if (strcmp(tee.name, c.tees[p].name) == 0) return {false, E::Duplicate, F::TeeName};
+    for (uint8_t n = 0; n < c.nineCount; ++n)
+      for (uint8_t h = 0; h < 9; ++h) {
+        uint16_t y = tee.yards[n][h];
+        if (tee.hasYards && (y < 1 || y > 999)) return {false, E::YardageRange, F::Yards, h, y};
+        if (!tee.hasYards && y) return {false, E::UnexpectedOptionalData, F::Yards, h, y};
+      }
+  }
+  return {true, E::None, F::None};
 }
-
-GolfCourseValidationResult validateGolfCourse(const GolfCourse& course, const GolfCourseArrayLengths& lengths) {
-  if (course.holeCount != 9 && course.holeCount != 18) {
-    return errorResult(GolfCourseValidationError::HoleCount, GolfCourseField::None, 0, course.holeCount);
-  }
-  if (lengths.par != course.holeCount) {
-    return errorResult(GolfCourseValidationError::ArrayLength, GolfCourseField::Par, 0, lengths.par, course.holeCount);
-  }
-  if (course.hasYards && lengths.yards != course.holeCount) {
-    return errorResult(GolfCourseValidationError::ArrayLength, GolfCourseField::Yards, 0, lengths.yards,
-                       course.holeCount);
-  }
-  if (course.hasSi && lengths.si != course.holeCount) {
-    return errorResult(GolfCourseValidationError::ArrayLength, GolfCourseField::StrokeIndex, 0, lengths.si,
-                       course.holeCount);
-  }
-
-  uint32_t seenStrokeIndexes = 0;
-  for (uint8_t hole = 0; hole < course.holeCount; ++hole) {
-    if (course.par[hole] < 3 || course.par[hole] > 6) {
-      return errorResult(GolfCourseValidationError::ParRange, GolfCourseField::Par, hole, course.par[hole]);
-    }
-    if (course.hasYards) {
-      if (course.yards[hole] < 1 || course.yards[hole] > 999) {
-        return errorResult(GolfCourseValidationError::YardageRange, GolfCourseField::Yards, hole, course.yards[hole]);
-      }
-    } else if (course.yards[hole] != 0) {
-      return errorResult(GolfCourseValidationError::UnexpectedOptionalData, GolfCourseField::Yards, hole,
-                         course.yards[hole]);
-    }
-    if (course.hasSi) {
-      const uint8_t strokeIndex = course.si[hole];
-      if (strokeIndex < 1 || strokeIndex > course.holeCount) {
-        return errorResult(GolfCourseValidationError::StrokeIndexRange, GolfCourseField::StrokeIndex, hole,
-                           strokeIndex);
-      }
-      const uint32_t bit = 1UL << (strokeIndex - 1);
-      if ((seenStrokeIndexes & bit) != 0) {
-        return errorResult(GolfCourseValidationError::StrokeIndexDuplicate, GolfCourseField::StrokeIndex, hole,
-                           strokeIndex);
-      }
-      seenStrokeIndexes |= bit;
-    } else if (course.si[hole] != 0) {
-      return errorResult(GolfCourseValidationError::UnexpectedOptionalData, GolfCourseField::StrokeIndex, hole,
-                         course.si[hole]);
-    }
-  }
-
-  for (uint8_t hole = course.holeCount; hole < GolfRound::MAX_HOLES; ++hole) {
-    if (course.par[hole] != 0) {
-      return errorResult(GolfCourseValidationError::TrailingEntry, GolfCourseField::Par, hole, course.par[hole]);
-    }
-    if (course.yards[hole] != 0) {
-      return errorResult(GolfCourseValidationError::TrailingEntry, GolfCourseField::Yards, hole, course.yards[hole]);
-    }
-    if (course.si[hole] != 0) {
-      return errorResult(GolfCourseValidationError::TrailingEntry, GolfCourseField::StrokeIndex, hole, course.si[hole]);
-    }
-  }
-  return validResult();
-}
-
-const char* golfCourseValidationErrorName(GolfCourseValidationError error) {
-  switch (error) {
+const char* golfCourseValidationErrorName(GolfCourseValidationError e) {
+  switch (e) {
     case GolfCourseValidationError::None:
       return "none";
-    case GolfCourseValidationError::HoleCount:
-      return "hole count must be 9 or 18";
+    case GolfCourseValidationError::Version:
+      return "course version must be 2";
+    case GolfCourseValidationError::Name:
+      return "invalid name";
+    case GolfCourseValidationError::NineCount:
+      return "nine count must be 1 through 4";
+    case GolfCourseValidationError::TeeCount:
+      return "tee count must be at most 6";
+    case GolfCourseValidationError::Duplicate:
+      return "duplicate name";
     case GolfCourseValidationError::ArrayLength:
-      return "array length does not match holes";
+      return "invalid array length or value type";
     case GolfCourseValidationError::ParRange:
       return "par must be 3 through 6";
     case GolfCourseValidationError::YardageRange:
       return "yardage must be 1 through 999";
     case GolfCourseValidationError::StrokeIndexRange:
-      return "stroke index is out of range";
+      return "stroke index out of range";
     case GolfCourseValidationError::StrokeIndexDuplicate:
-      return "stroke index is duplicated";
+      return "duplicate stroke index";
     case GolfCourseValidationError::UnexpectedOptionalData:
-      return "optional field contains data while absent";
-    case GolfCourseValidationError::TrailingEntry:
-      return "entry beyond hole count is nonzero";
+      return "data in absent field";
   }
-  return "unknown validation error";
+  return "unknown";
 }
-
-const char* golfCourseFieldName(GolfCourseField field) {
-  switch (field) {
+const char* golfCourseFieldName(GolfCourseField f) {
+  switch (f) {
     case GolfCourseField::None:
       return "course";
+    case GolfCourseField::Name:
+      return "name";
+    case GolfCourseField::Nines:
+      return "nines";
+    case GolfCourseField::NineName:
+      return "nines.name";
+    case GolfCourseField::Tees:
+      return "tees";
+    case GolfCourseField::TeeName:
+      return "tees.name";
     case GolfCourseField::Par:
       return "par";
     case GolfCourseField::Yards:
@@ -119,5 +97,4 @@ const char* golfCourseFieldName(GolfCourseField field) {
   }
   return "course";
 }
-
 #endif

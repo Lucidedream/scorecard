@@ -1,103 +1,102 @@
 # Authoring a course file
 
-Drop the finished file on the SD card at `/golf/courses/<slug>.json`, either by
-removing the card or by uploading through CrossPoint's built-in webserver
-(`POST /upload`, or the `/files` page in a browser).
+Put one v2 JSON file per course on the SD card at `/golf/courses/<slug>.json`,
+either by removing the card or uploading through CrossPoint's built-in webserver
+(`POST /upload`, or the `/files` page in a browser). The filename is not significant
+beyond its `.json` extension. For a conventional slug, lowercase the course name,
+collapse non-ASCII-alphanumerics to single hyphens, trim surrounding hyphens, and
+truncate to 40 characters (CONTRACTS §5).
 
-`<slug>` is the course name lowercased with non-alphanumerics collapsed to single
-hyphens — `Pebble Beach` becomes `pebble-beach.json`. See CONTRACTS §5.
+A course contains one to four named nines, in course order, and up to six tees.
+Par and stroke index belong to each nine; a tee's yardage has one row per nine.
+For a round, choose its front and back nine from the course. See CONTRACTS-V2 §40.1.
 
 ## Fields
 
-| Field | Required | Notes |
+| Field | Required | Rules |
 | --- | --- | --- |
-| `v` | yes | Schema version. Always `1`. |
-| `name` | yes | Shown on the scoring screen. Keep under 40 characters. |
-| `tees` | no | Canonical yardage-row token: `Blue` or `White`. It is not translated UI text. |
-| `holes` | yes | `9` or `18`. Nothing else is accepted. |
-| `par` | yes | Exactly `holes` entries. |
-| `yards` | no | Exactly `holes` entries when present. Copied into each player using this tee row. |
-| `si` | no | Shared stroke-index ranking, 1–18. Snapshotted into the round; it does not create handicap/net scoring. |
+| `v` | yes | Always `2`; v1 files must be converted. |
+| `name` | yes | 1–39 UTF-8 bytes, single line. |
+| `nines` | yes | 1–4 entries, in course order; index 0 is the course's front nine. |
+| `nines[].name` | yes | 1–11 UTF-8 bytes, single line, no commas; unique within the file, case-sensitive. |
+| `nines[].par` | yes | Exactly 9 integers, each 3–6. Zero pars are invalid in SD files. |
+| `nines[].si` | no | Exactly 9 distinct integers within each nine: 1–9 for a one-nine course, otherwise 1–18. Repetition across different nines is allowed. |
+| `tees` | no | 0–6 entries. Absent or empty synthesizes yardless Blue and White choices. |
+| `tees[].name` | yes, per tee | 1–11 UTF-8 bytes, single line, no commas; unique within the file. Free-form names such as `Gold` are accepted. |
+| `tees[].yards` | no | Exactly one array per nine in the same order, each with exactly 9 integers in 1–999. Omit for a selection-only tee. |
 
-Every array must have exactly `holes` entries. A length that disagrees with `holes`
-is treated as a corrupt file and rejected — it is never padded or truncated, because
-a file that disagrees with itself has no trustworthy reading.
+Unknown fields are ignored. An invalid field or array length rejects the entire
+course, with a log naming the file and reason; values are never padded or truncated.
+The firmware displays tees longest-first by their total yardage across all nines.
 
-## Where to get the numbers
+## Example shape
 
-The par and stroke-index values are printed on the paper scorecard in the pro shop,
-and almost every course publishes them on its own website. Yardages depend on which
-tees you actually play, so take them from that row of the card.
-
-Par is the only field the app truly needs. A course file with just `name`, `holes`, and
-`par` is valid. Par and SI are shared by all players; yardage is copied per player because
-Blue and White selections can differ. Missing SI remains an explicit zeroed `hasSi = false`
-snapshot, and no handicap or net score is inferred from it.
-
-## Worked example: Pebble Beach, Blue tees
-
-`pebble-beach.json` in this directory is a real, valid course file — copy it to
-`/golf/courses/pebble-beach.json` on the SD card and it works as-is.
-
-It carries `par` only, and that is deliberate rather than lazy.
-
-**Verified.** Pebble Beach plays to **par 72**, front nine 36 and back nine 36, with the
-sequence `4,5,4,4,3,5,3,4,4 / 4,4,3,4,5,4,4,3,5`. Note that US Open setups convert the
-2nd from a par 5 to a par 4; the file uses the par 5 that the course plays for everyone
-else. From the Blue tees the course measures **6,802 yards, rating 74.9, slope 144**.
-
-**Not verified, and therefore omitted.** Hole-by-hole *Blue tee* yardages and stroke
-indexes could not be confirmed from a trustworthy source — the course database sites are
-CAPTCHA-gated and the official scorecard PDF did not resolve. Rather than mix unverified
-numbers into a file whose par values *are* verified, `yards` and `si` are left out. Both
-are optional; omitting them leaves the corresponding round snapshot unavailable rather
-than guessed.
-
-If you want them, take that row straight off the paper card in the pro shop and add:
+This illustrates a nine-hole course with one yardless tee:
 
 ```json
-  "yards": [ ... 18 entries, Blue tee row ... ],
-  "si":    [ ... 18 entries, stroke index ... ]
+{
+  "v": 2,
+  "name": "Example Nine",
+  "nines": [
+    {
+      "name": "Out",
+      "par": [4, 5, 4, 4, 3, 5, 3, 4, 4]
+    }
+  ],
+  "tees": [
+    { "name": "Blue" }
+  ]
+}
 ```
 
-Each array must have exactly 18 entries or the file is rejected under CONTRACTS §9.
+For 18 holes, add an `In` nine. For yardages, add `yards` to each tee, with one
+nine-entry array for `Out` and another for `In`. Take par, SI, and each tee's
+hole-by-hole yardages directly from the paper scorecard or an authoritative course
+scorecard. Missing optional data stays unavailable rather than guessed; SI does
+not enable handicap or net scoring.
 
-For reference only, the **1992 US Open** setup measured 6,809 yards and ran
-`373, 502, 398, 327, 166, 516, 107, 431, 464 / 426, 384, 202, 392, 565, 397, 402, 209, 548`.
-That total sits within 7 yards of today's Blue tees, so it is a plausible starting point
-— but it is a 30-year-old championship setup, not the current Blue card, so check it
-against the real scorecard before trusting any single hole.
+## Included files
 
-## Sanyang Golf & Country Club, Suzhou — a deliberately incomplete file
+* `example-course.json` is an illustrative all-fields example named **Example Course**;
+  its yardages and SI are not verified course data.
+* `pebble-beach.json` contains the verified everyday par-72 sequence (36 Out, 36 In)
+  with a yardless Blue tee. Hole 2 is a par 5; US Open setups may make it a par 4.
+  Hole-by-hole Blue yardages and SI remain omitted because they were not confirmed.
+* `sanyang-golf-club.json` contains Sanyang's par, SI, and four tees.
+* `lake-hill-golf-dragon-course.json` and `lake-hill-golf-phoenix-course.json` remain
+  separate courses, each with five tees.
+* `moganshan-gowin.json` contains two nines and the Blue tee.
 
-`sanyang-suzhou.json` is a **template that will not load until you finish it.** That is
-intentional, not an oversight.
+## Converting your old files
 
-**Verified.** Sanyang Golf & Country Club (苏州三阳高尔夫乡村俱乐部) at 68 Hubin Rd,
-Wuzhong, Suzhou, Jiangsu is an **18-hole, par-72** course, roughly 7,022 yards, rated
-74.9, opened 1995. The 18-hole point matters: many Chinese clubs are 27 holes in three
-nines, which would change the file's shape entirely.
-
-**Not available.** Hole-by-hole par could not be obtained from any reachable source —
-the course-database sites are Cloudflare-gated and the Chinese booking pages do not
-publish the card.
-
-**Why the pars are zeros.** A par of `0` fails validation (par must be 3–6), so
-`CourseStore` will **skip this file and log why** rather than load it. Had I filled in a
-plausible-looking par sequence instead, the file would load silently and your to-par
-would be quietly wrong on every hole I guessed incorrectly — for every round you ever
-played there. A file that refuses to load is a far better failure than one that lies.
-
-**To finish it:** take the par row off the paper scorecard in the pro shop and replace
-the eighteen zeros. Then check it sums to 72:
+Copy the SD card's `/golf/courses` directory to a local `courses-v1` directory,
+keeping that copy as a backup. From the repository root run with Python 3.9 or newer:
 
 ```bash
-python3 -c "import json;p=json.load(open('sanyang-suzhou.json'))['par'];print('holes',len(p),'front',sum(p[:9]),'back',sum(p[9:]),'total',sum(p))"
+python3 scripts/golf_convert_courses_v2.py courses-v1 courses-v2
 ```
 
-Expect `holes 18` and `total 72`. If the total is not 72, a hole has been mistyped.
-Delete the `_TODO` line once done — unknown fields are ignored, but leaving it invites
-confusion later.
+Review the printed summaries and every skip or error before proceeding. The script
+merges v1 files with exactly the same course name only when their `holes`, `par`,
+and `si` agree (including whether SI is present). It splits 18 holes into `Out` and
+`In`, or 9 holes into `Out`, and preserves tee rows in input filename order. A file
+without a tee label contributes no tee. Already-v2 files are copied byte-for-byte
+under their original filenames. Invalid v1 files are skipped with a reason;
+conflicting groups are reported as errors and are not written.
 
-Add `yards` and `si` the same way if you want them; both are optional. Use the canonical
-`Blue` or `White` token for the yardage row, and never translate that stored token.
+The output directory must differ from the input directory. Existing output files
+are protected; add `--force` only to deliberately replace them. Different course
+names that produce the same slug are reported as errors even with `--force`;
+resolve the names or convert those courses into separate directories and choose
+distinct filenames yourself.
+
+After checking the converted files, delete the old course JSON files from the SD
+card's `/golf/courses` and copy the files from `courses-v2` there. Keep the local
+backup until you have checked course and tee selection on the device. Old v1 files
+left on the card will be rejected by v7 firmware.
+
+Run the converter's self-checks with:
+
+```bash
+python3 -m unittest discover -s scripts -p test_golf_convert_courses_v2.py
+```

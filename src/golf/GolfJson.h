@@ -259,6 +259,19 @@ inline GolfRoundDecodeStatus golfDecodeRoundJson(const JsonVariantConst doc, con
     return GolfRoundDecodeStatus::RejectedMetadata;
   }
 
+  out.nines[0] = 0;
+  out.nines[1] = holes == 9 ? GOLF_NO_NINE : 1;
+  if (!doc["nines"].isUnbound()) {
+    auto nines = doc["nines"].as<JsonArrayConst>();
+    if (nines.isNull() || (holes != 9 && holes != 18) || nines.size() != static_cast<size_t>(holes / 9))
+      return GolfRoundDecodeStatus::RejectedMetadata;
+    for (uint8_t i = 0; i < holes / 9; ++i) {
+      if (!nines[i].is<int>() || nines[i].as<int>() < 0 || nines[i].as<int>() >= GOLF_MAX_NINES)
+        return GolfRoundDecodeStatus::RejectedMetadata;
+      out.nines[i] = nines[i].as<uint8_t>();
+    }
+    if (holes == 18 && out.nines[0] == out.nines[1]) return GolfRoundDecodeStatus::RejectedMetadata;
+  }
   GolfRoundColumnLengths lengths{};
   if (!golfReadJsonHoleArray(doc["par"], out.par, GolfRound::MAX_HOLES, UINT8_MAX, lengths.par)) {
     return GolfRoundDecodeStatus::RejectedArrayLength;

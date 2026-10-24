@@ -12,12 +12,7 @@
 #include "golf/CourseStore.h"
 #include "golf/GolfPaths.h"
 
-// Read-only, full-course hole browser (CONTRACTS-V2 §30): opened from
-// GolfCourseMapListActivity with just a course name, it resolves every tee's data for that
-// course once via CourseStore::resolveAllTees() and pages hole-by-hole with Prev/Next,
-// showing the hole number, par, every tee's yardage, and the course-map image (via the
-// shared golfRenderCourseMapImage(), same source as GolfCourseMapActivity's in-round
-// glance screen). No GolfRound is ever in scope; nothing here can start or mutate a round.
+// Read-only course information.
 class GolfCourseMapBrowserActivity final : public Activity {
  public:
   GolfCourseMapBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const char* courseName);
@@ -29,7 +24,8 @@ class GolfCourseMapBrowserActivity final : public Activity {
   char courseName[40]{};
   char courseSlug[GOLF_SLUG_BUFFER_SIZE]{};
   bool slugValid = false;
-  GolfCourseTeeSet teeSet{};
+  GolfCourse course{};
+  GolfCourseFile courseFile{};
   uint8_t holeCount = 0;
   uint8_t currentHole = 0;
 

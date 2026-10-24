@@ -11,7 +11,7 @@
 class GolfPlayerSetupActivity final : public GolfUiListActivity {
  public:
   GolfPlayerSetupActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const GolfCourseFile& courseFile,
-                          const GolfCourse& course);
+                          GolfNineSelection selection);
 
   void onEnter() override;
 
@@ -24,7 +24,8 @@ class GolfPlayerSetupActivity final : public GolfUiListActivity {
 
   GolfCourseFile courseFile{};
   GolfCourse course{};
-  GolfCourseTeeSet teeSet{};
+  GolfNineSelection selection{};
+  bool loadFailed = false;
   GolfRound draft{};
   freeink::ui::ListItem playerRows[PLAYER_ROW_COUNT + 1]{};
   freeink::ui::ListItem teeRows[TEE_ROW_COUNT]{};

@@ -13,14 +13,11 @@ class GolfSetupActivity final : public GolfUiListActivity {
  private:
   static constexpr uint8_t MAX_ROWS = GOLF_MAX_COURSES + 1;
 
-  GolfCourseFile files[GOLF_MAX_COURSES]{};
-  GolfCourse courses[GOLF_MAX_COURSES]{};
-  uint8_t primaryIndex[GOLF_MAX_COURSES]{};  // row -> index of that name's first entry in files/courses
+  GolfCourseSummary courses[GOLF_MAX_COURSES]{};
   freeink::ui::ListItem rows[MAX_ROWS]{};
   freeink::ui::ListProps listProps{};
   char courseDetails[GOLF_MAX_COURSES][48]{};
   char parLabels[GOLF_MAX_COURSES][16]{};
-  uint8_t loadedCount = 0;
   uint8_t courseCount = 0;
   bool overflow = false;
   bool noCourses = false;
