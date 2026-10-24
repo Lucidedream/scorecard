@@ -203,12 +203,162 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(sorted(ex.image_holes(items, 2)), list(range(1, 19)))
         titles = [str(i) for i in range(1, 10)] + [f'Ｂ{i}' for i in range(1, 10)] + [f'Ｃ{i}' for i in range(1, 10)]
         self.assertEqual(len(ex.image_holes(self.images(titles), 3)), 27)
-        for titles in (['1'] * 18, [str(i) for i in range(1, 18)], ['A1', 'B1']):
-            self.assertEqual(ex.image_holes(self.images(titles), 2), {})
+        self.assertEqual(ex.image_holes(self.images(['1'] * 18), 2), {})
+        self.assertEqual(len(ex.image_holes(self.images([str(i) for i in range(1, 18)]), 2)), 17)
+        self.assertEqual(sorted(ex.image_holes(self.images(['A1', 'B1']), 2)), [1, 10])
 
     def test_image_title_suffix_and_prefix_normalization(self):
         for pattern in ('{} 洞', '第{}洞', 'Hole {}', 'H {}', '第{}号洞', '{}号'):
             self.assertEqual(len(ex.image_holes(self.images([pattern.format(i) for i in range(1, 19)]), 2)), 18)
+
+    def test_image_last_digit_run_and_nonoverlapping_group_ranges(self):
+        titles = [f'A场1-9号-{i}' for i in range(1, 10)] + [f'B场1-9号-{i}' for i in range(10, 19)]
+        items = self.images(titles)
+        mapping = ex.image_holes(items, 2)
+        self.assertEqual(sorted(mapping), list(range(1, 19)))
+        for hole, item in mapping.items():
+            self.assertEqual(item['id'], items[hole-1]['id'])
+
+    def test_image_letters_hyphens_and_letter_order(self):
+        for pattern in ('{letter}{hole}', '{letter}-{hole}', '{letter}场{hole}'):
+            with self.subTest(pattern=pattern):
+                titles = [pattern.format(letter=letter, hole=hole) for letter in ('Ｃ', 'b', 'A') for hole in range(1, 10)]
+                items = self.images(titles)
+                report = []
+                mapping = ex.image_holes(items, 3, report)
+                self.assertEqual(sorted(mapping), list(range(1, 28)))
+                self.assertEqual(mapping[1]['id'], items[18]['id'])
+                self.assertEqual(mapping[19]['id'], items[0]['id'])
+                self.assertFalse(any('order by appearance' in line for line in report))
+
+    def test_image_eighteen_hole_groups_match_raw_nine_names(self):
+        items = self.images([f'北{i}' for i in range(1, 19)] + [f'南{i}' for i in range(1, 19)])
+        names = ['South Course Out', 'South Course In', 'North Course Out', 'North Course In']
+        mapping = ex.image_holes(items, 4, nine_names=names)
+        self.assertEqual(sorted(mapping), list(range(1, 37)))
+        self.assertEqual(mapping[1]['id'], items[18]['id'])
+        self.assertEqual(mapping[19]['id'], items[0]['id'])
+        interleaved = ['South Out', 'North Out', 'South In', 'North In']
+        mapping = ex.image_holes(items, 4, nine_names=interleaved)
+        self.assertEqual(mapping[10]['id'], items[0]['id'])
+        self.assertEqual(mapping[28]['id'], items[9]['id'])
+        self.assertEqual(ex.image_holes(items, 3), {})
+
+    def test_image_partial_sets_and_descending_numbers(self):
+        report = []
+        items = self.images([f'{i:02} 洞' for i in range(18, 0, -1)])
+        mapping = ex.image_holes(items, 3, report)
+        self.assertEqual(sorted(mapping), list(range(1, 19)))
+        self.assertEqual(mapping[18]['id'], items[0]['id'])
+        self.assertEqual(mapping[1]['id'], items[-1]['id'])
+        self.assertFalse(any('order by appearance' in line for line in report))
+        partial = self.images(['B-2', 'A-1', 'B-9'])
+        self.assertEqual(sorted(ex.image_holes(partial, 2)), [1, 2, 9])
+        partial18 = self.images(['Second-18', 'First-10'])
+        self.assertEqual(sorted(ex.image_holes(partial18, 4)), [10, 18])
+
+    def test_image_camera_filenames_zero_and_out_of_range_ignored(self):
+        titles = ['微信图片_20260304112233', 'Camera_123456-01', '微信图片_20260304112233-2', '0', 'Hole 19', 'overview']
+        self.assertEqual(ex.image_holes(self.images(titles), 2), {})
+        self.assertEqual(sorted(ex.image_holes(self.images(titles + ['第1号洞']), 2)), [1])
+
+    def test_image_mixed_ranges_are_ambiguous(self):
+        titles = [f'c{i}' for i in range(1, 10)] + [str(i) for i in range(1, 19)]
+        report = []
+        self.assertEqual(ex.image_holes(self.images(titles), 3, report), {})
+        self.assertTrue(any('ambiguous' in line for line in report))
+        self.assertEqual(ex.image_holes(self.images(['A1', 'B1', 'C1']), 2), {})
+
+    def test_image_duplicate_holes_dropped_without_losing_other_maps(self):
+        report = []
+        mapping = ex.image_holes(self.images(['1', '2', '2', '3']), 2, report)
+        self.assertEqual(sorted(mapping), [1, 3])
+        self.assertTrue(any('duplicate holes: [2]' in line for line in report))
+        self.assertEqual(sorted(ex.image_holes(self.images(['B1', 'A1', 'A1', 'B2']), 2)), [10, 11])
+
+    def test_image_unknown_groups_have_no_appearance_fallback(self):
+        for titles in (['A场1', 'Another1'], ['A场1', 'AB场1'], ['虚构A1', '虚构B1']):
+            report = []
+            self.assertEqual(ex.image_holes(self.images(titles), 2, report), {})
+            self.assertFalse(any('order by appearance' in line for line in report))
+            self.assertTrue(any('no maps' in line for line in report))
+
+    def test_image_compass_groups_follow_scorecard_order(self):
+        cases = [
+            (['北', '东', '西', '中'], ['North Course', 'West Course', 'East Course', 'Center Course'], [0, 2, 1, 3]),
+            (['m', 'n', 's'], ['North Course', 'Middle Course', 'South Course'], [1, 0, 2]),
+            (['east', 'mid', 'west'], ['East Course', 'West Course', 'Center Course'], [0, 2, 1]),
+            (['E', 'W', 'N'], ['North Course', 'East Course', 'West Course'], [2, 0, 1]),
+        ]
+        for keys, names, source_groups in cases:
+            with self.subTest(keys=keys):
+                items = self.images([f'{key}-{hole}' for key in keys for hole in range(1, 10)])
+                mapping = ex.image_holes(items, len(names), nine_names=names)
+                self.assertEqual(sorted(mapping), list(range(1, 9 * len(names) + 1)))
+                for nine, source in enumerate(source_groups):
+                    self.assertEqual(mapping[9 * nine + 1]['id'], items[9 * source]['id'])
+
+    def test_image_empty_key_means_a_only_among_letters(self):
+        items = self.images([str(i) for i in range(1, 10)] + [f'B{i}' for i in range(1, 10)])
+        mapping = ex.image_holes(items, 2, nine_names=['A Course', 'B Course'])
+        self.assertEqual(len(mapping), 18)
+        self.assertEqual(ex.image_holes(items, 2, nine_names=['B Course', 'C Course']), {})
+        named = self.images([f'{letter}{hole}' for letter in ['D', 'C'] for hole in range(1, 10)])
+        mapping = ex.image_holes(named, 2, nine_names=['C Course', 'D Course'])
+        self.assertEqual(len(mapping), 18)
+        self.assertEqual(mapping[1]['id'], named[9]['id'])
+        self.assertEqual(mapping[10]['id'], named[0]['id'])
+        numeric_north = self.images(['1', 'N1'])
+        self.assertEqual(ex.image_holes(numeric_north, 2, nine_names=['North', 'South']), {})
+
+    def test_image_unmatched_or_duplicate_semantic_nines_reject_all_maps(self):
+        cases = [(['虚构东赛', '虚构西赛'], ['A Course', 'B Course', 'C Course', 'D Course'], 18),
+                 (['幻湖', '幻林', '幻谷'], ['A', 'B', 'C'], 9),
+                 (['B', 'N'], ['North Course Out', 'North Course In', 'South Course Out', 'South Course In'], 18),
+                 (['north', 'n'], ['North Course', 'South Course'], 9)]
+        for keys, names, holes in cases:
+            with self.subTest(keys=keys):
+                items = self.images([f'{key}{hole}' for key in keys for hole in range(1, holes + 1)])
+                self.assertEqual(ex.image_holes(items, len(names), nine_names=names), {})
+
+    def test_image_letter_fallback_requires_token_free_raw_names_and_fixed_positions(self):
+        items = self.images([f'{key}{hole}' for key in ['C', 'B'] for hole in range(1, 10)])
+        names = ['Oak', 'River', 'Meadow']
+        report = []
+        mapping = ex.image_holes(items, 3, report, nine_names=names)
+        self.assertTrue(any('letters-only fallback' in line for line in report))
+        self.assertEqual(sorted(mapping), list(range(10, 28)))
+        self.assertEqual(mapping[10]['id'], items[9]['id'])
+        self.assertEqual(ex.image_holes(items, 3, nine_names=['North', 'River', 'Meadow']), {})
+        self.assertEqual(ex.image_holes(items, 2, nine_names=['Oak', 'River']), {})
+        repeated = self.images(['A1', 'a1', 'B1'])
+        self.assertEqual(ex.image_holes(repeated, 3, nine_names=names), {})
+
+    def test_image_out_in_tokens_and_incidental_letters_do_not_guess(self):
+        items = self.images(['IN1', 'OUT1'])
+        mapping = ex.image_holes(items, 2, nine_names=['Out', 'In'])
+        self.assertEqual(mapping[10]['id'], items[0]['id'])
+        self.assertEqual(mapping[1]['id'], items[1]['id'])
+        for value in ['Spring', 'Links', 'Origin', '中山', 'WillowA', '幻湖']:
+            self.assertIsNone(ex.image_token(value, group_key=True), value)
+        for value, token in [('NorthCourseOut', 'N'), ('West Course In', 'W'), ('A Course Out', 'A'),
+                             ('A-course', 'A'), ('前', 'OUT'), ('后', 'IN'), ('Middle', 'M')]:
+            self.assertEqual(ex.image_token(value), token)
+        self.assertEqual(ex.image_token('North South'), '?')
+
+    def test_raw_scorecard_table_names_survive_splitting_and_ui_name_fallback(self):
+        for table in self.cards['list']:
+            for row in table['scorecard']:
+                row['values'] = (list(range(1, 19)) if row['name'] == 'HOLE' else row['values'][:9] * 2) + ['TOTAL']
+        self.cards['list'][0]['name'] = 'South Course'
+        self.cards['list'][1]['name'] = 'North Course'
+        self.assertEqual(ex.raw_nine_names(self.cards), ['South Course', 'South Course', 'North Course', 'North Course'])
+        course = self.build()
+        self.assertEqual([nine['name'] for nine in course['nines']], ['Nine 1', 'Nine 2', 'Nine 3', 'Nine 4'])
+        items = self.images([f'N{i}' for i in range(1, 19)] + [f'S{i}' for i in range(1, 19)])
+        mapping = ex.image_holes(items, 4, nine_names=ex.raw_nine_names(self.cards))
+        self.assertEqual(mapping[1]['id'], items[18]['id'])
+        self.assertEqual(mapping[19]['id'], items[0]['id'])
 
     def mapped_tones(self, colors):
         image = ex.pillow().new('RGB', (len(colors), 1))
@@ -302,7 +452,9 @@ class CatalogTests(unittest.TestCase):
         ex.export(self.cache, self.out)
         self.assertEqual(len(list((self.out / 'golf/maps/bg-7001').glob('*.bmp'))), 18)
         self.assertEqual((self.out / 'golf/catalog/index.dat').read_bytes()[27:28], b'Y')
-        self.assertIn('suggested owner duplicate', (self.cache / 'export-report.txt').read_text())
+        report = (self.cache / 'export-report.txt').read_text()
+        self.assertIn('suggested owner duplicate', report)
+        self.assertIn('7001: maps resolved 18/18; exported 18/18', report)
         self.assertEqual(sentinel.read_text(), 'preserve')
         before = {p.name: p.read_bytes() for p in (self.out / 'golf/maps/bg-7001').glob('*.bmp')}
         ex.export(self.cache, self.out, force=True)
@@ -311,6 +463,7 @@ class CatalogTests(unittest.TestCase):
         write_json(self.cache / 'detail/7001.json', dict(succeed=1, data=self.detail))
         ex.export(self.cache, self.out, force=True)
         self.assertFalse((self.out / 'golf/maps/bg-7001').exists())
+        self.assertIn('7001: maps resolved 0/18; exported 0/18', (self.cache / 'export-report.txt').read_text())
 
     def test_unknown_region_loud_and_skipped_report(self):
         self.cache_course(region='Unknown Region')

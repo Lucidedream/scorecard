@@ -3059,16 +3059,49 @@ unknown today:
 * **`maps`:** always `bg-<id>`, which is always ≤15 bytes of `[a-z0-9-]`.
 
 **Hole images:**
-* Matching titles: each title is NFKC-normalised, whitespace is removed, and a leading
-  `第`/`Hole`/`H` and a trailing `号洞`/`洞`/`号` are stripped (case-insensitive). The result
-  is matched against `^([A-Za-z]?)(\d+)$`, so `1 洞`, `第1洞`, `Hole 1`, `B1` and `Ｃ1` all
-  match. Others (the overview) are ignored.
-* Which image is which hole:
-  - If every match has no letter and the numbers are exactly 1..9×nineCount, the number is
-    the course hole.
-  - Otherwise, if the letter groups (in first-appearance order) number exactly
-    `nineCount`, each holding 1..9, group *g* hole *h* → course hole 9g+h.
-  - Anything else exports no maps for that course (reported); `maps` stays set.
+* Matching titles: each title is NFKC-normalised and whitespace is removed. Its **hole
+  number** is the last run of digits in the title, and its **group key** is the text
+  before that run, minus trailing `-`, `_`, `号`, `洞`, `场`, `区` and a leading `第`. Ignore
+  a title whose hole number is 0 or above `9 × nineCount`, or whose group key contains 6
+  or more consecutive digits (camera/WeChat filenames such as `微信图片_20241121160759`).
+* Which image is which hole. With one group, or groups whose numbers do not overlap,
+  order does not matter. Otherwise each group must be matched to scorecard nines **by
+  meaning, never by upload order**:
+  - **Tokens.** Each group key and each raw scorecard table name gets a token
+    (case-insensitive, NFKC):
+    - compass: `n`/`north`/`北` → N, `s`/`south`/`南` → S, `e`/`east`/`东` → E,
+      `w`/`west`/`西` → W, `m`/`mid`/`middle`/`center`/`centre`/`中` → M;
+    - a standalone letter A–D (`A`, `A Course`, `A-course`, `A场`) → that letter;
+    - `out`/`前` → OUT, `in`/`后` → IN.
+    Full English compass words and OUT may occur inside compact keys. IN must be a
+    whole word or follow a separator/compass word, so Spring and Links do not match.
+    Single ASCII letters must be the entire group key, or standalone words in raw
+    scorecard names. Chinese compass/前/后 keys must be exactly that character after
+    suffix stripping, so place names such as 中山 do not match. Compass takes precedence
+    over letters, then OUT/IN. An empty key is A when every other group key is a letter.
+  - **Matched by name:** if every group token matches the token of exactly one
+    scorecard nine, or of exactly two nines for a 1..18 group (e.g. `North Course Out`
+    and `North Course In`, in API order), the groups follow those nines.
+  - **Letters only:** if the scorecard names carry **no** tokens at all and every group
+    token is a distinct letter, the groups follow the letters (A, B, C, D), as with
+    Nine Dragons. Letters keep fixed positions: A=nine 0, B=1, C=2, D=3; missing
+    letters leave missing nines, and a letter outside the course is ambiguous. An
+    eighteen-hole letter group covers two consecutive nines at twice its letter index.
+  - **Anything else** (unknown keys such as course names, a token with no match, or two
+    groups on one nine) is ambiguous, so the course gets **no maps**. There is no
+    appearance-order fallback.
+  Then, for each numbering below, the first that fits decides course hole *H*:
+  - **one group** (including all-empty keys), or **groups whose numbers do not overlap**
+    (e.g. `A场…-1..9`, `B场…-10..18`): *H* = the number; this is checked first and needs
+    no token matching;
+  - **groups numbered 1..9 each**, with group count ≤ nineCount: group *g* hole *n* →
+    *H* = 9g + n;
+  - **groups numbered 1..18 each**, each containing a number above 9, with twice the
+    group count ≤ nineCount: group *g* hole *n* → *H* = 18g + n;
+  - Anything else is ambiguous, so the course gets **no maps**.
+* Partial sets are fine: export every resolved *H* ≤ `9 × nineCount` that exactly one
+  image claims. Holes with no image, or claimed twice, get none, and the device shows
+  its normal missing-map message. Report each course's resolved/expected count.
 * Conversion: PNG → RGB → **colour-aware tone map** → fit within **480×640**, keeping
   the aspect ratio, scaling up or down (LANCZOS). Plain luminance makes water and grass
   the same grey on a 4-level panel, so each source pixel's tone comes from its HSV class,

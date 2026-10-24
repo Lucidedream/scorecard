@@ -218,24 +218,114 @@ def scaled(value):
         return None
 
 
-def image_holes(images, nine_count):
-    matches = []
+def raw_nine_names(scorecards):
+    names = []
+    for table in scorecards['list']:
+        rows = {nfkc(row['name']): row['values'] for row in table['scorecard']}
+        holes = rows.get('HOLE', [])
+        count = len(holes) - (1 if holes and str(holes[-1]).upper() == 'TOTAL' else 0)
+        names.extend([table.get('name', '')] * (count // 9))
+    return names
+
+
+def image_token(value, group_key=False):
+    text = nfkc(value).lower()
+    compact = re.sub(r'\s+', '', text)
+    compass = set()
+    for words, token in [('north', 'N'), ('south', 'S'), ('east', 'E'), ('west', 'W'),
+                         ('mid middle center centre', 'M')]:
+        if any(word in compact for word in words.split()):
+            compass.add(token)
+    singles = [compact] if group_key else re.findall(r'(?<![a-z])([nsewm])(?![a-z])', text)
+    compass.update(value.upper() for value in singles if value in 'nsewm' and len(value) == 1)
+    chinese = {'北': 'N', '南': 'S', '东': 'E', '西': 'W', '中': 'M'}
+    if compact.rstrip('-_号洞场区') in chinese:
+        compass.add(chinese[compact.rstrip('-_号洞场区')])
+    if compass:
+        return next(iter(compass)) if len(compass) == 1 else '?'
+    letters = set(re.findall(r'^[a-d]$', compact) if group_key else
+                  re.findall(r'(?<![a-z])([a-d])(?![a-z])', text))
+    if letters:
+        return next(iter(letters)).upper() if len(letters) == 1 else '?'
+    halves = set()
+    if 'out' in compact or compact.rstrip('-_号洞场区') == '前':
+        halves.add('OUT')
+    if re.search(r'(?<![a-z])in(?![a-z])', text) or compact == 'in' or compact.rstrip('-_号洞场区') == '后':
+        halves.add('IN')
+    return next(iter(halves)) if len(halves) == 1 else '?' if halves else None
+
+
+def image_holes(images, nine_count, report=None, nine_names=None):
+    count = nine_count * 9
+    groups = {}
     for item in images:
         title = re.sub(r'\s+', '', nfkc(item['images_title']))
-        title = re.sub(r'^(?:第|Hole|H)', '', title, flags=re.I)
-        title = re.sub(r'(?:号洞|洞|号)$', '', title, flags=re.I)
-        match = re.fullmatch(r'([A-Za-z]?)(\d+)', title)
-        if match:
-            matches.append((match[1], int(match[2]), item))
-    count = nine_count * 9
-    if len(matches) == count and all(not letter for letter, _, _ in matches) and {n for _, n, _ in matches} == set(range(1, count + 1)):
-        return {n: item for _, n, item in matches}
-    groups = {}
-    for letter, number, item in matches:
-        groups.setdefault(letter, []).append((number, item))
-    if len(groups) == nine_count and all(len(g) == 9 and {n for n, _ in g} == set(range(1, 10)) for g in groups.values()):
-        return {9 * i + n: item for i, group in enumerate(groups.values()) for n, item in group}
-    return {}
+        match = re.search(r'(\d+)(?!.*\d)', title)
+        if not match:
+            continue
+        number = int(match[1])
+        key = title[:match.start()].removeprefix('第').rstrip('-_号洞场区')
+        if not 1 <= number <= count or re.search(r'\d{6,}', key):
+            continue
+        groups.setdefault(key, []).append((number, item))
+    if not groups:
+        if report is not None:
+            report.append('no maps: no usable numbered titles')
+        return {}
+
+    numbers = [set(number for number, _ in items) for items in groups.values()]
+    direct = len(groups) == 1 or sum(map(len, numbers)) == len(set().union(*numbers))
+    assignments = {}
+    reason = None
+    if not direct:
+        if len(groups) <= nine_count and all(max(values) <= 9 for values in numbers):
+            width = 1
+        elif 2 * len(groups) <= nine_count and all(9 < max(values) <= 18 for values in numbers):
+            width = 2
+        else:
+            width = 0
+        tokens = {key: image_token(key, group_key=True) for key in groups}
+        if '' in tokens and all(token in ('A', 'B', 'C', 'D') for key, token in tokens.items() if key):
+            tokens[''] = 'A'
+        names = [image_token(name) for name in (nine_names if nine_names is not None else [''] * nine_count)]
+        if not width or len(names) != nine_count or any(token in (None, '?') for token in tokens.values()):
+            reason = 'ambiguous image numbering or group tokens'
+        else:
+            occupied = set()
+            letters_only = not any(names) and all(token in ('A', 'B', 'C', 'D') for token in tokens.values())
+            if letters_only and report is not None:
+                report.append(f'letters-only fallback: {tokens!r}')
+            for key, token in tokens.items():
+                if letters_only:
+                    first = (ord(token) - ord('A')) * width
+                    positions = list(range(first, first + width))
+                else:
+                    positions = [index for index, name in enumerate(names) if name == token]
+                if len(positions) != width or any(index >= nine_count or index in occupied for index in positions):
+                    reason = 'image groups do not uniquely match scorecard nines'
+                    break
+                assignments[key] = positions
+                occupied.update(positions)
+    if reason:
+        if report is not None:
+            report.append(f'no maps: {reason}')
+        return {}
+
+    claims = {}
+    for key, items in groups.items():
+        for number, item in items:
+            if direct:
+                hole = number
+            else:
+                positions = assignments[key]
+                hole = 9 * positions[(number - 1) // 9] + (number - 1) % 9 + 1
+            if hole <= count:
+                claims.setdefault(hole, []).append(item)
+    if report is not None:
+        duplicates = sorted(hole for hole, items in claims.items() if len(items) > 1)
+        if duplicates:
+            report.append(f'dropped duplicate holes: {duplicates}')
+    return {hole: items[0] for hole, items in claims.items() if len(items) == 1}
 
 
 def hsv_tone(hue, saturation, value):
@@ -336,9 +426,10 @@ def export(cache, out, bpp=2, force=False):
             used.add(course['name'].casefold())
             if course['name'] != source:
                 report.append(f"{cid}: name {source!r} -> {course['name']!r}")
-            mapping = image_holes(detail.get('ball_path_img_list', []), len(course['nines']))
-            if not mapping:
-                report.append(f'{cid}: no maps: ambiguous or incomplete image titles')
+            image_report = []
+            mapping = image_holes(detail.get('ball_path_img_list', []), len(course['nines']), image_report,
+                                  raw_nine_names(scorecards))
+            report.extend(f'{cid}: {message}' for message in image_report)
             courses.append((course, mapping))
         except (ValueError, KeyError, TypeError, OSError) as error:
             report.append(f'{cid}: skipped: {error}')
@@ -369,6 +460,8 @@ def export(cache, out, bpp=2, force=False):
                 exported += 1
             except (OSError, ValueError) as error:
                 report.append(f'{cid}: map {hole} unavailable: {error}')
+        expected = 9 * len(course['nines'])
+        report.append(f'{cid}: maps resolved {len(mapping)}/{expected}; exported {exported}/{expected}')
         write_json(catalog / 'courses' / f'bg-{cid}.json', course)
         records.append(index_record(course, region_ids[course['baigolf']['region']], exported > 0))
         for filename, owner_name in owners:
