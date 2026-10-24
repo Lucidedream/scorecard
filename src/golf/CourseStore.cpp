@@ -13,6 +13,8 @@
 
 #include "CourseBuiltIns.h"
 #include "CourseOrder.h"
+#include "GolfCatalog.h"
+#include "GolfCourseCatalogInfo.h"
 #include "GolfCourseParse.h"
 #include "GolfDirectoryScan.h"
 
@@ -131,6 +133,7 @@ GolfCourseListResult CourseStore::enumerate(GolfCourseFile* files, uint8_t capac
     }
     if (files && result.count < capacity) {
       files[result.count] = {};
+      files[result.count].source = GolfCourseSource::BuiltIn;
       files[result.count++].builtInIndex = i;
     } else {
       result.overflow = true;
@@ -142,13 +145,14 @@ GolfCourseListResult CourseStore::enumerate(GolfCourseFile* files, uint8_t capac
   return result;
 }
 
-bool CourseStore::load(const char* filename, GolfCourse& course) {
+namespace {
+bool loadFile(const char* directory, const char* filename, GolfCourse& course) {
   if (!isSafeFilename(filename)) {
     LOG_ERR("GOLF", "Skipped course: invalid filename");
     return false;
   }
-  char path[sizeof(COURSE_DIRECTORY) + GOLF_COURSE_FILENAME_BUFFER_SIZE + 1];
-  const int pathLength = snprintf(path, sizeof(path), "%s/%s", COURSE_DIRECTORY, filename);
+  char path[96];
+  const int pathLength = snprintf(path, sizeof(path), "%s/%s", directory, filename);
   if (pathLength < 0 || static_cast<size_t>(pathLength) >= sizeof(path)) {
     LOG_ERR("GOLF", "Skipped course %s: path is too long", filename);
     return false;
@@ -173,11 +177,51 @@ bool CourseStore::load(const char* filename, GolfCourse& course) {
   return true;
 }
 
+bool findCatalogByName(const char* name, GolfCourseFile& file, GolfCourse& course) {
+  HalFile index;
+  if (!Storage.openFileForRead("GOLF", "/golf/catalog/index.dat", index)) return false;
+  if (index.size() % GOLF_CATALOG_RECORD_SIZE) {
+    LOG_ERR("GOLF", "Bad catalog record length");
+    return false;
+  }
+  char bytes[GOLF_CATALOG_RECORD_SIZE];
+  GolfCatalogRecord record;
+  while (index.available()) {
+    if (index.read(bytes, sizeof(bytes)) != sizeof(bytes)) return false;
+    if (!golfParseCatalogRecord(bytes, sizeof(bytes), record)) {
+      LOG_ERR("GOLF", "Skipped malformed catalog record");
+      continue;
+    }
+    if (strcmp(name, record.name)) continue;
+    file = {};
+    file.source = GolfCourseSource::Catalog;
+    snprintf(file.filename, sizeof(file.filename), "bg-%lu.json", static_cast<unsigned long>(record.id));
+    if (CourseStore::load(file, course) && !strcmp(name, course.courseName)) return true;
+  }
+  return false;
+}
+}  // namespace
+bool CourseStore::load(const char* filename, GolfCourse& course) {
+  return loadFile(COURSE_DIRECTORY, filename, course);
+}
+bool CourseStore::loadCatalogInfo(const GolfCourseFile& file, GolfCourseCatalogInfo& info) {
+  info = {};
+  if (!isSafeFilename(file.filename)) return false;
+  char path[96];
+  snprintf(path, sizeof(path), "%s/%s",
+           file.source == GolfCourseSource::Catalog ? "/golf/catalog/courses" : COURSE_DIRECTORY, file.filename);
+  JsonDocument doc;
+  if (!PersistableStoreBase::readDocFromFile(path, doc)) return false;
+  const bool valid = golfParseCatalogInfo(doc.as<JsonVariantConst>(), info);
+  if (!valid && !doc["baigolf"].isUnbound()) LOG_ERR("GOLF", "Invalid catalog facts in %s", file.filename);
+  return valid;
+}
 bool CourseStore::load(const GolfCourseFile& file, GolfCourse& course) {
   // A non-empty filename means an SD file: load it even when builtInIndex is set, since
   // that index only records which built-in slot the override inherits (CONTRACTS-V2 §7.1).
   if (file.filename[0] != '\0') {
-    return load(file.filename, course);
+    return loadFile(file.source == GolfCourseSource::Catalog ? "/golf/catalog/courses" : COURSE_DIRECTORY,
+                    file.filename, course);
   }
   if (file.builtInIndex >= 0 && file.builtInIndex < GOLF_BUILT_IN_COURSE_COUNT) {
     course = GOLF_BUILT_IN_COURSES[file.builtInIndex];
@@ -188,19 +232,33 @@ bool CourseStore::load(const GolfCourseFile& file, GolfCourse& course) {
 
 bool CourseStore::findByName(const char* name, GolfCourseFile& file, GolfCourse& course) {
   if (!name || !name[0]) return false;
-  auto files = makeUniqueNoThrow<GolfCourseFile[]>(GOLF_MAX_COURSES);
-  auto scratch = makeUniqueNoThrow<GolfCourse>();
-  if (!files || !scratch) {
-    LOG_ERR("GOLF", "OOM: find course scratch");
-    return false;
+  char candidate[GOLF_COURSE_FILENAME_BUFFER_SIZE]{};
+  {
+    HalFile directory = Storage.open(COURSE_DIRECTORY);
+    for (HalFile entry = directory && directory.isDirectory() ? directory.openNextFile() : HalFile{}; entry;
+         entry = directory.openNextFile()) {
+      char filename[GOLF_COURSE_FILENAME_BUFFER_SIZE]{};
+      if (entry.isDirectory() || !entry.getName(filename, sizeof(filename)) || golfIsHiddenSidecarFilename(filename) ||
+          !hasJsonExtension(filename) || (candidate[0] && strcmp(candidate, filename) <= 0))
+        continue;
+      if (load(filename, course) && !strcmp(name, course.courseName)) strcpy(candidate, filename);
+    }
   }
-  auto result = enumerate(files.get(), GOLF_MAX_COURSES);
-  for (uint8_t i = 0; i < result.count; ++i)
-    if (load(files[i], *scratch) && strcmp(name, scratch->courseName) == 0) {
-      file = files[i];
-      course = *scratch;
+  if (candidate[0]) {
+    file = {};
+    file.source = GolfCourseSource::Owner;
+    strcpy(file.filename, candidate);
+    return load(file, course);
+  }
+  for (uint8_t i = 0; i < GOLF_BUILT_IN_COURSE_COUNT; ++i) {
+    if (!strcmp(name, GOLF_BUILT_IN_COURSES[i].courseName)) {
+      file = {};
+      file.source = GolfCourseSource::BuiltIn;
+      file.builtInIndex = i;
+      course = GOLF_BUILT_IN_COURSES[i];
       return true;
     }
-  return false;
+  }
+  return findCatalogByName(name, file, course);
 }
 #endif

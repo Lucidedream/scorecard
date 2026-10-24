@@ -31,14 +31,22 @@ GolfCourseMapBrowserActivity::GolfCourseMapBrowserActivity(GfxRenderer& renderer
   snprintf(this->courseName, sizeof(this->courseName), "%s", courseName != nullptr ? courseName : "");
 }
 
+GolfCourseMapBrowserActivity::GolfCourseMapBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                                           const GolfCourseFile& file)
+    : GolfCourseMapBrowserActivity(renderer, mappedInput, static_cast<const char*>(nullptr)) {
+  courseFile = file;
+  hasCourseFile = true;
+}
+
 void GolfCourseMapBrowserActivity::onEnter() {
   Activity::onEnter();
-  if (!CourseStore::findByName(courseName, courseFile, course)) {
+  if (!(hasCourseFile ? CourseStore::load(courseFile, course)
+                      : CourseStore::findByName(courseName, courseFile, course))) {
     LOG_ERR("GOLF", "Course map browser: course not found: %s", courseName);
   }
+  if (course.courseName[0]) snprintf(courseName, sizeof(courseName), "%s", course.courseName);
   holeCount = (9 * course.nineCount);
-  // golfSlug's ASCII-only fallback is intentionally shared by non-ASCII course names (CONTRACTS-V2 §25).
-  slugValid = golfSlug(courseName, courseSlug, sizeof(courseSlug));
+  slugValid = golfCourseMapsDir(course, courseSlug, sizeof(courseSlug));
   currentHole = 0;
   renderHole();
 }
@@ -87,7 +95,7 @@ void GolfCourseMapBrowserActivity::loop() {
 }
 
 void GolfCourseMapBrowserActivity::openTeeInfo() {
-  auto page = makeUniqueNoThrow<GolfCourseTeeInfoActivity>(renderer, mappedInput, courseName);
+  auto page = makeUniqueNoThrow<GolfCourseTeeInfoActivity>(renderer, mappedInput, courseFile);
   if (!page) {
     LOG_ERR("GOLF", "OOM: tee info");
     return;

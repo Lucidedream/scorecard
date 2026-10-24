@@ -9,7 +9,7 @@
 
 #include <cstdio>
 
-#include "GolfCourseMapListActivity.h"
+#include "GolfCoursePickerActivity.h"
 #include "GolfNavigation.h"
 #include "GolfPlayerSelectActivity.h"
 #include "GolfSetupActivity.h"
@@ -224,7 +224,7 @@ void GolfHomeActivity::activateDestination(const Destination destination) {
       return;
     }
     case Destination::CourseMap: {
-      auto list = makeUniqueNoThrow<GolfCourseMapListActivity>(renderer, mappedInput);
+      auto list = makeUniqueNoThrow<GolfCoursePickerActivity>(renderer, mappedInput);
       if (!list) {
         LOG_ERR("GOLF", "OOM: course map list activity");
         return;

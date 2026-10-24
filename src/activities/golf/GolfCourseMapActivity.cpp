@@ -5,6 +5,7 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <Memory.h>
 
 #include <cstdio>
 
@@ -12,6 +13,7 @@
 #include "GolfUiLayout.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "golf/CourseStore.h"
 
 GolfCourseMapActivity::GolfCourseMapActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                              const uint8_t holeIndex, const uint8_t holeCount, const char* courseName,
@@ -25,8 +27,13 @@ GolfCourseMapActivity::GolfCourseMapActivity(GfxRenderer& renderer, MappedInputM
 
 void GolfCourseMapActivity::onEnter() {
   Activity::onEnter();
-  // golfSlug's ASCII-only fallback is intentionally shared by non-ASCII course names (CONTRACTS-V2 §25).
-  slugValid = golfSlug(courseName, courseSlug, sizeof(courseSlug));
+  // The course is larger than the task stack budget and lives only during resolution.
+  auto course = makeUniqueNoThrow<GolfCourse>();
+  GolfCourseFile file{};
+  if (!course) LOG_ERR("GOLF", "OOM: glance course lookup");
+  slugValid = course && CourseStore::findByName(courseName, file, *course)
+                  ? golfCourseMapsDir(*course, courseSlug, sizeof(courseSlug))
+                  : golfSlug(courseName, courseSlug, sizeof(courseSlug));
   loadAndRender();
 }
 

@@ -5,7 +5,7 @@
 #include "GolfUiListActivity.h"
 #include "golf/CourseStore.h"
 
-// Read-only course list; each row opens the course-map browser.
+// Read-only course list; each row opens Course info.
 class GolfCourseMapListActivity final : public GolfUiListActivity {
  public:
   GolfCourseMapListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)

@@ -74,6 +74,14 @@ GolfCourseValidationResult golfParseCourseJson(JsonVariantConst doc, GolfCourse&
   if (!validName(doc["name"], sizeof(course.courseName))) {
     return failure(GolfCourseValidationError::Name, GolfCourseField::Name);
   }
+  if (!doc["maps"].isUnbound()) {
+    if (!validName(doc["maps"], sizeof(course.mapsDir)))
+      return failure(GolfCourseValidationError::Name, GolfCourseField::Maps);
+    for (const char* c = doc["maps"].as<const char*>(); *c; ++c) {
+      if (!(*c >= 'a' && *c <= 'z') && !(*c >= '0' && *c <= '9') && *c != '-')
+        return failure(GolfCourseValidationError::Name, GolfCourseField::Maps);
+    }
+  }
   const auto nines = doc["nines"].as<JsonArrayConst>();
   if (nines.isNull() || nines.size() < 1 || nines.size() > GOLF_MAX_NINES) {
     return failure(GolfCourseValidationError::NineCount, GolfCourseField::Nines);
@@ -133,6 +141,7 @@ GolfCourseValidationResult golfParseCourseJson(JsonVariantConst doc, GolfCourse&
   // Complete validation before writing so a rejected document leaves the course untouched.
   course = {};
   copyValidatedName(doc["name"], course.courseName);
+  if (!doc["maps"].isUnbound()) copyValidatedName(doc["maps"], course.mapsDir);
   course.nineCount = nines.size();
   for (uint8_t nineIndex = 0; nineIndex < course.nineCount; ++nineIndex) {
     const auto source = nines[nineIndex];

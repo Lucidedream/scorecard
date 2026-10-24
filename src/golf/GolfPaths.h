@@ -15,3 +15,6 @@ bool golfParseDate(const char* date, uint16_t& dateYmd);
 bool golfDateFromTimestamp(int64_t timestamp, int16_t utcOffsetMinutes, uint16_t& dateYmd);
 bool golfRoundFilename(uint16_t roundSequence, const char* courseName, uint16_t collisionSuffix, char* output,
                        size_t outputSize);
+
+struct GolfCourse;
+bool golfCourseMapsDir(const GolfCourse& course, char* output, size_t outputSize);

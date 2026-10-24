@@ -78,6 +78,8 @@ const char* golfCourseFieldName(GolfCourseField f) {
   switch (f) {
     case GolfCourseField::None:
       return "course";
+    case GolfCourseField::Maps:
+      return "maps";
     case GolfCourseField::Name:
       return "name";
     case GolfCourseField::Nines:

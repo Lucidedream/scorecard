@@ -16,6 +16,7 @@
 class GolfCourseMapBrowserActivity final : public Activity {
  public:
   GolfCourseMapBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const char* courseName);
+  GolfCourseMapBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const GolfCourseFile& file);
 
   void onEnter() override;
   void loop() override;
@@ -26,6 +27,7 @@ class GolfCourseMapBrowserActivity final : public Activity {
   bool slugValid = false;
   GolfCourse course{};
   GolfCourseFile courseFile{};
+  bool hasCourseFile = false;
   uint8_t holeCount = 0;
   uint8_t currentHole = 0;
 

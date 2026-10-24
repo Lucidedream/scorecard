@@ -2,13 +2,14 @@
 
 #if defined(CROSSPOINT_GOLF)
 
+#include <Arduino.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <Memory.h>
 
 #include <cstdio>
 
-#include "GolfCourseMapBrowserActivity.h"
+#include "GolfCourseInfoActivity.h"
 #include "GolfReviewFormat.h"
 #include "GolfUiLayout.h"
 #include "components/UITheme.h"
@@ -17,6 +18,7 @@
 namespace fui = freeink::ui;
 
 void GolfCourseMapListActivity::onEnter() {
+  LOG_DBG("GOLF", "Catalog picker My courses: free heap %u", ESP.getFreeHeap());
   loadCourses();
   UiListActivity::onEnter();
 }
@@ -79,14 +81,14 @@ void GolfCourseMapListActivity::formatCourseRow(const uint8_t row) {
 int GolfCourseMapListActivity::listCount() const { return courseCount + (overflow ? 1 : 0); }
 
 const char* GolfCourseMapListActivity::headerTitle() const {
-  return noCourses ? tr(STR_GOLF_NO_COURSES) : tr(STR_GOLF_COURSE_MAP);
+  return noCourses ? tr(STR_GOLF_NO_COURSES) : tr(STR_GOLF_MY_COURSES);
 }
 
 void GolfCourseMapListActivity::activateIndex(const int index) {
   app.clearTapFlash();
   if (index < 0 || index >= courseCount) return;
   const GolfCourseSummary& course = courses[index];
-  auto browser = makeUniqueNoThrow<GolfCourseMapBrowserActivity>(renderer, mappedInput, course.courseName);
+  auto browser = makeUniqueNoThrow<GolfCourseInfoActivity>(renderer, mappedInput, course.file);
   if (!browser) {
     LOG_ERR("GOLF", "OOM: course map browser activity");
     return;

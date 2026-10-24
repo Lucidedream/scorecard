@@ -3122,9 +3122,10 @@ Bytes 8, 11, 13, 17, 20, 26, 28, 69 are `|`. Record *k* starts at byte 96·k.
   map folders keep working.
 * `GolfCourseFile` records its source (built-in / owner `/golf/courses` / catalog
   `/golf/catalog/courses`), and `CourseStore::load` honours it.
-* `CourseStore::findByName` searches built-ins, then owner files, then the catalog (a
-  sequential `index.dat` name scan, then loading `bg-<id>.json`), so rounds, resume and
-  History work for catalog courses unchanged.
+* `CourseStore::findByName` searches owner files first (an owner file named like a
+  built-in **overrides** it, §7.1), then the built-ins not overridden, then the catalog
+  (a sequential `index.dat` name scan, then loading `bg-<id>.json`). So rounds, resume
+  and History work for catalog courses unchanged.
 * Memory: catalog screens hold `regions.txt` (≤64 regions × 32 B) and, per open region,
   a `uint16_t` record list (≤512 entries) plus one page of rows. They never hold more
   than one page of names.
@@ -3145,6 +3146,11 @@ One picker, `GolfCoursePickerActivity(mode)`, where mode is `Browse` (Course Map
 3. **Region courses:** row 1 is a sort toggle, `Sort: Rating` / `Sort: Name`
    (`STR_GOLF_SORT_RATING`/`STR_GOLF_SORT_NAME`), default Rating. Rating order is
    descending, unrated last, ties by name.
+   * `index.dat` is already name-ordered within a region, so **Name order is record
+     order** and needs no sort.
+   * Rating order sorts the region's ordinals using a `uint8_t` rating key per record,
+     read once when the region loads (0 for unrated, sorted last), with ties by
+     ordinal. The sort itself reads nothing from SD.
    * Each course row has the name and the detail line
      `tr(STR_GOLF_CATALOG_ROW_FORMAT)` → `4.2/5 (37) · 27 holes`. An unrated course shows
      `tr(STR_GOLF_NO_RATING)` in place of the rating; a course with maps flag `N` appends

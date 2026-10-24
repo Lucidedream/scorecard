@@ -1,6 +1,6 @@
 #pragma once
 #include "GolfCourse.h"
-enum class GolfCourseField : uint8_t { None, Name, Nines, NineName, Tees, TeeName, Par, Yards, StrokeIndex };
+enum class GolfCourseField : uint8_t { None, Maps, Name, Nines, NineName, Tees, TeeName, Par, Yards, StrokeIndex };
 enum class GolfCourseValidationError : uint8_t {
   None,
   Version,

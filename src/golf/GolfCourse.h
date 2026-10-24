@@ -25,6 +25,7 @@ struct GolfCourse {
   uint8_t teeCount;
   GolfNine nines[GOLF_MAX_NINES];
   GolfCourseTee tees[GOLF_MAX_TEES];
+  char mapsDir[16]{};
 };
 
 struct GolfNineSelection {
@@ -32,4 +33,4 @@ struct GolfNineSelection {
   uint8_t back = 1;  // GOLF_NO_NINE for a nine-hole round.
 };
 
-static_assert(sizeof(GolfCourse) == 682);
+static_assert(sizeof(GolfCourse) == 698);

@@ -12,6 +12,7 @@
 class GolfCourseTeeInfoActivity final : public Activity, protected UiAppHost {
  public:
   GolfCourseTeeInfoActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const char* courseName);
+  GolfCourseTeeInfoActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const GolfCourseFile& file);
 
   void onEnter() override;
   void loop() override;
@@ -27,6 +28,7 @@ class GolfCourseTeeInfoActivity final : public Activity, protected UiAppHost {
   char courseName[40]{};
   GolfCourse course{};
   GolfCourseFile courseFile{};
+  bool hasCourseFile = false;
   bool resolved = false;
   uint8_t holeCount = 0;
   uint8_t activeTab = 0;

@@ -22,10 +22,19 @@ GolfCourseTeeInfoActivity::GolfCourseTeeInfoActivity(GfxRenderer& renderer, Mapp
   snprintf(this->courseName, sizeof(this->courseName), "%s", courseName != nullptr ? courseName : "");
 }
 
+GolfCourseTeeInfoActivity::GolfCourseTeeInfoActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                                     const GolfCourseFile& file)
+    : GolfCourseTeeInfoActivity(renderer, mappedInput, static_cast<const char*>(nullptr)) {
+  courseFile = file;
+  hasCourseFile = true;
+}
+
 void GolfCourseTeeInfoActivity::onEnter() {
   Activity::onEnter();
-  resolved = CourseStore::findByName(courseName, courseFile, course);
+  resolved =
+      (hasCourseFile ? CourseStore::load(courseFile, course) : CourseStore::findByName(courseName, courseFile, course));
   if (!resolved) LOG_ERR("GOLF", "Tee info: course not found: %s", courseName);
+  if (course.courseName[0]) snprintf(courseName, sizeof(courseName), "%s", course.courseName);
   holeCount = (9 * course.nineCount);
   activeTab = 0;
   firstPaint = true;
