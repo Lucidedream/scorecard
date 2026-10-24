@@ -3110,9 +3110,14 @@ Bytes 8, 11, 13, 17, 20, 26, 28, 69 are `|`. Record *k* starts at byte 96·k.
 
 ### 41.4 Firmware: catalog courses are first-class (P2)
 
-* `GolfCourse` gains `char mapsDir[16]`. The v2 parser reads optional `maps`
-  (`[a-z0-9-]{1,15}`, else the file is rejected) and optional `baigolf` (`id`, `rating`,
-  `reviews`, `scores`, `region` ≤23 bytes, `yards`, `designer`, `opened`). Every
+* `GolfCourse` gains only `char mapsDir[16]` (update its `static_assert`). The v2 parser
+  reads optional `maps` (`[a-z0-9-]{1,15}`, else the file is rejected).
+* The `baigolf` object is **not** stored in `GolfCourse`. A separate
+  `GolfCourseCatalogInfo` (id, rating ×10, reviews, `scores[6]` ×10, `region[24]`, holes,
+  par, yards, `designer[32]`, opened, plus a has-flag per optional field) is filled by its
+  own `golfParseCatalogInfo(json, info)`. It is called only by Course info, so rounds,
+  the History index and every other `GolfCourse` user stay the same size. A malformed
+  `baigolf` object makes Course info show no catalog facts; it never rejects the course. Every
   `/golf/maps/...` lookup uses `mapsDir` when set, else `golfSlug(name)`, so existing
   map folders keep working.
 * `GolfCourseFile` records its source (built-in / owner `/golf/courses` / catalog
