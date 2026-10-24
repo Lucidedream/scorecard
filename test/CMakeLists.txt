@@ -81,3 +81,4 @@ add_subdirectory(golf_quotes)
 add_subdirectory(golf_export)
 
 add_subdirectory(golf_nine_picker)
+add_subdirectory(golf_catalog_check)
