@@ -3206,6 +3206,28 @@ which show only the facts they have):
 
 All new user-facing text uses `tr()` (English YAML; other languages fall back).
 
+**`Play` mode and the Play row (P3):**
+* **New round:** the main menu's New round tile opens `GolfCoursePickerActivity(Mode::Play)`
+  in place of `GolfSetupActivity`'s course list.
+  - The levels are the same as in Browse.
+  - **My courses** in Play mode is today's New round list, unchanged.
+  - Picking a course anywhere starts today's flow: the nine picker when nineCount ≥2,
+    else player setup, with `golfDefaultNineSelection`.
+  - `openGolfSetup` (used by Back from the nine picker and player setup) opens the Play
+    picker at the **same level, region, sort and selected row** the course was chosen
+    from. That context is a small value kept by `GolfNavigation`, not a file.
+* **Play this course:** the Course info row (`STR_GOLF_PLAY_THIS_COURSE`) appears exactly
+  when the main menu offers New round (`golfDecideHomeEntry(...).showNew`). It behaves
+  exactly like New round. That includes today's behaviour: starting a round while one is
+  open replaces it without a prompt. Whether to confirm first is a separate decision for
+  both entry points.
+  - It runs the same start flow.
+  - Back from that flow returns to Course info.
+* Rounds started from catalog courses store the course name as usual. Resume, History,
+  Recent and the in-round map glance resolve them through `findByName` (§41.4).
+* Linking an owner file to a catalog id (`"baigolf":{"id":N}` in an owner course) is
+  **deferred**: P3 does not merge or hide duplicates.
+
 ### 41.6 Acceptance for P1
 
 * Host tests `python3 scripts/test_baigolf_export.py` run on synthetic fixtures under
