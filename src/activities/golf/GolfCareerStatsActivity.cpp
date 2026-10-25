@@ -171,6 +171,11 @@ void GolfCareerStatsActivity::loop() {
     return;
   }
   if (scanning) return;
+  const int swipeDelta = golfui::pagingSwipeDelta(mappedInput);
+  if (swipeDelta) {
+    page(swipeDelta);
+    return;
+  }
   const int frontDelta = input.releasedFrontNavigationDelta();
   if (frontDelta != 0) {
     page(frontDelta);

@@ -29,6 +29,8 @@ void GolfRoundSummaryActivity::onEnter() {
                         sizeof(playerLabel));
   resetUi();
   app.setScreen(&GolfRoundSummaryActivity::screenTrampoline, this);
+  app.on(
+      1, [](const fui::ActionEvent&, void* user) { static_cast<GolfRoundSummaryActivity*>(user)->sendRound(); }, this);
   requestUpdate();
 }
 
@@ -41,21 +43,7 @@ void GolfRoundSummaryActivity::loop() {
       mappedInput,
       {tr(STR_BACK), archiveFilename[0] ? tr(STR_GOLF_EXPORT_SEND) : tr(STR_GOLF_EXPORT_SHARE_SUMMARY), "", ""});
   if (input.wasReleased(golfui::FooterAction::Confirm)) {
-    auto transfer = makeUniqueNoThrow<GolfRoundExportActivity>(renderer, mappedInput, entry, archiveFilename);
-    if (!transfer) {
-      LOG_ERR("GOLF", "OOM: summary export activity");
-      {
-        RenderLock lock(*this);
-        exportFailed = true;
-      }
-      requestUpdate();
-      return;
-    }
-    {
-      RenderLock lock(*this);
-      exportFailed = false;
-    }
-    startActivityForResult(std::move(transfer), nullptr);
+    sendRound();
     return;
   }
   if (input.wasReleased(golfui::FooterAction::Back)) {
@@ -64,13 +52,44 @@ void GolfRoundSummaryActivity::loop() {
     } else {
       finish();
     }
+    return;
   }
+  const auto route = routeTouch(mappedInput);
+  if (route.routed && app.invalidated()) requestUpdate();
+}
+
+void GolfRoundSummaryActivity::sendRound() {
+  app.clearTapFlash();
+  auto transfer = makeUniqueNoThrow<GolfRoundExportActivity>(renderer, mappedInput, entry, archiveFilename);
+  if (!transfer) {
+    LOG_ERR("GOLF", "OOM: summary export activity");
+    {
+      RenderLock lock(*this);
+      exportFailed = true;
+    }
+    requestUpdate();
+    return;
+  }
+  {
+    RenderLock lock(*this);
+    exportFailed = false;
+  }
+  startActivityForResult(std::move(transfer), nullptr);
+  return;
 }
 
 void GolfRoundSummaryActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto layout = golfui::chromeLayout(renderer, mappedInput, screen.frame().safeRect(), metrics.topPadding);
   screen.setContentMargin(layout.contentMargins);
+  if (mappedInput.hasTouch()) {
+    const auto sendRect = screen.takeBottom(56, 8);
+    fui::ButtonProps send{};
+    send.label = archiveFilename[0] ? tr(STR_GOLF_EXPORT_SEND) : tr(STR_GOLF_EXPORT_SHARE_SUMMARY);
+    send.action = 1;
+    send.inputMask = fui::InputTouch;
+    screen.button(send, sendRect);
+  }
   const bool hasPar = golfHistoryShowsToPar(entry);
   const char* labels[] = {tr(STR_GOLF_SCORE),           tr(STR_GOLF_TO_PAR),       tr(STR_GOLF_PUTTS),
                           tr(STR_GOLF_INSIDE_100_CARD), tr(STR_GOLF_LONG_GAME),    tr(STR_GOLF_TOTAL_PENALTIES),

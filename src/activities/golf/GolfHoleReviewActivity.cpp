@@ -47,6 +47,11 @@ void GolfHoleReviewActivity::loop() {
     finish();
     return;
   }
+  const int swipeDelta = golfui::pagingSwipeDelta(mappedInput);
+  if (swipeDelta) {
+    changeHole(swipeDelta);
+    return;
+  }
   const int frontDelta = input.releasedFrontNavigationDelta();
   if (frontDelta != 0) {
     changeHole(frontDelta);

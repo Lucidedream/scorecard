@@ -24,6 +24,7 @@ class GolfRoundSummaryActivity final : public Activity, protected UiAppHost {
   void render(RenderLock&&) override;
 
  private:
+  void sendRound();
   GolfHistoryEntry entry{};
   bool returnToGolfHome = false;
   char archiveFilename[GOLF_ROUND_FILENAME_BUFFER_SIZE]{};

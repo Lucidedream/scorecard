@@ -99,6 +99,11 @@ void GolfTipNoteActivity::loop() {
     finish();
     return;
   }
+  const int swipeDelta = golfui::pagingSwipeDelta(mappedInput);
+  if (swipeDelta) {
+    turnPage(swipeDelta);
+    return;
+  }
   const int frontDelta = input.releasedFrontNavigationDelta();
   if (frontDelta != 0) {
     turnPage(frontDelta);

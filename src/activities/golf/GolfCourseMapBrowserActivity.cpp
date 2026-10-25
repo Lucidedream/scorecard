@@ -66,17 +66,18 @@ void GolfCourseMapBrowserActivity::loop() {
     finish();
     return;
   }
-  if (mappedInput.hasTouch()) {
-    const auto swipe = mappedInput.wasSwipe();
-    if (swipe == MappedInputManager::SwipeDir::Left) {
-      changeHole(1);
+  const int swipeDelta = golfui::pagingSwipeDelta(mappedInput);
+  if (swipeDelta) {
+    changeHole(swipeDelta);
+    return;
+  }
+  if (input.hasTap() && holeCount) {
+    const auto chrome = golfui::chromeLayout(renderer, mappedInput, UITheme::getInstance().getMetrics().topPadding);
+    if (input.tapIn({chrome.body.x, chrome.body.y, chrome.body.width,
+                     static_cast<int16_t>(golfui::minValue(HOLE_BAND_HEIGHT, chrome.body.height))})) {
+      openTeeInfo();
       return;
     }
-    if (swipe == MappedInputManager::SwipeDir::Right) {
-      changeHole(-1);
-      return;
-    }
-    if (swipe != MappedInputManager::SwipeDir::None) return;
   }
   const int frontDelta = input.releasedFrontNavigationDelta();
   if (frontDelta != 0) {

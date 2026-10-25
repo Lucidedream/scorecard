@@ -475,3 +475,37 @@ TEST(GolfBlocks, RestoredCourseWindowOnlyShowsSortOnFirstPage) {
   EXPECT_FALSE(golfui::courseSortVisible(body, 10, 0));
   EXPECT_FALSE(golfui::courseSortVisible(body, 4, 3));
 }
+
+TEST(GolfFooterless, HeightAndPagingExcludeEdgeBack) {
+  EXPECT_EQ(golfui::touchFooterHeight(true), 0);
+  EXPECT_EQ(golfui::touchFooterHeight(true, true), 56);
+  EXPECT_EQ(golfui::touchFooterHeight(false), 0);
+  EXPECT_EQ(golfui::touchFooterHeight(false, true), 0);
+  EXPECT_EQ(golfui::pagingSwipeDelta(true, false, false), 1);
+  EXPECT_EQ(golfui::pagingSwipeDelta(false, true, false), -1);
+  EXPECT_EQ(golfui::pagingSwipeDelta(false, false, false), 0);
+  EXPECT_EQ(golfui::pagingSwipeDelta(true, false, true), 0);
+  EXPECT_EQ(golfui::pagingSwipeDelta(false, true, true), 0);
+}
+
+TEST(GolfFooterless, ChromeUsesFullTouchBodyAndRetainsX4HintsOnEveryEdge) {
+  for (const Case test : cases()) {
+    const fui::Rect screen{0, 0, test.width, test.height};
+    const auto physical = golfui::reserveHintEdge(screen, test.edge, HINT_RESERVE);
+    const auto touch = golfui::footerSafeRect(screen, physical, true, false);
+    EXPECT_EQ(touch.x, screen.x);
+    EXPECT_EQ(touch.y, screen.y);
+    EXPECT_EQ(touch.width, screen.width);
+    EXPECT_EQ(touch.height, screen.height);
+    const auto x4 = golfui::footerSafeRect(screen, physical, false, false);
+    EXPECT_EQ(x4.x, physical.x);
+    EXPECT_EQ(x4.y, physical.y);
+    EXPECT_EQ(x4.width, physical.width);
+    EXPECT_EQ(x4.height, physical.height);
+    const auto scoring = golfui::footerSafeRect(screen, physical, true, true);
+    EXPECT_EQ(scoring.height, physical.height - 56);
+    EXPECT_EQ(scoring.width, physical.width);
+  }
+  const auto clipped = golfui::detailGeometry({13, 20, 440, 90}, 28, 72, 12);
+  EXPECT_EQ(clipped.box.height, 90);
+}

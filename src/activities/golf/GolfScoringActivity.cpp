@@ -344,7 +344,7 @@ void GolfScoringActivity::closePenaltyPicker() {
 }
 
 void GolfScoringActivity::handlePickerInput() {
-  golfui::FooterInput input(mappedInput, {tr(STR_GOLF_FOOTER_BACK), tr(STR_GOLF_FOOTER_CONFIRM), "", ""});
+  golfui::FooterInput input(mappedInput, {tr(STR_GOLF_FOOTER_BACK), tr(STR_GOLF_FOOTER_CONFIRM), "", ""}, true);
   if (input.wasReleased(golfui::FooterAction::Back)) {
     closePenaltyPicker();
     return;
@@ -382,7 +382,7 @@ void GolfScoringActivity::handlePickerInput() {
 
   if (!input.hasTap()) return;
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto chrome = golfui::chromeLayout(renderer, mappedInput, 0);
+  const auto chrome = golfui::chromeLayout(renderer, mappedInput, 0, {}, true);
   const GolfRound& round = GOLF_ROUND_STORE.getRound();
   const GolfPlayerScore& score = round.players[round.currentPlayer].score;
   const auto layout =
@@ -606,13 +606,14 @@ void GolfScoringActivity::loop() {
 
 bool GolfScoringActivity::handleNavigationSwipe() {
   if (!mappedInput.hasTouch()) return false;
+  if (mappedInput.wasBackGesture()) return true;
   const auto swipe = mappedInput.wasSwipe();
   if (swipe == MappedInputManager::SwipeDir::None) return false;
   if (!touchStartValid || (swipe != MappedInputManager::SwipeDir::Left && swipe != MappedInputManager::SwipeDir::Right))
     return true;
   const int delta = swipe == MappedInputManager::SwipeDir::Left ? 1 : -1;
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto chrome = golfui::chromeLayout(renderer, mappedInput, 0);
+  const auto chrome = golfui::chromeLayout(renderer, mappedInput, 0, {}, true);
   const GolfRound& round = GOLF_ROUND_STORE.getRound();
   const GolfPlayerScore& score = round.players[round.currentPlayer].score;
   const auto layout =
@@ -646,7 +647,7 @@ void GolfScoringActivity::handleScoringInput() {
     handlePickerInput();
     return;
   }
-  golfui::FooterInput input(mappedInput, footerLabels());
+  golfui::FooterInput input(mappedInput, footerLabels(), true);
   if (input.wasLongPressed(golfui::FooterAction::Back, MAP_LONGPRESS_MS)) {
     openCourseMap();
     return;
@@ -695,7 +696,7 @@ void GolfScoringActivity::handleScoringInput() {
 
   if (input.hasTap()) {
     const auto& metrics = UITheme::getInstance().getMetrics();
-    const auto chrome = golfui::chromeLayout(renderer, mappedInput, 0);
+    const auto chrome = golfui::chromeLayout(renderer, mappedInput, 0, {}, true);
     const GolfRound& round = GOLF_ROUND_STORE.getRound();
     const GolfPlayerScore& score = round.players[round.currentPlayer].score;
     const auto layout =
@@ -1017,7 +1018,7 @@ void GolfScoringActivity::drawNineStrip(const golfui::ScoringLayout& layout) con
   drawHoleCells(layout.nineStrip, static_cast<uint8_t>(page * golfui::HOLE_STRIP_PAGE_SIZE));
 }
 
-void GolfScoringActivity::drawFooter() const { golfui::drawFooter(renderer, mappedInput, footerLabels()); }
+void GolfScoringActivity::drawFooter() const { golfui::drawFooter(renderer, mappedInput, footerLabels(), true); }
 
 void GolfScoringActivity::drawPenaltyPicker(const freeink::ui::Rect safe) const {
   const GolfRound& round = GOLF_ROUND_STORE.getRound();
@@ -1105,13 +1106,13 @@ void GolfScoringActivity::drawPenaltyPicker(const freeink::ui::Rect safe) const 
 
     renderer.drawLine(safe.x, rowBottom - 1, safe.x + safe.width - 1, rowBottom - 1, true);
   }
-  golfui::drawFooterTwo(renderer, mappedInput, tr(STR_GOLF_FOOTER_BACK), tr(STR_GOLF_FOOTER_CONFIRM));
+  golfui::drawFooterTwo(renderer, mappedInput, tr(STR_GOLF_FOOTER_BACK), tr(STR_GOLF_FOOTER_CONFIRM), true);
 }
 
 void GolfScoringActivity::render(RenderLock&&) {
   renderer.clearScreen();
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto chrome = golfui::chromeLayout(renderer, mappedInput, 0);
+  const auto chrome = golfui::chromeLayout(renderer, mappedInput, 0, {}, true);
   const GolfRound& round = GOLF_ROUND_STORE.getRound();
   const GolfPlayerScore& score = round.players[round.currentPlayer].score;
   const bool hasPenalty = score.penaltyCount[round.currentHole] > 0;

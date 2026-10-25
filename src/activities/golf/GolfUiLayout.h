@@ -139,6 +139,18 @@ constexpr int regionAt(const fui::Rect grid, const int x, const int y) {
     if (contains(regionCell(grid, i), x, y)) return i;
   return -1;
 }
+constexpr int touchFooterHeight(const bool hasTouch, const bool scoring = false) {
+  return hasTouch && scoring ? GOLF_TOUCH_FOOTER_HEIGHT : 0;
+}
+constexpr fui::Rect footerSafeRect(const fui::Rect screen, const fui::Rect physicalHintSafe, const bool touch,
+                                   const bool scoring) {
+  if (!touch) return physicalHintSafe;
+  return scoring ? reserveHintEdge(physicalHintSafe, HintEdge::Bottom, touchFooterHeight(touch, scoring)) : screen;
+}
+constexpr int pagingSwipeDelta(const bool left, const bool right, const bool edgeBack) {
+  return edgeBack ? 0 : left ? 1 : right ? -1 : 0;
+}
+int pagingSwipeDelta(const MappedInputManager& input);
 enum class FooterAction : uint8_t { None, Back, Confirm, Previous, Next };
 
 struct FooterLabels {
@@ -209,7 +221,7 @@ constexpr FooterAction touchFooterActionAt(const TouchFooterLayout& layout, cons
 
 class FooterInput {
  public:
-  FooterInput(MappedInputManager& mappedInput, FooterLabels labels);
+  FooterInput(MappedInputManager& mappedInput, FooterLabels labels, bool keepTouch = false);
 
   bool wasReleased(FooterAction action) const;
   bool wasLongPressed(FooterAction action, unsigned long thresholdMs) const;
@@ -230,8 +242,9 @@ class FooterInput {
 };
 
 TouchFooterLayout touchFooterLayout(const GfxRenderer& renderer);
-void drawFooter(GfxRenderer& renderer, MappedInputManager& mappedInput, FooterLabels labels);
-void drawFooterTwo(GfxRenderer& renderer, MappedInputManager& mappedInput, const char* back, const char* confirm);
+void drawFooter(GfxRenderer& renderer, MappedInputManager& mappedInput, FooterLabels labels, bool keepTouch = false);
+void drawFooterTwo(GfxRenderer& renderer, MappedInputManager& mappedInput, const char* back, const char* confirm,
+                   bool keepTouch = false);
 
 struct ChromeLayout {
   fui::Rect safe{};
@@ -263,9 +276,9 @@ constexpr ChromeLayout makeChromeLayout(const fui::Rect frameSafe, const fui::Re
 // uses a FreeInkUI frame-safe rect; the second derives the bezel-safe rect
 // directly from GfxRenderer for legacy/raw drawing screens.
 ChromeLayout chromeLayout(const GfxRenderer& renderer, const MappedInputManager& mappedInput, fui::Rect frameSafe,
-                          int topPadding, fui::Insets bodyPadding = {});
+                          int topPadding, fui::Insets bodyPadding = {}, bool keepTouch = false);
 ChromeLayout chromeLayout(const GfxRenderer& renderer, const MappedInputManager& mappedInput, int topPadding,
-                          fui::Insets bodyPadding = {});
+                          fui::Insets bodyPadding = {}, bool keepTouch = false);
 void drawHeader(const GfxRenderer& renderer, fui::Rect rect, const char* title, const char* rightLabel = nullptr);
 
 constexpr int scoringDigitHeight(const int rowHeight, const bool focused) {

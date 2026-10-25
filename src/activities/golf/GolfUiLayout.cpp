@@ -17,12 +17,13 @@ namespace golfui {
 
 namespace {
 
-fui::Rect hintSafeRect(const GfxRenderer& renderer, const MappedInputManager& mappedInput) {
+fui::Rect hintSafeRect(const GfxRenderer& renderer, const MappedInputManager& mappedInput, const bool keepTouch) {
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   fui::Rect result{static_cast<int16_t>(safe.x), static_cast<int16_t>(safe.y), static_cast<int16_t>(safe.width),
                    static_cast<int16_t>(safe.height)};
-  if (mappedInput.hasTouch()) result = reserveHintEdge(result, HintEdge::Bottom, GOLF_TOUCH_FOOTER_HEIGHT);
-  return result;
+  return footerSafeRect(
+      {0, 0, static_cast<int16_t>(renderer.getScreenWidth()), static_cast<int16_t>(renderer.getScreenHeight())}, result,
+      mappedInput.hasTouch(), keepTouch);
 }
 
 fui::Rect bezelSafeRect(const GfxRenderer& renderer) {
@@ -43,21 +44,28 @@ TouchFooterLayout touchFooterLayout(const GfxRenderer& renderer) {
   return makeTouchFooterLayout(bezelSafeRect(renderer));
 }
 
-FooterInput::FooterInput(MappedInputManager& mappedInput, const FooterLabels labels) : mappedInput(mappedInput) {
+FooterInput::FooterInput(MappedInputManager& mappedInput, const FooterLabels labels, const bool keepTouch)
+    : mappedInput(mappedInput) {
   if (!mappedInput.hasTouch()) return;
   const TouchFooterLayout layout = touchFooterLayout(mappedInput.getRenderer());
   int x = 0;
   int y = 0;
   if (mappedInput.wasScreenLongPress(x, y)) {
-    longPressAction = touchFooterActionAt(layout, labels, x, y);
+    if (keepTouch) longPressAction = touchFooterActionAt(layout, labels, x, y);
     return;
   }
   if (mappedInput.wasScreenTapped(x, y)) {
     tapped = true;
     tapX = static_cast<int16_t>(x);
     tapY = static_cast<int16_t>(y);
-    tapAction = touchFooterActionAt(layout, labels, x, y);
+    if (keepTouch) tapAction = touchFooterActionAt(layout, labels, x, y);
   }
+}
+
+int pagingSwipeDelta(const MappedInputManager& input) {
+  const auto swipe = input.wasSwipe();
+  return pagingSwipeDelta(swipe == MappedInputManager::SwipeDir::Left, swipe == MappedInputManager::SwipeDir::Right,
+                          input.wasBackGesture());
 }
 
 bool FooterInput::wasReleased(const FooterAction action) const {
@@ -99,13 +107,15 @@ int FooterInput::releasedFrontNavigationDelta() const {
   return 0;
 }
 
-void drawFooter(GfxRenderer& renderer, MappedInputManager& mappedInput, const FooterLabels labels) {
+void drawFooter(GfxRenderer& renderer, MappedInputManager& mappedInput, const FooterLabels labels,
+                const bool keepTouch) {
   if (!mappedInput.hasTouch()) {
     const auto mapped = mappedInput.mapLabels(labels.back, labels.confirm, labels.previous, labels.next);
     GUI.drawButtonHints(renderer, mapped.btn1, mapped.btn2, mapped.btn3, mapped.btn4);
     return;
   }
 
+  if (!keepTouch) return;
   const TouchFooterLayout layout = touchFooterLayout(renderer);
   renderer.fillRect(layout.footer.x, layout.footer.y, layout.footer.width, layout.footer.height, false);
   constexpr FooterAction actions[4] = {FooterAction::Back, FooterAction::Confirm, FooterAction::Previous,
@@ -120,9 +130,10 @@ void drawFooter(GfxRenderer& renderer, MappedInputManager& mappedInput, const Fo
   }
 }
 
-void drawFooterTwo(GfxRenderer& renderer, MappedInputManager& mappedInput, const char* back, const char* confirm) {
+void drawFooterTwo(GfxRenderer& renderer, MappedInputManager& mappedInput, const char* back, const char* confirm,
+                   const bool keepTouch) {
   if (mappedInput.hasTouch()) {
-    drawFooter(renderer, mappedInput, {back, confirm, "", ""});
+    drawFooter(renderer, mappedInput, {back, confirm, "", ""}, keepTouch);
     return;
   }
   const auto mapped = mappedInput.mapLabels(back, confirm, "", "");
@@ -130,15 +141,15 @@ void drawFooterTwo(GfxRenderer& renderer, MappedInputManager& mappedInput, const
 }
 
 ChromeLayout chromeLayout(const GfxRenderer& renderer, const MappedInputManager& mappedInput, const fui::Rect frameSafe,
-                          const int topPadding, const fui::Insets bodyPadding) {
-  const fui::Rect hardwareSafe = intersect(bezelSafeRect(renderer), hintSafeRect(renderer, mappedInput));
+                          const int topPadding, const fui::Insets bodyPadding, const bool keepTouch) {
+  const fui::Rect hardwareSafe = intersect(bezelSafeRect(renderer), hintSafeRect(renderer, mappedInput, keepTouch));
   return makeChromeLayout(frameSafe, hardwareSafe, topPadding, GOLF_HEADER_HEIGHT, bodyPadding);
 }
 
 ChromeLayout chromeLayout(const GfxRenderer& renderer, const MappedInputManager& mappedInput, const int topPadding,
-                          const fui::Insets bodyPadding) {
-  return makeChromeLayout(bezelSafeRect(renderer), hintSafeRect(renderer, mappedInput), topPadding, GOLF_HEADER_HEIGHT,
-                          bodyPadding);
+                          const fui::Insets bodyPadding, const bool keepTouch) {
+  return makeChromeLayout(bezelSafeRect(renderer), hintSafeRect(renderer, mappedInput, keepTouch), topPadding,
+                          GOLF_HEADER_HEIGHT, bodyPadding);
 }
 
 void drawHeader(const GfxRenderer& renderer, const fui::Rect rect, const char* title, const char* rightLabel) {

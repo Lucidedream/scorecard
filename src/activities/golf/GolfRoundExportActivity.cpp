@@ -151,7 +151,8 @@ void GolfRoundExportActivity::loop() {
     finish();
     return;
   }
-  if (input.wasReleased(golfui::FooterAction::Confirm)) {
+  const int swipeDelta = golfui::pagingSwipeDelta(mappedInput);
+  if (input.wasReleased(golfui::FooterAction::Confirm) || (!errorMessage && swipeDelta)) {
     if (errorMessage) {
       finish();
       return;
