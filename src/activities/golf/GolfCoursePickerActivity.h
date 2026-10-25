@@ -3,20 +3,38 @@
 #include <HalStorage.h>
 #include <Memory.h>
 
+#include "GolfNavigation.h"
 #include "GolfUiListActivity.h"
 #include "golf/CourseStore.h"
 #include "golf/GolfCatalog.h"
 
 class GolfCoursePickerActivity final : public GolfUiListActivity {
  public:
-  enum class Mode : uint8_t { Browse };
-  GolfCoursePickerActivity(GfxRenderer& renderer, MappedInputManager& input, Mode = Mode::Browse)
-      : GolfUiListActivity("GolfCoursePicker", renderer, input) {}
+  using Mode = GolfPickerMode;
+  GolfCoursePickerActivity(GfxRenderer& renderer, MappedInputManager& input, Mode mode = Mode::Browse)
+      : GolfUiListActivity("GolfCoursePicker", renderer, input), mode(mode) {}
+  GolfCoursePickerActivity(GfxRenderer& renderer, MappedInputManager& input, GolfPickerContext context)
+      : GolfUiListActivity("GolfCoursePicker", renderer, input),
+        mode(context.mode),
+        initial(context),
+        standalone(true) {}
+  void restoreInfo(const GolfCourseFile& file, uint16_t row) {
+    infoFile = file;
+    infoRow = row;
+    reopenInfo = true;
+  }
   void onEnter() override;
   void onExit() override;
 
  private:
-  enum class Level : uint8_t { Hub, Regions, Courses };
+  using Level = GolfPickerLevel;
+  Mode mode;
+  GolfPickerContext initial{};
+  GolfCourseFile infoFile{};
+  uint16_t infoRow = 0;
+  bool reopenInfo = false;
+  bool standalone = false;
+  GolfPickerContext context(uint16_t selected) const;
   static constexpr uint8_t PAGE_ROWS = 16;
   struct Scratch {
     GolfCatalogRegionsReader catalog;

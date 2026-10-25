@@ -8,15 +8,18 @@
 
 class GolfCourseInfoActivity final : public GolfUiListActivity {
  public:
-  GolfCourseInfoActivity(GfxRenderer& renderer, MappedInputManager& input, const GolfCourseFile& file)
-      : GolfUiListActivity("GolfCourseInfo", renderer, input), file(file) {}
+  GolfCourseInfoActivity(GfxRenderer& renderer, MappedInputManager& input, const GolfCourseFile& file,
+                         uint16_t selected = 0)
+      : GolfUiListActivity("GolfCourseInfo", renderer, input), file(file), initialRow(selected) {}
   void onEnter() override;
 
  private:
-  static constexpr uint8_t MAX_ROWS = 15;
+  static constexpr uint8_t MAX_ROWS = 16;
   GolfCourseFile file;
   GolfCourse course{};
   GolfCourseCatalogInfo info{};
+  uint16_t initialRow = 0;
+  int8_t playRow = -1;
   bool resolved = false;
   uint8_t count = 0;
   uint8_t mapsRow = 0;

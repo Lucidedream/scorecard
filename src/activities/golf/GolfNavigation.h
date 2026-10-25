@@ -32,6 +32,29 @@ constexpr GolfHomeEntryDecision golfDecideHomeEntry(const bool archiveMarkedAtEn
   return {stateExists, false, resumable, true, stateExists && !stateLoaded};
 }
 
+enum class GolfPickerMode : uint8_t { Browse, Play };
+enum class GolfPickerLevel : uint8_t { Hub, Regions, Courses, MyCourses };
+
+struct GolfPickerContext {
+  GolfPickerMode mode = GolfPickerMode::Play;
+  GolfPickerLevel level = GolfPickerLevel::Hub;
+  uint8_t region = 0;
+  bool byRating = true;
+  uint16_t selected = 0;
+  uint16_t parentSelected = 0;
+  bool skipHub = false;
+};
+
+GolfPickerContext golfSetupReturnContext();
+void golfSetSetupReturnContext(GolfPickerContext context);
+bool openGolfNewRound(ActivityManager& manager, GfxRenderer& renderer, MappedInputManager& mappedInput);
+bool openGolfPickerParent(ActivityManager& manager, GfxRenderer& renderer, MappedInputManager& mappedInput);
+bool startGolfCourse(ActivityManager& manager, GfxRenderer& renderer, MappedInputManager& mappedInput,
+                     const GolfCourseFile& file, uint8_t nineCount);
+void golfSetInfoReturn(const GolfCourseFile& file, uint16_t selected);
+GolfHomeEntryDecision golfReadHomeEntry();
+constexpr bool golfShowPlayCourse(GolfHomeEntryDecision decision) { return decision.showNew; }
+
 bool openGolfHome(ActivityManager& manager, GfxRenderer& renderer, MappedInputManager& mappedInput);
 bool openGolfSetup(ActivityManager& manager, GfxRenderer& renderer, MappedInputManager& mappedInput);
 bool openGolfNineSelect(ActivityManager& manager, GfxRenderer& renderer, MappedInputManager& mappedInput,

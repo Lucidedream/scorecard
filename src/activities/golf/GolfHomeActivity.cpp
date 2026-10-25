@@ -32,24 +32,7 @@ constexpr char INDEX_PATH[] = "/golf/rounds/index.csv";
 }
 
 void GolfHomeActivity::onEnter() {
-  // The RAM marker is the commit authority. Never read an older unmarked
-  // state.json over it; a failed cleanup may only be retried.
-  const bool archiveMarkedAtEntry = GOLF_ROUND_STORE.isArchived();
-  bool archiveMarkerSeen = archiveMarkedAtEntry;
-  bool cleanupSucceeded = true;
-  bool stateExists = false;
-  bool loaded = false;
-  if (archiveMarkedAtEntry) {
-    cleanupSucceeded = GOLF_ROUND_STORE.clear();
-  } else {
-    stateExists = Storage.exists(GolfRoundStore::getFilePath());
-    loaded = stateExists && GOLF_ROUND_STORE.loadFromFile();
-    archiveMarkerSeen = GOLF_ROUND_STORE.isArchived();
-    if (archiveMarkerSeen) cleanupSucceeded = GOLF_ROUND_STORE.clear();
-  }
-
-  const GolfHomeEntryDecision decision = golfDecideHomeEntry(archiveMarkerSeen, cleanupSucceeded, stateExists, loaded,
-                                                             loaded ? GOLF_ROUND_STORE.getRound().holeCount : 0);
+  const GolfHomeEntryDecision decision = golfReadHomeEntry();
   hasOpenRound = decision.showResume;
   showNewRound = decision.showNew;
   stateError = decision.stateError;
@@ -212,7 +195,7 @@ void GolfHomeActivity::activateDestination(const Destination destination) {
   app.clearTapFlash();
   switch (destination) {
     case Destination::NewRound:
-      openGolfSetup(activityManager, renderer, mappedInput);
+      openGolfNewRound(activityManager, renderer, mappedInput);
       return;
     case Destination::Tips: {
       auto list = makeUniqueNoThrow<GolfTipListActivity>(renderer, mappedInput);

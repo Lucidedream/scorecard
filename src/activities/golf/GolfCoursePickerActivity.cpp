@@ -20,9 +20,25 @@ void GolfCoursePickerActivity::onEnter() {
   UiListActivity::onEnter();
   {
     RenderLock lock(*this);
-    enterLevel(Level::Hub);
+    region = initial.region;
+    byRating = initial.byRating;
+    if (initial.level == Level::Courses) {
+      if (hasCatalog && region < scratch->catalog.count)
+        loadRegion();
+      else
+        initial.level = Level::Hub;
+    } else if (initial.level == Level::Regions && !hasCatalog) {
+      initial.level = Level::Hub;
+    }
+    enterLevel(initial.level == Level::MyCourses ? Level::Hub : initial.level);
+    nav.reset(initial.level == Level::MyCourses ? initial.parentSelected : initial.selected);
   }
-  if (!hasCatalog && !recentCount) openMyCourses(true);
+  if (initial.level == Level::MyCourses && mode == Mode::Browse)
+    openMyCourses(initial.skipHub);
+  else if (reopenInfo)
+    openInfo(infoFile);
+  else if (!hasCatalog && !recentCount)
+    openMyCourses(true);
 }
 void GolfCoursePickerActivity::onExit() {
   indexFile.close();
@@ -96,7 +112,7 @@ int GolfCoursePickerActivity::listCount() const {
 const char* GolfCoursePickerActivity::headerTitle() const {
   if (level == Level::Regions) return tr(STR_GOLF_BY_REGION);
   if (level == Level::Courses) return scratch->catalog.regions[region].name;
-  return tr(STR_GOLF_COURSE_MAP);
+  return mode == Mode::Play ? tr(STR_GOLF_NEW_ROUND) : tr(STR_GOLF_COURSE_MAP);
 }
 bool GolfCoursePickerActivity::readRecord(uint16_t ordinal, GolfCatalogRecord& record) {
   if (!indexFile || !indexFile.seek(static_cast<size_t>(ordinal) * GOLF_CATALOG_RECORD_SIZE) ||
@@ -211,22 +227,52 @@ void GolfCoursePickerActivity::drawChrome() {
   const auto chrome = golfui::chromeLayout(renderer, mappedInput, UITheme::getInstance().getMetrics().topPadding);
   golfui::drawHeader(renderer, chrome.header, headerTitle());
 }
+GolfPickerContext GolfCoursePickerActivity::context(uint16_t selected) const {
+  return {mode, level, region, byRating, selected, initial.parentSelected, initial.skipHub};
+}
 void GolfCoursePickerActivity::openInfo(const GolfCourseFile& file) {
-  auto info = makeUniqueNoThrow<GolfCourseInfoActivity>(renderer, mappedInput, file);
+  if (mode == Mode::Play) {
+    if (!CourseStore::load(file, scratch->course)) {
+      LOG_ERR("GOLF", "Play picker: failed to load course");
+      return;
+    }
+    golfSetSetupReturnContext(context(nav.selected));
+    startGolfCourse(activityManager, renderer, mappedInput, file, scratch->course.nineCount);
+    return;
+  }
+  golfSetSetupReturnContext(context(nav.selected));
+  auto info = makeUniqueNoThrow<GolfCourseInfoActivity>(renderer, mappedInput, file, reopenInfo ? infoRow : 0);
   if (!info) {
     LOG_ERR("GOLF", "OOM: course info activity");
     return;
   }
+  reopenInfo = false;
   startActivityForResult(std::move(info), nullptr);
 }
 void GolfCoursePickerActivity::openMyCourses(bool finishOnReturn) {
+  if (mode == Mode::Play) {
+    auto saved = context(0);
+    saved.level = Level::MyCourses;
+    saved.parentSelected = nav.selected;
+    saved.skipHub = finishOnReturn;
+    golfSetSetupReturnContext(saved);
+    openGolfSetup(activityManager, renderer, mappedInput);
+    return;
+  }
   auto list = makeUniqueNoThrow<GolfCourseMapListActivity>(renderer, mappedInput);
   if (!list) {
     LOG_ERR("GOLF", "OOM: My courses activity");
     return;
   }
+  auto saved = context(initial.level == Level::MyCourses ? initial.selected : 0);
+  saved.level = Level::MyCourses;
+  saved.parentSelected = initial.level == Level::MyCourses ? initial.parentSelected : nav.selected;
+  saved.skipHub = finishOnReturn;
+  list->setReturnContext(saved);
+  if (reopenInfo) list->restoreInfo(infoFile, infoRow);
+  reopenInfo = false;
   startActivityForResult(std::move(list), [this, finishOnReturn](const ActivityResult&) {
-    if (finishOnReturn) finish();
+    if (finishOnReturn) onBackButton();
   });
 }
 void GolfCoursePickerActivity::activateIndex(int index) {
@@ -272,6 +318,10 @@ void GolfCoursePickerActivity::activateIndex(int index) {
 }
 void GolfCoursePickerActivity::onBackButton() {
   if (level == Level::Hub) {
+    if (mode == Mode::Play || standalone) {
+      openGolfHome(activityManager, renderer, mappedInput);
+      return;
+    }
     finish();
     return;
   }

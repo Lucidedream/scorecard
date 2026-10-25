@@ -6,10 +6,13 @@
 #include <fstream>
 #include <string>
 
+#include "CourseOrder.h"
 #include "CourseStore.h"
 #include "GolfCatalog.h"
 #include "GolfCourseCatalogInfo.h"
 #include "GolfCourseParse.h"
+#include "GolfPaths.h"
+#include "src/activities/golf/GolfSetupReturn.h"
 
 namespace {
 std::string record(uint32_t id, const char* name, const char* rating = "46", uint32_t reviews = 12,
@@ -263,4 +266,89 @@ TEST(CatalogRecent, ReverseStopsAtFiveAndResolvesOnce) {
   EXPECT_EQ(reader.count, 5);
   EXPECT_STREQ(reader.names[0], "Five");
   EXPECT_STREQ(reader.names[4], "One");
+}
+
+TEST(CatalogPlay, ReturnContextRoundTrip) {
+  GolfSetupReturn route;
+  for (const auto level :
+       {GolfPickerLevel::Hub, GolfPickerLevel::Regions, GolfPickerLevel::Courses, GolfPickerLevel::MyCourses}) {
+    for (bool rating : {false, true}) {
+      route.selectPicker({GolfPickerMode::Play, level, 7, rating, 201, 6, false});
+      const auto saved = route.picker;
+      GolfCourseFile file{};
+      file.source = GolfCourseSource::Catalog;
+      strcpy(file.filename, "bg-123.json");
+      route.selectInfo(file, 15);
+      EXPECT_TRUE(route.toInfo);
+      EXPECT_STREQ(route.infoFile.filename, "bg-123.json");
+      EXPECT_EQ(route.infoRow, 15);
+      EXPECT_EQ(route.picker.level, level);
+      route.selectPicker(saved);
+      EXPECT_FALSE(route.toInfo);
+      EXPECT_EQ(route.picker.mode, GolfPickerMode::Play);
+      EXPECT_EQ(route.picker.level, level);
+      EXPECT_EQ(route.picker.region, 7);
+      EXPECT_EQ(route.picker.byRating, rating);
+      EXPECT_EQ(route.picker.selected, 201);
+      route.parent();
+      EXPECT_EQ(route.picker.level, GolfPickerLevel::Hub);
+      EXPECT_EQ(route.picker.selected, 6);
+    }
+  }
+}
+TEST(CatalogPlay, VisibilityForEveryHomeDecision) {
+  for (bool marked : {false, true})
+    for (bool cleanup : {false, true})
+      for (bool exists : {false, true})
+        for (bool loaded : {false, true})
+          for (uint8_t holes : {0, 9, 18, 27}) {
+            const auto decision = golfDecideHomeEntry(marked, cleanup, exists, loaded, holes);
+            EXPECT_EQ(golfShowPlayCourse(decision), decision.showNew);
+            EXPECT_EQ(golfShowPlayCourse(decision), !marked || cleanup);
+          }
+}
+
+TEST_F(CatalogStore, CatalogRoundNameResolvesAndUsesExplicitMapDirectory) {
+  auto doc = courseDoc("Invented Round Course");
+  doc["maps"] = "bg-321";
+  std::string json;
+  serializeJson(doc, json);
+  write("golf/catalog/courses/bg-321.json", json);
+  write("golf/catalog/index.dat", record(321, "Invented Round Course"));
+  GolfRound resumed{};
+  GolfCourseFile file{};
+  GolfCourse course{};
+  ASSERT_TRUE(CourseStore::findByName("Invented Round Course", file, course));
+  ASSERT_TRUE(golfComposeRound(course, golfDefaultNineSelection(course), 0, resumed));
+  EXPECT_STREQ(resumed.courseName, "Invented Round Course");
+  course = {};
+  ASSERT_TRUE(CourseStore::findByName(resumed.courseName, file, course));
+  EXPECT_EQ(file.source, GolfCourseSource::Catalog);
+  EXPECT_STREQ(file.filename, "bg-321.json");
+  char mapDirectory[48]{};
+  ASSERT_TRUE(golfCourseMapsDir(course, mapDirectory, sizeof(mapDirectory)));
+  EXPECT_STREQ(mapDirectory, "bg-321");
+}
+
+TEST(CatalogPlay, InfoReturnPreservesBrowseMyCoursesAndFallback) {
+  GolfSetupReturn route;
+  route.selectPicker({GolfPickerMode::Browse, GolfPickerLevel::MyCourses, 2, false, 17, 4, true});
+  GolfCourseFile file{};
+  file.source = GolfCourseSource::Owner;
+  strcpy(file.filename, "invented.json");
+  route.selectInfo(file, 14);
+  EXPECT_TRUE(route.toInfo);
+  EXPECT_EQ(route.picker.mode, GolfPickerMode::Browse);
+  EXPECT_EQ(route.picker.level, GolfPickerLevel::MyCourses);
+  EXPECT_EQ(route.picker.selected, 17);
+  EXPECT_EQ(route.picker.parentSelected, 4);
+  EXPECT_TRUE(route.picker.skipHub);
+  EXPECT_EQ(route.infoFile.source, GolfCourseSource::Owner);
+  EXPECT_EQ(route.infoRow, 14);
+  route.selectPicker({});
+  EXPECT_FALSE(route.toInfo);
+  EXPECT_EQ(route.picker.mode, GolfPickerMode::Play);
+  EXPECT_EQ(route.picker.level, GolfPickerLevel::Hub);
+  EXPECT_EQ(route.picker.selected, 0);
+  EXPECT_FALSE(route.picker.skipHub);
 }

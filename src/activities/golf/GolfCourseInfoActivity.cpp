@@ -8,6 +8,7 @@
 
 #include "GolfCourseMapBrowserActivity.h"
 #include "GolfCourseTeeInfoActivity.h"
+#include "GolfNavigation.h"
 #include "components/UITheme.h"
 namespace fui = freeink::ui;
 namespace {
@@ -37,6 +38,7 @@ void GolfCourseInfoActivity::onEnter() {
   buildRows();
   LOG_DBG("GOLF", "Catalog Course info: free heap %u", ESP.getFreeHeap());
   UiListActivity::onEnter();
+  nav.reset(initialRow);
 }
 uint8_t GolfCourseInfoActivity::addFact(const char* label, const char* value) {
   const uint8_t row = count++;
@@ -101,6 +103,10 @@ void GolfCourseInfoActivity::buildRows() {
   rows[mapsRow].enabled = true;
   addFact(tr(STR_GOLF_TEE_INFO));
   rows[mapsRow + 1].enabled = true;
+  if (golfShowPlayCourse(golfReadHomeEntry())) {
+    playRow = addFact(tr(STR_GOLF_PLAY_THIS_COURSE));
+    rows[playRow].enabled = true;
+  }
 }
 void GolfCourseInfoActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
@@ -147,7 +153,11 @@ void GolfCourseInfoActivity::drawChrome() {
 void GolfCourseInfoActivity::activateIndex(int index) {
   app.clearTapFlash();
   if (!resolved) return;
-  if (index == mapsRow) {
+  if (index == playRow) {
+    if (!golfShowPlayCourse(golfReadHomeEntry())) return;
+    golfSetInfoReturn(file, index);
+    startGolfCourse(activityManager, renderer, mappedInput, file, course.nineCount);
+  } else if (index == mapsRow) {
     auto browser = makeUniqueNoThrow<GolfCourseMapBrowserActivity>(renderer, mappedInput, file);
     if (!browser) {
       LOG_ERR("GOLF", "OOM: hole maps activity");

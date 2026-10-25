@@ -17,6 +17,6 @@ add_executable(golf_catalog_tests
 )
 target_link_libraries(golf_catalog_tests PRIVATE GTest::gtest_main ArduinoJson crosspoint_test_common)
 target_include_directories(golf_catalog_tests PRIVATE
-  stubs ${REPO_ROOT}/test/minibidi_arabic/stubs ${REPO_ROOT}/src/golf ${REPO_ROOT}/lib/Memory)
+  stubs ${REPO_ROOT}/src ${REPO_ROOT}/test/minibidi_arabic/stubs ${REPO_ROOT}/src/golf ${REPO_ROOT}/lib/Memory)
 target_compile_definitions(golf_catalog_tests PRIVATE CROSSPOINT_GOLF=1)
 gtest_discover_tests(golf_catalog_tests)

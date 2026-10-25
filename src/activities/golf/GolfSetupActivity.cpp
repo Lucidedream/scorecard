@@ -20,6 +20,7 @@ namespace fui = freeink::ui;
 void GolfSetupActivity::onEnter() {
   loadCourses();
   UiListActivity::onEnter();
+  nav.reset(golfSetupReturnContext().selected);
 }
 
 void GolfSetupActivity::loadCourses() {
@@ -83,18 +84,16 @@ const char* GolfSetupActivity::headerTitle() const {
   return noCourses ? tr(STR_GOLF_NO_COURSES) : tr(STR_GOLF_CHOOSE_COURSE);
 }
 
-void GolfSetupActivity::onBackButton() { openGolfHome(activityManager, renderer, mappedInput); }
+void GolfSetupActivity::onBackButton() { openGolfPickerParent(activityManager, renderer, mappedInput); }
 
 void GolfSetupActivity::activateIndex(const int index) {
   app.clearTapFlash();
   if (index < 0 || index >= courseCount) return;
   const auto& course = courses[index];
-  const auto selection = golfDefaultNineSelection(course);
-  if (course.nineCount >= 2) {
-    openGolfNineSelect(activityManager, renderer, mappedInput, course.file, selection);
-  } else {
-    openGolfPlayerSetup(activityManager, renderer, mappedInput, course.file, selection);
-  }
+  auto context = golfSetupReturnContext();
+  context.selected = index;
+  golfSetSetupReturnContext(context);
+  startGolfCourse(activityManager, renderer, mappedInput, course.file, course.nineCount);
 }
 
 void GolfSetupActivity::buildScreen(UiScreen& screen) {

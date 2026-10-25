@@ -21,6 +21,8 @@ void GolfCourseMapListActivity::onEnter() {
   LOG_DBG("GOLF", "Catalog picker My courses: free heap %u", ESP.getFreeHeap());
   loadCourses();
   UiListActivity::onEnter();
+  nav.reset(context.selected);
+  if (reopenInfo) openInfo(infoFile, infoRow);
 }
 
 void GolfCourseMapListActivity::loadCourses() {
@@ -87,8 +89,12 @@ const char* GolfCourseMapListActivity::headerTitle() const {
 void GolfCourseMapListActivity::activateIndex(const int index) {
   app.clearTapFlash();
   if (index < 0 || index >= courseCount) return;
-  const GolfCourseSummary& course = courses[index];
-  auto browser = makeUniqueNoThrow<GolfCourseInfoActivity>(renderer, mappedInput, course.file);
+  context.selected = index;
+  openInfo(courses[index].file);
+}
+void GolfCourseMapListActivity::openInfo(const GolfCourseFile& file, uint16_t selected) {
+  golfSetSetupReturnContext(context);
+  auto browser = makeUniqueNoThrow<GolfCourseInfoActivity>(renderer, mappedInput, file, selected);
   if (!browser) {
     LOG_ERR("GOLF", "OOM: course map browser activity");
     return;

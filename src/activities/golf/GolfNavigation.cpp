@@ -10,6 +10,7 @@
 #include <atomic>
 #include <cstdio>
 
+#include "GolfCoursePickerActivity.h"
 #include "GolfHomeActivity.h"
 #include "GolfMessageActivity.h"
 #include "GolfNineSelectActivity.h"
@@ -17,7 +18,9 @@
 #include "GolfRoundSummaryActivity.h"
 #include "GolfScoringActivity.h"
 #include "GolfSetupActivity.h"
+#include "GolfSetupReturn.h"
 #include "activities/ActivityManager.h"
+#include "golf/CourseOrder.h"
 #include "golf/GolfPaths.h"
 #include "golf/GolfPenalty.h"
 #include "golf/GolfRoundStore.h"
@@ -25,6 +28,7 @@
 #include "golf/RoundArchive.h"
 
 namespace {
+GolfSetupReturn setupReturn;
 bool roundDirty = false;
 std::atomic_bool roundSaveFailed{false};
 
@@ -76,8 +80,51 @@ bool openGolfHome(ActivityManager& manager, GfxRenderer& renderer, MappedInputMa
   return replaceGolfActivity<GolfHomeActivity>(manager, renderer, mappedInput, "home");
 }
 
+GolfPickerContext golfSetupReturnContext() { return setupReturn.picker; }
+void golfSetSetupReturnContext(GolfPickerContext context) { setupReturn.selectPicker(context); }
+void golfSetInfoReturn(const GolfCourseFile& file, uint16_t selected) { setupReturn.selectInfo(file, selected); }
+bool openGolfNewRound(ActivityManager& manager, GfxRenderer& renderer, MappedInputManager& mappedInput) {
+  golfSetSetupReturnContext({});
+  return openGolfSetup(manager, renderer, mappedInput);
+}
+bool openGolfPickerParent(ActivityManager& manager, GfxRenderer& renderer, MappedInputManager& mappedInput) {
+  if (setupReturn.picker.skipHub) return openGolfHome(manager, renderer, mappedInput);
+  setupReturn.parent();
+  return openGolfSetup(manager, renderer, mappedInput);
+}
 bool openGolfSetup(ActivityManager& manager, GfxRenderer& renderer, MappedInputManager& mappedInput) {
-  return replaceGolfActivity<GolfSetupActivity>(manager, renderer, mappedInput, "setup");
+  if (!setupReturn.toInfo && setupReturn.picker.level == GolfPickerLevel::MyCourses)
+    return replaceGolfActivity<GolfSetupActivity>(manager, renderer, mappedInput, "setup");
+  auto picker = makeUniqueNoThrow<GolfCoursePickerActivity>(renderer, mappedInput, setupReturn.picker);
+  if (!picker) {
+    LOG_ERR("GOLF", "OOM: Play picker activity");
+    return false;
+  }
+  if (setupReturn.toInfo) picker->restoreInfo(setupReturn.infoFile, setupReturn.infoRow);
+  manager.replaceActivity(std::move(picker));
+  return true;
+}
+bool startGolfCourse(ActivityManager& manager, GfxRenderer& renderer, MappedInputManager& mappedInput,
+                     const GolfCourseFile& file, uint8_t nineCount) {
+  const auto selection = golfDefaultNineSelection(nineCount);
+  return nineCount >= 2 ? openGolfNineSelect(manager, renderer, mappedInput, file, selection)
+                        : openGolfPlayerSetup(manager, renderer, mappedInput, file, selection);
+}
+GolfHomeEntryDecision golfReadHomeEntry() {
+  const bool marked = GOLF_ROUND_STORE.isArchived();
+  bool markerSeen = marked;
+  bool cleanup = true;
+  bool exists = false;
+  bool loaded = false;
+  if (marked) {
+    cleanup = GOLF_ROUND_STORE.clear();
+  } else {
+    exists = Storage.exists(GolfRoundStore::getFilePath());
+    loaded = exists && GOLF_ROUND_STORE.loadFromFile();
+    markerSeen = GOLF_ROUND_STORE.isArchived();
+    if (markerSeen) cleanup = GOLF_ROUND_STORE.clear();
+  }
+  return golfDecideHomeEntry(markerSeen, cleanup, exists, loaded, loaded ? GOLF_ROUND_STORE.getRound().holeCount : 0);
 }
 
 bool openGolfNineSelect(ActivityManager& manager, GfxRenderer& renderer, MappedInputManager& mappedInput,
