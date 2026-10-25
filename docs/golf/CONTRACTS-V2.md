@@ -3262,3 +3262,111 @@ card, **Hole map**, Abandon round, Finish round, Send, Tips.
   missing-map message.
 * The menu's row handling uses named row constants or an enum, not bare indices, so
   inserting a row cannot silently shift Finish or Abandon.
+
+## 43. The course picker in blocks (v8)
+
+*Owner-approved 2026-10-25. Mocks, 1:1: `docs/golf/design/catalog-blocks.html`.* This section
+restyles the §41.5 picker (both modes) and Course info in the main menu's vocabulary. It
+covers bordered blocks, the focused block drawn inverted, a big figure where a number
+matters, and a detail box. Levels, Back behaviour, the return context, Play visibility and
+memory bounds from §41.4–41.5 are unchanged. It applies on the X4 and the X4 Pro.
+
+### 43.1 Shared drawing
+
+The main menu's tile strip and bordered detail box are factored out of
+`GolfHomeActivity::buildScreen` into a shared golf component, as §34.3 anticipated, and
+reused here. **The main menu must render pixel-identically on the X4 after the refactor.**
+Pure layout (tile widths, grid cell rects, card rects, hit-tests, page counts) is
+`constexpr` in `GolfUiLayout.h` and host-tested.
+
+New Lucide tile icons are added to `golfTileIcons.manifest` and regenerated at 16/24/32 px:
+`history` (Recent), `flag` (My courses, Play), `map-pin` (By region), `map` (Hole maps,
+already present) and `table` (Tee info). Existing icons stay byte-identical. Stock Lucide
+SVGs are MIT-licensed; fetch only those files.
+
+### 43.2 Hub
+
+* A tile strip with **Recent** (`history`), **My courses** (`flag`) and **By region**
+  (`map-pin`). Each tile shows its label and a sub-line: `N courses` / `N on card` /
+  `N regions`.
+* Recent's tile is hidden when Recent is empty, and By region's when the catalog is
+  absent. With one tile left, the hub is skipped (§41.5).
+* The detail box describes the focused tile:
+  - Recent: up to 4 course names, each with its hole count, newest first;
+  - My courses: the number of courses on the card;
+  - By region: `N courses · R regions · M with hole maps`. M is counted once from the
+    index flags while the catalog loads.
+* Confirm reads **Open**. Left/Right and the side rocker move between tiles; touch taps a
+  tile.
+
+### 43.3 Regions
+
+* A **2-column grid of blocks**, 5 rows (10 per page). Each block shows the region name
+  and its course count as a big figure with the label `courses`.
+* **Order: course count descending**, ties A–Z. The device sorts the ≤64 entries it
+  already holds, so no file format changes.
+* Below the grid there is a page indicator, `p / n` plus pips.
+* Every button steps through blocks in reading order, wrapping onto the next or previous
+  page. Confirm opens the region. Touch: tap a block; a horizontal swipe turns the page.
+
+### 43.4 Course cards
+
+These cards are used by Region courses, Recent and My courses.
+
+* A full-width card, at least 96 px tall. The name sits on the first line, ellipsised.
+  The sub-line reads `N holes · par P · maps` or `· no maps`.
+* On the right is a big figure:
+  - catalog courses: the rating `x.y`, with `N reviews` underneath, or `—` when unrated;
+  - owner courses (My courses, or a Recent course resolved to an owner file): **par**,
+    with `par` underneath, as on today's §22.2 rows.
+* **Region courses** add a two-block **sort segment** (`Rating` | `Name`) as the first
+  focusable item on page 1. The current sort is underlined; Confirm on it, or a touch on
+  either half, sets the sort.
+* Confirm on a card reads **Start** in Play mode and **Open** in Browse mode.
+* At most one page of names is held in memory (§41.4).
+
+### 43.5 Course info
+
+* The header block holds the name, then `region · N holes · par P · Y yd`.
+* Below it is a small tile strip: **Play** (`flag`, only under the §41.5 rule), **Hole
+  maps** (`map`) and **Tee info** (`table`). These tiles are the only focusable items.
+  Confirm reads Start / Open / Open, following the tile.
+* Below the tiles, read-only:
+  - the rating as a big `x.y / 5` with `from N reviews`;
+  - six labelled bars (Greens, Difficulty, Caddies, Value, Clubhouse, Food) with their
+    values;
+  - a line `Nines: A · B · C`, then `Designer … · opened YYYY` when known.
+* Owner courses without catalog facts show the header, the tiles, and holes, par, yards
+  and nines only.
+
+## 44. No footer on touch boards, except Scoring (v8)
+
+*Owner decision 2026-10-25.* §37.3 drew a four-cell touch footer on every golf screen on the
+X4 Pro. On a touch board (`mappedInput.hasTouch()`), golf screens now draw **no footer and
+reserve no footer height**. The one exception is **Scoring**, which keeps its four cells
+(MENU · MARK · PREV · NEXT) unchanged.
+
+**Nothing changes on the X4**, where the footer labels the physical buttons.
+
+**Back on touch boards** is the host's left-edge swipe (plus the Home key). No on-screen
+back control is added. Any screen-level horizontal swipe used for paging must ignore a
+swipe that the host classifies as the left-edge Back gesture (`wasEdgeSwipe`). An
+edge-swipe never also pages.
+
+Every action a footer cell performed must stay reachable by touch:
+
+| Screen | Footer action without its own touch target | Touch replacement |
+|---|---|---|
+| Main menu, History chooser, picker hub, Course info | Open / Start / ◀ ▶ | tap the tile |
+| All `GolfUiListActivity` lists | Select / ▲ ▼ | tap the row; Up/Down buttons and list scrolling |
+| Scorecard (Card), Tee info | ◀ ▶ tab | tap the tab |
+| Course-map browser | ◀ ▶ hole, **Tee** | horizontal swipe (existing); **tap the hole band** opens Tee info |
+| Hole review, Tip note, Round export pages | ◀ ▶ | **new** horizontal swipe, left = next, right = previous |
+| Round export | Open / Done (Confirm) | a tappable block in the page body carrying that label |
+| Round summary | **Send** | a tappable **Send** block in the page body |
+| Player setup | **Next / Start** (Confirm beyond a row) | the same label as the **last row** of the list |
+| Statistics, Trends, Career stats, messages | Back only | left-edge swipe |
+| Scoring | MENU · MARK · PREV · NEXT | **footer kept** |
+
+The worker's report lists every golf screen with every action and how it is reached on the
+X4 Pro. Any action that cannot be reached means the work is not done.

@@ -1,0 +1,304 @@
+<title>Course Picker Blocks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Libre+Franklin:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: one row per screen — a 1:1 e-ink panel (480×800) beside its notes, stacked on narrow widths.
+   Tokens follow docs/golf/design/navigation-ux.html so the mocks match the approved main menu. */
+:root {
+  --paper:#F1F4F1; --card:#FBFCFA; --ink:#13181A; --ink-2:#4C5654; --ink-3:#737E7A;
+  --rule:#D2D9D2; --accent:#1E5C3E; --accent-wash:#E2ECE4; --flag:#A93826;
+  --panel-bg:#FFFFFF; --panel-ink:#000000; --panel-edge:#98A29C;
+  --display:"Archivo",system-ui,sans-serif;
+  --body:"Libre Franklin",-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:#0F1412; --card:#161C19; --ink:#E6EBE6; --ink-2:#A3AEA8; --ink-3:#7B8681;
+    --rule:#29322D; --accent:#6FC08D; --accent-wash:#17251D; --flag:#E1745F;
+    --panel-bg:#E9EBE7; --panel-ink:#0B0E0C; --panel-edge:#3A433D; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper:#0F1412; --card:#161C19; --ink:#E6EBE6; --ink-2:#A3AEA8; --ink-3:#7B8681;
+  --rule:#29322D; --accent:#6FC08D; --accent-wash:#17251D; --flag:#E1745F;
+  --panel-bg:#E9EBE7; --panel-ink:#0B0E0C; --panel-edge:#3A433D; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.55}
+.wrap{max-width:1040px;margin:0 auto;padding-inline:16px;padding-block:32px 64px}
+header.page{max-width:68ch;margin-bottom:36px}
+header.page h1{font-family:var(--display);font-size:clamp(1.7rem,1.3rem + 1.6vw,2.4rem);line-height:1.15;margin:0 0 10px;text-wrap:balance}
+header.page p{margin:0 0 8px;color:var(--ink-2)}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+
+.shot{display:grid;grid-template-columns:minmax(0,auto) minmax(0,1fr);gap:28px;align-items:start;margin-bottom:56px}
+@media (max-width:900px){.shot{grid-template-columns:minmax(0,1fr)}}
+.frame-scroll{overflow-x:auto;max-width:100%}
+.notes{min-width:0;max-width:62ch}
+.notes h2{font-family:var(--display);font-size:1.35rem;margin:0 0 6px}
+.notes .where{font-family:var(--mono);font-size:12px;color:var(--ink-3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:14px}
+.notes p{margin:0 0 12px}
+.notes ul{margin:0 0 12px;padding-left:1.1em}
+.notes li{margin-bottom:6px}
+.notes .ask{border-left:3px solid var(--accent);background:var(--accent-wash);padding:10px 14px;margin-top:14px}
+.notes .ask b{font-family:var(--display)}
+kbd{font-family:var(--mono);font-size:12px;border:1px solid var(--rule);border-bottom-width:2px;padding:0 5px;border-radius:3px;background:var(--card)}
+
+/* ---------- the e-ink panel ---------- */
+.dev{width:480px;height:800px;background:var(--panel-bg);color:var(--panel-ink);border:2px solid var(--panel-edge);
+  display:flex;flex-direction:column;font-family:var(--display);overflow:hidden;flex:none}
+.hdr{display:flex;justify-content:space-between;align-items:center;padding:0 16px;height:46px;flex:none;
+  border-bottom:2px solid var(--panel-ink);font-size:15px;font-weight:600;letter-spacing:.04em}
+.hdr .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:360px}
+.batt{display:inline-flex;align-items:center;gap:6px;font-size:13px}
+.cell{display:inline-block;width:22px;height:12px;border:2px solid var(--panel-ink);position:relative}
+.cell::after{content:"";position:absolute;right:-4px;top:3px;width:2px;height:4px;background:var(--panel-ink)}
+.cell i{position:absolute;left:1px;top:1px;bottom:1px;width:62%;background:var(--panel-ink)}
+.body{flex:1;display:flex;flex-direction:column;min-height:0}
+.foot{display:grid;grid-template-columns:repeat(4,1fr);height:52px;flex:none;border-top:2px solid var(--panel-ink)}
+.foot span{display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;border-right:1px solid var(--panel-ink)}
+.foot span:last-child{border-right:0}
+.on{background:var(--panel-ink);color:var(--panel-bg)}
+
+/* tile strip (main-menu vocabulary) */
+.tiles{display:flex;flex:none;border-bottom:2px solid var(--panel-ink)}
+.tile{flex:1;border-right:2px solid var(--panel-ink);padding:24px 8px 20px;text-align:center;display:flex;
+  flex-direction:column;align-items:center;justify-content:center;gap:12px;min-height:190px}
+.tile:last-child{border-right:0}
+.tile svg{width:52px;height:52px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.tile .nm{font-size:15px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.tile .sub{font-family:var(--body);font-size:12px;font-weight:500;opacity:.75}
+.tiles.small .tile{min-height:132px;padding:16px 6px 14px;gap:9px}
+.tiles.small .tile svg{width:40px;height:40px}
+
+.detail{flex:1;margin:18px;border:2px solid var(--panel-ink);padding:18px 18px 14px;font-family:var(--body);min-height:0}
+.detail .t{font-family:var(--display);font-size:20px;font-weight:700;margin-bottom:10px}
+.detail .m{font-size:14px;opacity:.75}
+.rec{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid var(--panel-ink);font-size:15px}
+.rec:first-of-type{border-top:0}
+.rec .n{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.rec .k{font-family:var(--mono);font-size:12px;opacity:.75;white-space:nowrap}
+.stat{display:flex;gap:0;border:2px solid var(--panel-ink);margin-top:6px}
+.stat div{flex:1;text-align:center;padding:12px 4px;border-right:1px solid var(--panel-ink)}
+.stat div:last-child{border-right:0}
+.stat b{display:block;font-family:var(--display);font-size:30px;line-height:1.1;font-variant-numeric:tabular-nums}
+.stat span{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;opacity:.75}
+
+/* region grid */
+.grid{display:grid;grid-template-columns:1fr 1fr;flex:1;min-height:0}
+.blk{border-right:2px solid var(--panel-ink);border-bottom:2px solid var(--panel-ink);padding:14px 16px;display:flex;
+  flex-direction:column;justify-content:space-between}
+.blk:nth-child(2n){border-right:0}
+.blk .nm{font-size:19px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.blk .ct{display:flex;align-items:baseline;gap:6px}
+.blk .ct b{font-size:30px;font-variant-numeric:tabular-nums;line-height:1}
+.blk .ct span{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;opacity:.75}
+.pager{display:flex;align-items:center;justify-content:center;gap:10px;height:40px;flex:none;font-size:13px;font-weight:700}
+.pips{display:flex;gap:8px}
+.pips span{width:10px;height:10px;border:2px solid var(--panel-ink);border-radius:50%}
+.pips span.on{background:var(--panel-ink)}
+
+/* sort segment + course cards */
+.seg{display:grid;grid-template-columns:1fr 1fr;flex:none;border-bottom:2px solid var(--panel-ink)}
+.seg span{height:48px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;
+  letter-spacing:.1em;text-transform:uppercase;border-right:2px solid var(--panel-ink)}
+.seg span:last-child{border-right:0}
+.seg span.cur{text-decoration:underline;text-decoration-thickness:3px;text-underline-offset:6px}
+.card{display:flex;align-items:center;gap:14px;padding:0 18px;height:104px;border-bottom:2px solid var(--panel-ink);flex:none}
+.card .main{flex:1;min-width:0}
+.card .t{font-size:20px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .s{font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;opacity:.75;margin-top:6px}
+.card .fig{text-align:right;line-height:1.15;flex:none;min-width:76px}
+.card .fig b{font-size:32px;font-variant-numeric:tabular-nums}
+.card .fig span{display:block;font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;opacity:.75}
+.card .fig.none b{font-size:22px}
+
+/* course info */
+.ihead{padding:16px 18px 14px;border-bottom:2px solid var(--panel-ink);flex:none}
+.ihead .nm{font-size:23px;font-weight:700;line-height:1.2}
+.ihead .s{font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;opacity:.75;margin-top:6px}
+.score{display:flex;gap:16px;align-items:center;padding:14px 18px 6px}
+.score b{font-size:46px;line-height:1;font-variant-numeric:tabular-nums}
+.score small{font-size:16px;opacity:.75;font-weight:600}
+.score .r{font-family:var(--body);font-size:13px;opacity:.8}
+.bars{padding:4px 18px 10px;font-family:var(--body);font-size:13px}
+.bar{display:grid;grid-template-columns:96px 1fr 30px;align-items:center;gap:10px;height:25px}
+.bar .track{height:10px;border:2px solid var(--panel-ink);position:relative}
+.bar .track i{position:absolute;left:0;top:0;bottom:0;background:var(--panel-ink)}
+.bar .v{font-family:var(--mono);font-size:12px;text-align:right}
+.facts{margin:6px 18px 0;padding-top:10px;border-top:1px solid var(--panel-ink);font-family:var(--body);font-size:13px;line-height:1.7}
+.ex{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-top:8px}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+<header class="page">
+  <div class="eyebrow">Golf scorecard · v8 catalog · design for review</div>
+  <h1>Course picker in the main menu’s blocks</h1>
+  <p>New round and Course Map share one picker. Today its levels are plain lists. This proposal rebuilds them from the main menu’s vocabulary: bordered blocks, the focused block drawn inverted, a big figure where a number matters, and a detail box that explains the focused block.</p>
+  <p>Panels are 1:1 at the X4’s 480 × 800 portrait size. Course names are real; ratings, review counts, category scores and region counts are invented for illustration. The Recent names are your own courses, shown as examples.</p>
+</header>
+
+<!-- 1. Hub -->
+<section class="shot">
+  <div class="frame-scroll"><div class="dev" role="img" aria-label="New round hub with three tiles">
+    <div class="hdr"><span class="t">NEW ROUND</span><span class="batt">78%<span class="cell"><i></i></span></span></div>
+    <div class="body">
+      <div class="tiles">
+        <div class="tile on">
+          <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
+          <div class="nm">Recent</div><div class="sub">4 courses</div>
+        </div>
+        <div class="tile">
+          <svg viewBox="0 0 24 24"><path d="M4 22V4"/><path d="M4 4h12l-2 4 2 4H4"/></svg>
+          <div class="nm">My courses</div><div class="sub">4 on card</div>
+        </div>
+        <div class="tile">
+          <svg viewBox="0 0 24 24"><path d="M20 10c0 5-8 12-8 12s-8-7-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+          <div class="nm">By region</div><div class="sub">31 regions</div>
+        </div>
+      </div>
+      <div class="detail">
+        <div class="t">Recent</div>
+        <div class="rec"><span class="n">Nine Dragons Hill Golf Club</span><span class="k">27 H</span></div>
+        <div class="rec"><span class="n">Sanyang Golf Club</span><span class="k">18 H</span></div>
+        <div class="rec"><span class="n">Lake Hill Golf - Dragon Course</span><span class="k">18 H</span></div>
+        <div class="rec"><span class="n">Moganshan Gowin Golf Club</span><span class="k">18 H</span></div>
+        <div class="ex">Example: your courses, newest first</div>
+      </div>
+    </div>
+    <div class="foot"><span>Back</span><span class="on">Open</span><span>◀</span><span>▶</span></div>
+  </div></div>
+  <div class="notes">
+    <h2>1 · Hub: three tiles and a detail box</h2>
+    <div class="where">New round and Course Map share it · only the header differs</div>
+    <p>This is the main menu’s shape. The three ways in are always visible, one Confirm away, and the box below says what the focused tile holds.</p>
+    <ul>
+      <li><b>Recent</b> previews its courses in the box. Open shows them as cards (screen 3’s card style) so you can pick one.</li>
+      <li><b>My courses</b> says how many are on the card. <b>By region</b> says “425 courses · 31 regions · 249 with hole maps”.</li>
+      <li>On the hub the Confirm cell reads <kbd>Open</kbd>. Inside New round, a course card’s Confirm reads <kbd>Start</kbd>, as §22.1 already does.</li>
+      <li>Buttons: Left/Right or the side rocker move between tiles. Touch: tap a tile.</li>
+    </ul>
+    <p>Icons are Lucide <code>history</code>, <code>flag</code> and <code>map-pin</code>, added to the existing icon manifest. When the card has no catalog, By region is hidden and the strip becomes two tiles.</p>
+  </div>
+</section>
+
+<!-- 2. Regions -->
+<section class="shot">
+  <div class="frame-scroll"><div class="dev" role="img" aria-label="Regions as a two-column grid of blocks">
+    <div class="hdr"><span class="t">BY REGION</span><span class="batt">78%<span class="cell"><i></i></span></span></div>
+    <div class="body">
+      <div class="grid">
+        <div class="blk"><span class="nm">Guangdong</span><span class="ct"><b>64</b><span>courses</span></span></div>
+        <div class="blk"><span class="nm">Taiwan</span><span class="ct"><b>48</b><span>courses</span></span></div>
+        <div class="blk"><span class="nm">Beijing</span><span class="ct"><b>45</b><span>courses</span></span></div>
+        <div class="blk"><span class="nm">Hainan</span><span class="ct"><b>33</b><span>courses</span></span></div>
+        <div class="blk"><span class="nm">Jiangsu</span><span class="ct"><b>28</b><span>courses</span></span></div>
+        <div class="blk"><span class="nm">Shandong</span><span class="ct"><b>24</b><span>courses</span></span></div>
+        <div class="blk on"><span class="nm">Zhejiang</span><span class="ct"><b>19</b><span>courses</span></span></div>
+        <div class="blk"><span class="nm">Shanghai</span><span class="ct"><b>15</b><span>courses</span></span></div>
+        <div class="blk"><span class="nm">Yunnan</span><span class="ct"><b>14</b><span>courses</span></span></div>
+        <div class="blk"><span class="nm">Hebei</span><span class="ct"><b>11</b><span>courses</span></span></div>
+      </div>
+      <div class="pager"><span>1 / 4</span><span class="pips"><span class="on"></span><span></span><span></span><span></span></span></div>
+    </div>
+    <div class="foot"><span>Back</span><span class="on">Open</span><span>◀</span><span>▶</span></div>
+  </div></div>
+  <div class="notes">
+    <h2>2 · Regions: a grid of blocks</h2>
+    <div class="where">31 regions · 10 per page · 4 pages</div>
+    <p>Each region is a block with its name and course count as a big figure, so you can see at a glance where the courses are.</p>
+    <ul>
+      <li>Every button steps through the blocks in reading order. Left/Right and the rocker move one block, wrapping onto the next page. Touch: tap a block, swipe to turn the page.</li>
+      <li>Memory is unchanged: <code>regions.txt</code> is already held in RAM (≤64 × 32 B), and the grid only draws the visible ten.</li>
+    </ul>
+    <div class="ask"><b>Decide:</b> order regions by <b>course count</b>, as shown, so the provinces you are likely to want come first? Or <b>A–Z</b>, as in the index file? Count order needs no file change; the device sorts 31 entries.</div>
+  </div>
+</section>
+
+<!-- 3. Region courses -->
+<section class="shot">
+  <div class="frame-scroll"><div class="dev" role="img" aria-label="Zhejiang courses as cards with rating figures">
+    <div class="hdr"><span class="t">ZHEJIANG · 19</span><span class="batt">78%<span class="cell"><i></i></span></span></div>
+    <div class="body">
+      <div class="seg"><span class="cur">Rating</span><span>Name</span></div>
+      <div class="card on"><div class="main"><div class="t">Nine Dragons Hill Golf Club</div><div class="s">27 holes · par 72 · maps</div></div>
+        <div class="fig"><b>4.8</b><span>41 reviews</span></div></div>
+      <div class="card"><div class="main"><div class="t">Anji King Valley Country Club</div><div class="s">18 holes · par 72 · no maps</div></div>
+        <div class="fig"><b>4.6</b><span>33 reviews</span></div></div>
+      <div class="card"><div class="main"><div class="t">Ningbo Orient Golf Country Club</div><div class="s">18 holes · par 72 · maps</div></div>
+        <div class="fig"><b>4.5</b><span>29 reviews</span></div></div>
+      <div class="card"><div class="main"><div class="t">Phoenix International Country Club</div><div class="s">18 holes · par 72 · maps</div></div>
+        <div class="fig"><b>4.4</b><span>52 reviews</span></div></div>
+      <div class="card"><div class="main"><div class="t">Moganshan Gowin Golf Club</div><div class="s">18 holes · par 72 · maps</div></div>
+        <div class="fig"><b>4.3</b><span>47 reviews</span></div></div>
+      <div class="card"><div class="main"><div class="t">Deqing Longshan Lake Golf Club</div><div class="s">18 holes · par 72 · maps</div></div>
+        <div class="fig"><b>3.9</b><span>12 reviews</span></div></div>
+    </div>
+    <div class="foot"><span>Back</span><span class="on">Start</span><span>▲</span><span>▼</span></div>
+  </div></div>
+  <div class="notes">
+    <h2>3 · Courses: cards with the rating as the figure</h2>
+    <div class="where">Region courses · also the card style for Recent and My courses</div>
+    <p>Each course is a full-width card: the name in large type, holes, par and map availability below it, and the rating as the big figure on the right with its review count underneath. The figure sits where par sits on today’s course rows (§22.2).</p>
+    <ul>
+      <li>The sort is a two-block segment at the top. The current sort is underlined, and Confirm on the segment flips it. On touch, tap either half.</li>
+      <li>Six cards fit on a page. The list scrolls in windows, as P2 does today, so RAM stays at one page of names.</li>
+      <li>In New round the Confirm cell reads <kbd>Start</kbd>; in Course Map it reads <kbd>Open</kbd>, which goes to Course info.</li>
+      <li>Unrated courses show “—” in place of the figure. In My courses, which has no ratings, the figure is <b>par</b>, as on today’s rows.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- 4. Course info -->
+<section class="shot">
+  <div class="frame-scroll"><div class="dev" role="img" aria-label="Course info with action tiles and rating bars">
+    <div class="hdr"><span class="t">COURSE</span><span class="batt">78%<span class="cell"><i></i></span></span></div>
+    <div class="body">
+      <div class="ihead"><div class="nm">Nine Dragons Hill Golf Club</div><div class="s">Zhejiang · 27 holes · par 72 · 10,950 yd</div></div>
+      <div class="tiles small">
+        <div class="tile on"><svg viewBox="0 0 24 24"><path d="M4 22V4"/><path d="M4 4h12l-2 4 2 4H4"/></svg><div class="nm">Play</div></div>
+        <div class="tile"><svg viewBox="0 0 24 24"><path d="M14.1 6.1 9 3 3 6v15l6-3 6 3 6-3V3l-6 3"/><path d="M9 3v15"/><path d="M15 6v15"/></svg><div class="nm">Hole maps</div></div>
+        <div class="tile"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16"/><path d="M3 10h18M3 15h18M9 4v16M15 4v16"/></svg><div class="nm">Tee info</div></div>
+      </div>
+      <div class="score"><b>4.8<small> / 5</small></b><span class="r">from 41 reviews</span></div>
+      <div class="bars">
+        <div class="bar"><span>Greens</span><span class="track"><i style="width:92%"></i></span><span class="v">4.6</span></div>
+        <div class="bar"><span>Difficulty</span><span class="track"><i style="width:84%"></i></span><span class="v">4.2</span></div>
+        <div class="bar"><span>Caddies</span><span class="track"><i style="width:94%"></i></span><span class="v">4.7</span></div>
+        <div class="bar"><span>Value</span><span class="track"><i style="width:86%"></i></span><span class="v">4.3</span></div>
+        <div class="bar"><span>Clubhouse</span><span class="track"><i style="width:88%"></i></span><span class="v">4.4</span></div>
+        <div class="bar"><span>Food</span><span class="track"><i style="width:82%"></i></span><span class="v">4.1</span></div>
+      </div>
+      <div class="facts">Nines: Ocean · Lake · Quarry<br>Designer Example Designs · opened 2005</div>
+    </div>
+    <div class="foot"><span>Back</span><span class="on">Start</span><span>◀</span><span>▶</span></div>
+  </div></div>
+  <div class="notes">
+    <h2>4 · Course info: action tiles above the facts</h2>
+    <div class="where">Course Map → a course · illustrative figures</div>
+    <p>The three things you can do with a course become a small tile strip: <b>Play</b>, <b>Hole maps</b>, <b>Tee info</b>. The facts sit below as a big rating figure, six category bars and a short fact line.</p>
+    <ul>
+      <li>Left/Right and the rocker move between the tiles. Confirm’s label follows the tile: <kbd>Start</kbd>, <kbd>Open</kbd>, <kbd>Open</kbd>. Touch: tap a tile.</li>
+      <li>Play keeps the §41.5 rule: it is present exactly when New round is.</li>
+      <li>Owner courses with no baigolf facts keep the header and tiles, and the box shows holes, par, yards and nines only.</li>
+      <li>Today this screen is a list, so the facts are rows you scroll past. Here they are read-only content, and the only things you can select are the three tiles.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="shot" style="grid-template-columns:minmax(0,1fr)">
+  <div class="notes" style="max-width:68ch">
+    <h2>What stays the same</h2>
+    <ul>
+      <li>Every level, the Back behaviour, the return-to-same-row context and Play’s visibility rule from P2/P3.</li>
+      <li>Memory: still one page of names. Region and Recent data are already in RAM. No change to the catalog files.</li>
+      <li>The nine picker, player setup and scoring screens are not part of this redesign.</li>
+    </ul>
+    <p>The screens are built from existing pieces: the tile strip and detail box from <code>GolfHomeActivity</code> (factored out as §34.3 already suggested) and the footer from <code>GolfUiListActivity</code>. The grid and the cards are the only new drawing code, and both are host-testable as pure layout functions in <code>GolfUiLayout.h</code>.</p>
+  </div>
+</section>
+</div>
