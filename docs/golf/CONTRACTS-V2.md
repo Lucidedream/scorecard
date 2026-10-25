@@ -3362,11 +3362,13 @@ Every action a footer cell performed must stay reachable by touch:
 | Scorecard (Card), Tee info | ◀ ▶ tab | tap the tab |
 | Course-map browser | ◀ ▶ hole, **Tee** | horizontal swipe (existing); **tap the hole band** opens Tee info |
 | Hole review, Tip note, Round export pages | ◀ ▶ | **new** horizontal swipe, left = next, right = previous |
-| Round export | Open / Done (Confirm) | a tappable block in the page body carrying that label |
+| Round export | Next / Previous page (Confirm), Done (Back) | the horizontal swipe toggles Join ↔ Report; the left-edge swipe is Done; no extra block |
 | Round summary | **Send** | a tappable **Send** block in the page body |
-| Player setup | **Next / Start** (Confirm beyond a row) | the same label as the **last row** of the list |
-| Statistics, Trends, Career stats, messages | Back only | left-edge swipe |
-| Scoring | MENU · MARK · PREV · NEXT | **footer kept** |
+| Player setup — Count | ◀ ▶ adjust, Next | **four rows `1`–`4`** (current one focused); tapping a row sets the count **and continues** to Players, as any list row's Select does. The X4 keeps its centred counter |
+| Player setup — Players / roster | **Start** (Confirm beyond a row) | a **Start round** last row |
+| Statistics, Trends, messages | Back only | left-edge swipe |
+| Career stats | Back, **More** (next page) | left-edge swipe; More = the side Up/Down page buttons (existing) **and** a horizontal swipe, left = next, right = previous |
+| Scoring, including its in-place overlays (mark sheet, fairway/GIR picker) | MENU · MARK · PREV · NEXT and each overlay's own labels | **footer kept**, relabelled per overlay as today |
 
 The worker's report lists every golf screen with every action and how it is reached on the
 X4 Pro. Any action that cannot be reached means the work is not done.
