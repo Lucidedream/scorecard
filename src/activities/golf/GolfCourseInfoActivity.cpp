@@ -98,7 +98,7 @@ void GolfCourseInfoActivity::buildScreen(UiScreen& screen) {
   auto small = screen.theme().smallText;
   small.maxLines = 1;
   screen.target().text(screen.takeTop(32), facts, small);
-  const auto strip = screen.takeTop(132, 12);
+  const auto strip = golfui::takeTileStrip(screen, static_cast<int16_t>(metrics.verticalSpacing));
   nav.visibleRows = count;
   for (uint8_t i = 0; i < count; ++i) {
     const bool play = i == playRow;

@@ -311,7 +311,7 @@ void GolfHomeActivity::buildScreen(UiScreen& screen) {
   // Four tiles across 480 px leave ~118 px each; the row is a little shorter
   // than the three-tile layout so the 32 px icon and its label stay in
   // proportion at the narrower width (CONTRACTS-V2 §25.3).
-  const fui::Rect tiles = screen.takeTop(112, static_cast<int16_t>(metrics.verticalSpacing));
+  const fui::Rect tiles = golfui::takeTileStrip(screen, static_cast<int16_t>(metrics.verticalSpacing));
   for (uint8_t index = 0; index < destinationCount; ++index) {
     golfui::drawTile(screen, golfui::tileCell(tiles, destinationCount, index), ACTION_TILE, index,
                      !resumeFocused && index == selected, destinationIcon(destinations[index]),

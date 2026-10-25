@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <string_view>
 
+#include "GolfPlayerSetupPolicy.h"
 #include "GolfReviewFormat.h"
 #include "GolfUiListActivity.h"
 #include "golf/CourseStore.h"
@@ -16,7 +17,7 @@ class GolfPlayerSetupActivity final : public GolfUiListActivity {
   void onEnter() override;
 
  private:
-  enum class Phase : uint8_t { Count, Players, TeeChoice };
+  using Phase = GolfPlayerSetupPhase;
 
   static constexpr uint8_t PLAYER_ROW_COUNT = GolfRound::MAX_PLAYERS;
   // Row 0 edits the player name; rows 1.. are one per resolved course tee.
@@ -43,6 +44,7 @@ class GolfPlayerSetupActivity final : public GolfUiListActivity {
   void activateIndex(int index) override;
   void onRowAction(const freeink::ui::ActionEvent& event) override;
   void onBackButton() override;
+  bool keepTouchFooter() const override { return golfPlayerSetupKeepsTouchFooter(phase); }
   golfui::FooterLabels golfFooterLabels() const override;
   void onFooterConfirm() override;
   void onFooterPrevious() override;

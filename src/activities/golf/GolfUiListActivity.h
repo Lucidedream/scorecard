@@ -11,6 +11,7 @@ class GolfUiListActivity : public UiListActivity {
 
   bool handleButtons() override;
   void drawFooter() override;
+  virtual bool keepTouchFooter() const { return false; }
   virtual golfui::FooterLabels golfFooterLabels() const;
   virtual void onFooterConfirm();
   virtual void onFooterPrevious();

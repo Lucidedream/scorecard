@@ -265,26 +265,20 @@ void GolfCoursePickerActivity::buildScreen(UiScreen& screen) {
   if (!scratch) return;
   if (nav.selected < 0 || nav.selected >= listCount()) nav.reset();
   if (level == Level::Hub) {
-    const auto strip = screen.takeTop(190, metrics.verticalSpacing);
+    const auto strip = golfui::takeTileStrip(screen, static_cast<int16_t>(metrics.verticalSpacing));
     nav.visibleRows = listCount();
     for (int i = 0; i < listCount(); ++i) {
       const bool recentTile = recentCount && i == 0;
       const bool ownerTile = i == (recentCount ? 1 : 0);
-      snprintf(details[i], sizeof(details[i]),
-               recentTile  ? tr(STR_GOLF_CATALOG_COUNT_FORMAT)
-               : ownerTile ? tr(STR_GOLF_ON_CARD_FORMAT)
-                           : tr(STR_GOLF_REGIONS_FORMAT),
-               recentTile  ? recentCount
-               : ownerTile ? ownerCount
-                           : scratch->catalog.count);
       golfui::drawTile(screen, golfui::tileCell(strip, listCount(), i), ACTION_ROW, i, nav.selected == i,
                        fui::bitmapFromIcon(recentTile  ? icon_history_32
                                            : ownerTile ? icon_flag_32
                                                        : icon_map_pin_32),
-                       hubLabel(i), details[i]);
+                       hubLabel(i));
     }
     hubDetail[0] = 0;
     if (recentCount && nav.selected == 0) {
+      snprintf(hubDetail, sizeof(hubDetail), tr(STR_GOLF_CATALOG_COUNT_FORMAT), recentCount);
       for (uint8_t i = 0; i < recentCount && i < 4; ++i) {
         if (!CourseStore::load(recent[i], scratch->course)) continue;
         snprintf(details[i], sizeof(details[i]), tr(STR_GOLF_RECENT_PREVIEW_FORMAT), scratch->course.courseName,
@@ -297,7 +291,7 @@ void GolfCoursePickerActivity::buildScreen(UiScreen& screen) {
     } else
       snprintf(hubDetail, sizeof(hubDetail), tr(STR_GOLF_CATALOG_SUMMARY_FORMAT), scratch->catalog.courseCount,
                scratch->catalog.count, mapCount);
-    golfui::drawDetail(screen, hubLabel(nav.selected), hubDetail, metrics.verticalSpacing, 4);
+    golfui::drawDetail(screen, hubLabel(nav.selected), hubDetail, metrics.verticalSpacing, 5);
     return;
   }
   if (level == Level::Regions) {

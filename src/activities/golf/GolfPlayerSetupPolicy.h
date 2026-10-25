@@ -4,6 +4,11 @@
 
 #include "golf/GolfRound.h"
 
+enum class GolfPlayerSetupPhase : uint8_t { Count, Players, TeeChoice };
+constexpr bool golfPlayerSetupKeepsTouchFooter(const GolfPlayerSetupPhase phase) {
+  return phase == GolfPlayerSetupPhase::Count;
+}
+
 enum class GolfPlayerSetupNext : uint8_t { ReviewRoster };
 
 constexpr uint8_t golfClampPlayerCount(const uint8_t count) {

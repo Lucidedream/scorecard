@@ -60,8 +60,7 @@ const GolfCourseTee* GolfPlayerSetupActivity::findTee(const char* name) const {
 }
 
 int GolfPlayerSetupActivity::listCount() const {
-  if (loadFailed) return 0;
-  if (phase == Phase::Count) return mappedInput.hasTouch() ? GOLF_MAX_PLAYERS : 0;
+  if (loadFailed || phase == Phase::Count) return 0;
   return phase == Phase::Players ? playerCount + 1 : teeRowCount();
 }
 
@@ -110,7 +109,6 @@ void GolfPlayerSetupActivity::initializeTeeRows() {
 
 bool GolfPlayerSetupActivity::rowIsEnabled(const int index) const {
   if (index < 0 || index >= listCount()) return false;
-  if (phase == Phase::Count) return true;
   return phase == Phase::Players ? playerRows[index].enabled : teeRows[index].enabled;
 }
 
@@ -152,11 +150,6 @@ void GolfPlayerSetupActivity::activateIndex(const int index) {
   // gate that FreeInkUI applies to touch hit registration.
   if (!rowIsEnabled(index)) return;
 
-  if (phase == Phase::Count) {
-    stepPlayerCount(index + 1 - playerCount);
-    showPlayers();
-    return;
-  }
   if (phase == Phase::TeeChoice) {
     if (index == 0) {
       editPlayerName(editingPlayer);
@@ -415,7 +408,7 @@ void GolfPlayerSetupActivity::completeRound() {
 
 void GolfPlayerSetupActivity::drawChrome() {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, mappedInput, metrics.topPadding);
+  const auto layout = golfui::chromeLayout(renderer, mappedInput, metrics.topPadding, {}, keepTouchFooter());
   golfui::drawHeader(renderer, layout.header, headerTitle(),
                      phase == Phase::TeeChoice ? tr(STR_GOLF_CHOOSE_TEE) : nullptr);
 }
@@ -438,23 +431,9 @@ golfui::FooterLabels GolfPlayerSetupActivity::golfFooterLabels() const {
 void GolfPlayerSetupActivity::buildScreen(UiScreen& screen) {
   if (loadFailed) return;
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto layout = golfui::chromeLayout(renderer, mappedInput, screen.frame().safeRect(), metrics.topPadding);
+  const auto layout =
+      golfui::chromeLayout(renderer, mappedInput, screen.frame().safeRect(), metrics.topPadding, {}, keepTouchFooter());
   screen.setContentMargin(layout.contentMargins);
-  if (phase == Phase::Count && mappedInput.hasTouch()) {
-    for (uint8_t i = 0; i < GOLF_MAX_PLAYERS; ++i) {
-      const auto row = golfui::evenRow(screen.body(), GOLF_MAX_PLAYERS, i);
-      fui::ButtonProps button{};
-      char number[4];
-      snprintf(number, sizeof(number), "%u", i + 1);
-      button.label = number;
-      button.action = ACTION_ROW;
-      button.value = i;
-      button.inputMask = fui::InputTouch;
-      button.state = i + 1 == playerCount ? fui::StateSelected : fui::StateNormal;
-      screen.button(button, row);
-    }
-    return;
-  }
   if (phase == Phase::Count) {
     const fui::Rect body = screen.body();
     fui::TextStyle question = screen.theme().titleText;

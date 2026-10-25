@@ -9,7 +9,7 @@ golfui::FooterLabels GolfUiListActivity::golfFooterLabels() const {
 }
 
 bool GolfUiListActivity::handleButtons() {
-  golfui::FooterInput input(mappedInput, golfFooterLabels());
+  golfui::FooterInput input(mappedInput, golfFooterLabels(), keepTouchFooter());
   if (input.wasReleased(golfui::FooterAction::Back)) {
     onBackButton();
     return true;
@@ -42,6 +42,8 @@ void GolfUiListActivity::onFooterNext() {
   moveSelectionTo(ButtonNavigator::nextIndex(activeNav().selected, listCount()));
 }
 
-void GolfUiListActivity::drawFooter() { golfui::drawFooter(renderer, mappedInput, golfFooterLabels()); }
+void GolfUiListActivity::drawFooter() {
+  golfui::drawFooter(renderer, mappedInput, golfFooterLabels(), keepTouchFooter());
+}
 
 #endif

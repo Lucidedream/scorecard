@@ -3287,12 +3287,15 @@ SVGs are MIT-licensed; fetch only those files.
 ### 43.2 Hub
 
 * A tile strip with **Recent** (`history`), **My courses** (`flag`) and **By region**
-  (`map-pin`). Each tile shows its label and a sub-line: `N courses` / `N on card` /
-  `N regions`.
+  (`map-pin`). The strip is **identical to the main menu's**: the same 112 px height,
+  icon and label geometry, with label only and no sub-line, so the icon and label sit
+  together exactly as on the main page (owner feedback 2026-10-25). The counts live in
+  the detail box.
 * Recent's tile is hidden when Recent is empty, and By region's when the catalog is
   absent. With one tile left, the hub is skipped (§41.5).
 * The detail box describes the focused tile:
-  - Recent: up to 4 course names, each with its hole count, newest first;
+  - Recent: `N courses`, then up to 4 course names, each with its hole count, newest
+    first;
   - My courses: the number of courses on the card;
   - By region: `N courses · R regions · M with hole maps`. M is counted once from the
     index flags while the catalog loads.
@@ -3328,8 +3331,8 @@ These cards are used by Region courses, Recent and My courses.
 ### 43.5 Course info
 
 * The header block holds the name, then `region · N holes · par P · Y yd`.
-* Below it is a small tile strip: **Play** (`flag`, only under the §41.5 rule), **Hole
-  maps** (`map`) and **Tee info** (`table`). These tiles are the only focusable items.
+* Below it is a tile strip identical to the main menu's (112 px, label only): **Play**
+  (`flag`, only under the §41.5 rule), **Hole maps** (`map`) and **Tee info** (`table`). These tiles are the only focusable items.
   Confirm reads Start / Open / Open, following the tile.
 * Below the tiles, read-only:
   - the rating as a big `x.y / 5` with `from N reviews`;
@@ -3343,8 +3346,9 @@ These cards are used by Region courses, Recent and My courses.
 
 *Owner decision 2026-10-25.* §37.3 drew a four-cell touch footer on every golf screen on the
 X4 Pro. On a touch board (`mappedInput.hasTouch()`), golf screens now draw **no footer and
-reserve no footer height**. The one exception is **Scoring**, which keeps its four cells
-(MENU · MARK · PREV · NEXT) unchanged.
+reserve no footer height**. The exceptions are **Scoring**, which keeps its four cells
+(MENU · MARK · PREV · NEXT) unchanged, and **Player setup’s Count step**, which keeps its
+original centred counter and four-cell footer (Back · Next · ◀ · ▶).
 
 **Nothing changes on the X4**, where the footer labels the physical buttons.
 
@@ -3352,6 +3356,8 @@ reserve no footer height**. The one exception is **Scoring**, which keeps its fo
 back control is added. Any screen-level horizontal swipe used for paging must ignore a
 swipe that the host classifies as the left-edge Back gesture (`wasEdgeSwipe`). An
 edge-swipe never also pages.
+
+Scoring and Player setup's Count step are the only footer exceptions.
 
 Every action a footer cell performed must stay reachable by touch:
 
@@ -3364,7 +3370,7 @@ Every action a footer cell performed must stay reachable by touch:
 | Hole review, Tip note, Round export pages | ◀ ▶ | **new** horizontal swipe, left = next, right = previous |
 | Round export | Next / Previous page (Confirm), Done (Back) | the horizontal swipe toggles Join ↔ Report; the left-edge swipe is Done; no extra block |
 | Round summary | **Send** | a tappable **Send** block in the page body |
-| Player setup — Count | ◀ ▶ adjust, Next | **four rows `1`–`4`** (current one focused); tapping a row sets the count **and continues** to Players, as any list row's Select does. The X4 keeps its centred counter |
+| Player setup — Count | ◀ ▶ adjust, Next | **footer kept** (owner 2026-10-25): the original centred counter with its four-cell touch footer, exactly as before §44 |
 | Player setup — Players / roster | **Start** (Confirm beyond a row) | a **Start round** last row |
 | Statistics, Trends, messages | Back only | left-edge swipe |
 | Career stats | Back, **More** (next page) | left-edge swipe; More = the side Up/Down page buttons (existing) **and** a horizontal swipe, left = next, right = previous |

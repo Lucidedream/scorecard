@@ -509,3 +509,49 @@ TEST(GolfFooterless, ChromeUsesFullTouchBodyAndRetainsX4HintsOnEveryEdge) {
   const auto clipped = golfui::detailGeometry({13, 20, 440, 90}, 28, 72, 12);
   EXPECT_EQ(clipped.box.height, 90);
 }
+
+TEST(GolfBlocks, HubAndCourseInfoUseMainMenuStripHeightAndLabelGeometry) {
+  for (const Case test : cases()) {
+    const fui::Rect body{13, 72, static_cast<int16_t>(test.width - 26), static_cast<int16_t>(test.height - 100)};
+    const auto strip = golfui::tileStripRect(body);
+    EXPECT_EQ(strip.height, 112);
+    EXPECT_EQ(strip.x, body.x);
+    EXPECT_EQ(strip.y, body.y);
+    EXPECT_EQ(strip.width, body.width);
+    for (uint8_t tiles : {2, 3, 4}) {
+      for (uint8_t i = 0; i < tiles; ++i) {
+        const auto rect = golfui::tileCell(strip, tiles, i);
+        const auto geometry = golfui::tileGeometry(rect);
+        EXPECT_EQ(rect.height, 112);
+        EXPECT_EQ(geometry.icon.y, body.y + 16);
+        EXPECT_EQ(geometry.label.y - geometry.icon.bottom(), 6);
+        EXPECT_EQ(geometry.label.height, 54);
+      }
+    }
+  }
+  EXPECT_EQ(golfui::tileStripRect({0, 0, 480, 80}).height, 80);
+}
+
+TEST(GolfFooterless, PlayerCountKeepsOriginalFooterAndRosterReleasesItsSpace) {
+  constexpr fui::Rect screen{0, 0, 480, 800};
+  constexpr fui::Rect physicalHints{0, 0, 480, 760};
+  for (const auto phase :
+       {GolfPlayerSetupPhase::Count, GolfPlayerSetupPhase::Players, GolfPlayerSetupPhase::TeeChoice}) {
+    const bool keep = golfPlayerSetupKeepsTouchFooter(phase);
+    EXPECT_EQ(keep, phase == GolfPlayerSetupPhase::Count);
+    const auto safe = golfui::footerSafeRect(screen, physicalHints, true, keep);
+    EXPECT_EQ(safe.height, phase == GolfPlayerSetupPhase::Count ? 704 : 800);
+    EXPECT_EQ(golfui::touchFooterHeight(true, keep), phase == GolfPlayerSetupPhase::Count ? 56 : 0);
+    const auto x4 = golfui::footerSafeRect(screen, physicalHints, false, keep);
+    EXPECT_EQ(x4.height, physicalHints.height);
+  }
+  const auto footer = golfui::makeTouchFooterLayout(screen);
+  constexpr golfui::FooterLabels labels{"Back", "Next", "Previous", "Next"};
+  constexpr golfui::FooterAction actions[] = {golfui::FooterAction::Back, golfui::FooterAction::Confirm,
+                                              golfui::FooterAction::Previous, golfui::FooterAction::Next};
+  for (uint8_t i = 0; i < 4; ++i) {
+    const auto cell = footer.cells[i];
+    EXPECT_EQ(golfui::touchFooterActionAt(footer, labels, cell.x + cell.width / 2, cell.y + cell.height / 2),
+              actions[i]);
+  }
+}

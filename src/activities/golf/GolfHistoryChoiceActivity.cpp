@@ -202,7 +202,7 @@ void GolfHistoryChoiceActivity::buildScreen(UiScreen& screen) {
   screen.setContentMargin(layout.contentMargins);
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
 
-  const fui::Rect tiles = screen.takeTop(112, static_cast<int16_t>(metrics.verticalSpacing));
+  const fui::Rect tiles = golfui::takeTileStrip(screen, static_cast<int16_t>(metrics.verticalSpacing));
   for (uint8_t index = 0; index < TILE_COUNT; ++index) {
     golfui::drawTile(screen, golfui::tileCell(tiles, TILE_COUNT, index), ACTION_TILE, index, index == selected,
                      tileIcon(index), tileLabel(index));

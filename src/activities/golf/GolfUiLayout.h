@@ -78,6 +78,10 @@ constexpr fui::Rect reserveHintEdge(const fui::Rect screen, const HintEdge edge,
   }
 }
 
+inline constexpr int16_t GOLF_TILE_STRIP_HEIGHT = 112;
+constexpr fui::Rect tileStripRect(const fui::Rect body) {
+  return {body.x, body.y, body.width, static_cast<int16_t>(minValue(body.height, GOLF_TILE_STRIP_HEIGHT))};
+}
 constexpr fui::Rect tileCell(const fui::Rect strip, const uint8_t count, const uint8_t index) {
   if (!count || index >= count) return {};
   const int left = strip.x + static_cast<int32_t>(strip.width) * index / count;
@@ -139,13 +143,13 @@ constexpr int regionAt(const fui::Rect grid, const int x, const int y) {
     if (contains(regionCell(grid, i), x, y)) return i;
   return -1;
 }
-constexpr int touchFooterHeight(const bool hasTouch, const bool scoring = false) {
-  return hasTouch && scoring ? GOLF_TOUCH_FOOTER_HEIGHT : 0;
+constexpr int touchFooterHeight(const bool hasTouch, const bool keepTouch = false) {
+  return hasTouch && keepTouch ? GOLF_TOUCH_FOOTER_HEIGHT : 0;
 }
 constexpr fui::Rect footerSafeRect(const fui::Rect screen, const fui::Rect physicalHintSafe, const bool touch,
-                                   const bool scoring) {
+                                   const bool keepTouch) {
   if (!touch) return physicalHintSafe;
-  return scoring ? reserveHintEdge(physicalHintSafe, HintEdge::Bottom, touchFooterHeight(touch, scoring)) : screen;
+  return keepTouch ? reserveHintEdge(physicalHintSafe, HintEdge::Bottom, touchFooterHeight(touch, keepTouch)) : screen;
 }
 constexpr int pagingSwipeDelta(const bool left, const bool right, const bool edgeBack) {
   return edgeBack ? 0 : left ? 1 : right ? -1 : 0;

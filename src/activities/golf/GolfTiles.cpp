@@ -5,8 +5,11 @@
 #include <cstdio>
 #include <cstring>
 namespace golfui {
+fui::Rect takeTileStrip(UiAppHost::UiScreen& screen, const int16_t spacing) {
+  return screen.takeTop(tileStripRect(screen.body()).height, spacing);
+}
 void drawTile(UiAppHost::UiScreen& screen, fui::Rect tileRect, fui::ActionId action, uint8_t index, bool selected,
-              fui::BitmapRef icon, const char* label, const char* subtitle) {
+              fui::BitmapRef icon, const char* label) {
   const auto geometry = tileGeometry(tileRect);
   const bool tileSelected = selected;
 
@@ -25,13 +28,6 @@ void drawTile(UiAppHost::UiScreen& screen, fui::Rect tileRect, fui::ActionId act
   tileLabel.color = ink;
   tileLabel.maxLines = 2;
   screen.target().text(geometry.label, label, tileLabel);
-  if (subtitle) {
-    auto style = screen.theme().smallText;
-    style.align = fui::TextAlign::Center;
-    style.color = ink;
-    screen.target().text({tileRect.x, static_cast<int16_t>(tileRect.bottom() - 30), tileRect.width, 26}, subtitle,
-                         style);
-  }
 }
 void drawFigure(fui::DrawTarget& target, fui::Rect rect, const char* value, fui::Color color) {
   static constexpr uint8_t MASKS[] = {0x3f, 6, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 7, 0x7f, 0x6f};
