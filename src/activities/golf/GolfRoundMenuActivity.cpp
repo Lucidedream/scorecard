@@ -17,12 +17,13 @@
 namespace fui = freeink::ui;
 
 void GolfRoundMenuActivity::onEnter() {
-  rows[0].label = tr(STR_GOLF_VIEW_CARD);
-  rows[1].label = tr(STR_GOLF_ABANDON_ROUND);
-  rows[2].label = tr(STR_GOLF_FINISH_ROUND);
-  rows[3].label = tr(STR_GOLF_EXPORT_SEND);
-  rows[4].label = tr(STR_GOLF_TIPS);
-  for (uint8_t i = 0; i < ROW_COUNT; ++i) rows[i].actionValue = i;
+  rows[golfmenu::VIEW_CARD].label = tr(STR_GOLF_VIEW_CARD);
+  rows[golfmenu::HOLE_MAP].label = tr(STR_GOLF_HOLE_MAP);
+  rows[golfmenu::ABANDON].label = tr(STR_GOLF_ABANDON_ROUND);
+  rows[golfmenu::FINISH].label = tr(STR_GOLF_FINISH_ROUND);
+  rows[golfmenu::SEND].label = tr(STR_GOLF_EXPORT_SEND);
+  rows[golfmenu::TIPS].label = tr(STR_GOLF_TIPS);
+  for (uint8_t i = 0; i < golfmenu::ROW_COUNT; ++i) rows[i].actionValue = i;
   UiListActivity::onEnter();
 }
 
@@ -32,41 +33,53 @@ const char* GolfRoundMenuActivity::headerTitle() const {
 
 void GolfRoundMenuActivity::activateIndex(const int index) {
   app.clearTapFlash();
-  if (index == 0) {
-    auto card = makeUniqueNoThrow<GolfCardActivity>(renderer, mappedInput);
-    if (!card) {
-      LOG_ERR("GOLF", "OOM: card activity");
-      return;
-    }
-    startActivityForResult(std::move(card), nullptr);
-    return;
-  }
-  if (index == 3) {
-    const auto& round = GOLF_ROUND_STORE.getRound();
-    auto transfer =
-        makeUniqueNoThrow<GolfRoundExportActivity>(renderer, mappedInput, round, round.currentPlayer, false);
-    if (!transfer) {
-      LOG_ERR("GOLF", "OOM: export activity");
-      {
-        RenderLock lock(*this);
-        errorMessage = tr(STR_GOLF_EXPORT_ERROR);
+  switch (golfmenu::rowAt(index)) {
+    case golfmenu::VIEW_CARD: {
+      auto card = makeUniqueNoThrow<GolfCardActivity>(renderer, mappedInput);
+      if (!card) {
+        LOG_ERR("GOLF", "OOM: card activity");
+        return;
       }
-      requestUpdate();
+      startActivityForResult(std::move(card), nullptr);
       return;
     }
-    startActivityForResult(std::move(transfer), nullptr);
-    return;
-  }
-  if (index == 4) {
-    auto tips = makeUniqueNoThrow<GolfTipListActivity>(renderer, mappedInput);
-    if (!tips) {
-      LOG_ERR("GOLF", "OOM: tip list activity");
+    case golfmenu::HOLE_MAP:
+      openGolfCourseMap(*this, renderer, mappedInput);
+      return;
+    case golfmenu::SEND: {
+      const auto& round = GOLF_ROUND_STORE.getRound();
+      auto transfer =
+          makeUniqueNoThrow<GolfRoundExportActivity>(renderer, mappedInput, round, round.currentPlayer, false);
+      if (!transfer) {
+        LOG_ERR("GOLF", "OOM: export activity");
+        {
+          RenderLock lock(*this);
+          errorMessage = tr(STR_GOLF_EXPORT_ERROR);
+        }
+        requestUpdate();
+        return;
+      }
+      startActivityForResult(std::move(transfer), nullptr);
       return;
     }
-    startActivityForResult(std::move(tips), nullptr);
-    return;
+    case golfmenu::TIPS: {
+      auto tips = makeUniqueNoThrow<GolfTipListActivity>(renderer, mappedInput);
+      if (!tips) {
+        LOG_ERR("GOLF", "OOM: tip list activity");
+        return;
+      }
+      startActivityForResult(std::move(tips), nullptr);
+      return;
+    }
+    case golfmenu::ABANDON:
+      confirmAction(PendingAction::Abandon);
+      return;
+    case golfmenu::FINISH:
+      confirmAction(PendingAction::Finish);
+      return;
+    case golfmenu::ROW_COUNT:
+      return;
   }
-  confirmAction(index == 2 ? PendingAction::Finish : PendingAction::Abandon);
 }
 
 void GolfRoundMenuActivity::confirmAction(const PendingAction action) {
@@ -116,7 +129,7 @@ void GolfRoundMenuActivity::buildScreen(UiScreen& screen) {
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
   listProps = {};
   listProps.items = rows;
-  listProps.count = ROW_COUNT;
+  listProps.count = golfmenu::ROW_COUNT;
   listProps.action = ACTION_ROW;
   listProps.inputMask = fui::InputTouch;
   syncListViewport(screen, listProps);

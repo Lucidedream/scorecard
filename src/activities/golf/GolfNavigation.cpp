@@ -10,6 +10,7 @@
 #include <atomic>
 #include <cstdio>
 
+#include "GolfCourseMapActivity.h"
 #include "GolfCoursePickerActivity.h"
 #include "GolfHomeActivity.h"
 #include "GolfMessageActivity.h"
@@ -146,6 +147,18 @@ bool openGolfPlayerSetup(ActivityManager& manager, GfxRenderer& renderer, Mapped
     return false;
   }
   manager.replaceActivity(std::move(activity));
+  return true;
+}
+
+bool openGolfCourseMap(Activity& parent, GfxRenderer& renderer, MappedInputManager& mappedInput) {
+  const GolfRound& round = GOLF_ROUND_STORE.getRound();
+  auto map = makeUniqueNoThrow<GolfCourseMapActivity>(renderer, mappedInput, round.currentHole, round.holeCount,
+                                                      round.courseName, golfCourseHoleNumber(round, round.currentHole));
+  if (!map) {
+    LOG_ERR("GOLF", "OOM: course map");
+    return false;
+  }
+  parent.startActivityForResult(std::move(map), nullptr);
   return true;
 }
 

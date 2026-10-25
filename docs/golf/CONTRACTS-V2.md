@@ -2954,8 +2954,8 @@ republishing; `Lucidedream/scorecard` is public. Therefore:
   never a copied baigolf response or image.
 * The scrape cache defaults to `~/golf-catalog-cache/`. Both tools **refuse** a `--cache`
   or `--out` path inside a git work tree (`git -C <path> rev-parse` succeeds), and say why.
-* Images keep the baigolf watermark. The catalog screens credit `tr(STR_GOLF_DATA_BAIGOLF)`
-  ("Data: baigolf.com").
+* Images keep the baigolf watermark. The app shows **no** separate text credit (owner
+  decision 2026-10-25; the copies stay on the owner's own devices).
 * Network politeness: one request at a time, at least `--delay` seconds apart (default 2.0,
   minimum 1.0), User-Agent `scorecard-catalog/1 (personal use)`. Each URL is fetched once
   and cached. On HTTP 403/429 or a non-JSON API reply, it backs off 60 s, retries twice,
@@ -3180,7 +3180,7 @@ One picker, `GolfCoursePickerActivity(mode)`, where mode is `Browse` (Course Map
    * **My courses**: built-ins + `/golf/courses`, today's list.
    * **By region**: shown when `regions.txt` loads.
    With no catalog and no Recent, the hub is skipped and My courses opens directly.
-2. **Regions:** `<name>` with the count as detail; the footer credits baigolf.
+2. **Regions:** `<name>` with the count as detail.
 3. **Region courses:** row 1 is a sort toggle, `Sort: Rating` / `Sort: Name`
    (`STR_GOLF_SORT_RATING`/`STR_GOLF_SORT_NAME`), default Rating. Rating order is
    descending, unrated last, ties by name.
@@ -3243,3 +3243,22 @@ All new user-facing text uses `tr()` (English YAML; other languages fall back).
   Ocean/Lake/Quarry with par and Black/Blue/Red yards equal to the owner's hand-entered
   `~/golf-sd-backup/2026-10-24-courses-v2/nine-dragons-hill.json` (read-only, not
   copied into the repo), and 27 maps.
+
+## 42. Hole map in the round menu (v8)
+
+*Added 2026-10-25, owner request.* The §26 MENU long-press stays. The scoring page's round
+menu (`GolfRoundMenuActivity`, MENU short press) also gains **Hole map** as its
+**second row**, so the map is discoverable without the long press. The rows become: View
+card, **Hole map**, Abandon round, Finish round, Send, Tips.
+
+* The label is `tr(STR_GOLF_HOLE_MAP)` (English "Hole map").
+* The row opens the same `GolfCourseMapActivity` with the same arguments as
+  `GolfScoringActivity::openCourseMap()`: the live round's current hole, holeCount,
+  course name and `golfCourseHoleNumber(...)`. Share one helper rather than duplicating
+  the call.
+* It opens as a child of the menu, so **Back returns to the menu**, like View card and
+  Tips. Back from the menu returns to scoring on the same hole and player.
+* The row is read-only and never mutates the round. A missing map shows §26's normal
+  missing-map message.
+* The menu's row handling uses named row constants or an enum, not bare indices, so
+  inserting a row cannot silently shift Finish or Abandon.

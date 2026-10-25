@@ -204,10 +204,6 @@ void GolfCoursePickerActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto chrome = golfui::chromeLayout(renderer, mappedInput, screen.frame().safeRect(), metrics.topPadding);
   screen.setContentMargin(chrome.contentMargins);
-  if (hasCatalog) {
-    const auto credit = screen.takeBottom(screen.target().lineHeight(screen.theme().smallText.font));
-    screen.target().text(credit, tr(STR_GOLF_DATA_BAIGOLF), screen.theme().smallText);
-  }
   props = {};
   props.count = listCount();
   props.action = ACTION_ROW;

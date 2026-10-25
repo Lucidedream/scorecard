@@ -1,5 +1,6 @@
 add_executable(golf_confirm_tests
   test_golf_confirm.cpp
+  test_golf_round_menu.cpp
   ${REPO_ROOT}/src/golf/GolfConfirm.cpp
   ${REPO_ROOT}/src/golf/GolfRules.cpp
   ${REPO_ROOT}/src/golf/GolfStats.cpp

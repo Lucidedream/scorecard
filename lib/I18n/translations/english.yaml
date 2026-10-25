@@ -758,7 +758,6 @@ STR_GOLF_CATALOG_ROW_FORMAT: "%s · %u holes%s"
 STR_GOLF_CATALOG_RATING_FORMAT: "%u.%u/5 (%lu)"
 STR_GOLF_NO_RATING: "No rating"
 STR_GOLF_NO_MAPS: " · no maps"
-STR_GOLF_DATA_BAIGOLF: "Data: baigolf.com"
 STR_GOLF_RATING_LINE_FORMAT: "%u.%u/5 from %lu reviews"
 STR_GOLF_GREEN_FAIRWAY: "Green / fairway"
 STR_GOLF_COURSE_DIFFICULTY: "Course difficulty"
@@ -775,3 +774,5 @@ STR_GOLF_SCORE_VALUE_FORMAT: "%u.%u/5"
 STR_GOLF_OPENED_FORMAT: "Opened %u"
 
 STR_GOLF_PLAY_THIS_COURSE: "Play this course"
+
+STR_GOLF_HOLE_MAP: "Hole map"

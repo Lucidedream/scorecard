@@ -3,6 +3,7 @@
 #include <cstdint>
 
 class ActivityManager;
+class Activity;
 class GfxRenderer;
 class MappedInputManager;
 struct GolfNineSelection;
@@ -61,6 +62,7 @@ bool openGolfNineSelect(ActivityManager& manager, GfxRenderer& renderer, MappedI
                         const GolfCourseFile& courseFile, GolfNineSelection selection);
 bool openGolfPlayerSetup(ActivityManager& manager, GfxRenderer& renderer, MappedInputManager& mappedInput,
                          const GolfCourseFile& courseFile, GolfNineSelection selection);
+bool openGolfCourseMap(Activity& parent, GfxRenderer& renderer, MappedInputManager& mappedInput);
 bool openGolfScoring(ActivityManager& manager, GfxRenderer& renderer, MappedInputManager& mappedInput);
 bool resumeGolfRound(ActivityManager& manager, GfxRenderer& renderer, MappedInputManager& mappedInput);
 bool finishGolfRound(ActivityManager& manager, GfxRenderer& renderer, MappedInputManager& mappedInput);

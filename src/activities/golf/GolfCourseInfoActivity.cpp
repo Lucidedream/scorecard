@@ -97,7 +97,6 @@ void GolfCourseInfoActivity::buildRows() {
     snprintf(values[count], sizeof(values[count]), tr(STR_GOLF_OPENED_FORMAT), info.opened);
     addFact(values[count]);
   }
-  if (info.id) addFact(tr(STR_GOLF_DATA_BAIGOLF));
   mapsRow = count;
   addFact(tr(STR_GOLF_HOLE_MAPS));
   rows[mapsRow].enabled = true;

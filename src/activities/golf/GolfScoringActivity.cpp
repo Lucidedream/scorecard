@@ -13,7 +13,6 @@
 #include <cstring>
 
 #include "CrossPointSettings.h"
-#include "GolfCourseMapActivity.h"
 #include "GolfLargeNumber.h"
 #include "GolfNavigation.h"
 #include "GolfReviewFormat.h"
@@ -583,14 +582,7 @@ void GolfScoringActivity::offerFinishRound() {
 
 void GolfScoringActivity::openCourseMap() {
   if (!flushDirty()) return;
-  const GolfRound& round = GOLF_ROUND_STORE.getRound();
-  auto map = makeUniqueNoThrow<GolfCourseMapActivity>(renderer, mappedInput, round.currentHole, round.holeCount,
-                                                      round.courseName, golfCourseHoleNumber(round, round.currentHole));
-  if (!map) {
-    LOG_ERR("GOLF", "OOM: course map");
-    return;
-  }
-  startActivityForResult(std::move(map), nullptr);
+  openGolfCourseMap(*this, renderer, mappedInput);
 }
 
 bool GolfScoringActivity::handleHomeGesture() { return !flushDirty(); }
