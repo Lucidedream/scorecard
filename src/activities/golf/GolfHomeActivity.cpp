@@ -13,6 +13,7 @@
 #include "GolfNavigation.h"
 #include "GolfPlayerSelectActivity.h"
 #include "GolfSetupActivity.h"
+#include "GolfTiles.h"
 #include "GolfTipListActivity.h"
 #include "GolfUiLayout.h"
 #include "components/UITheme.h"
@@ -311,37 +312,10 @@ void GolfHomeActivity::buildScreen(UiScreen& screen) {
   // than the three-tile layout so the 32 px icon and its label stay in
   // proportion at the narrower width (CONTRACTS-V2 §25.3).
   const fui::Rect tiles = screen.takeTop(112, static_cast<int16_t>(metrics.verticalSpacing));
-  constexpr int16_t tileIconSize = 32;
   for (uint8_t index = 0; index < destinationCount; ++index) {
-    const int left = tiles.x + static_cast<int32_t>(tiles.width) * index / destinationCount;
-    const int right = tiles.x + static_cast<int32_t>(tiles.width) * (index + 1) / destinationCount;
-    const fui::Rect tileRect{static_cast<int16_t>(left), tiles.y, static_cast<int16_t>(right - left), tiles.height};
-    const bool tileSelected = !resumeFocused && index == selected;
-
-    fui::ButtonProps tile{};
-    tile.action = ACTION_TILE;
-    tile.value = index;
-    tile.inputMask = fui::InputTouch;
-    tile.state = tileSelected ? fui::StateSelected : fui::StateNormal;
-    screen.button(tile, tileRect);  // box, selection fill and hit target only
-
-    const fui::Color ink = tileSelected ? fui::Color::White : fui::Color::Black;
-    const fui::BitmapRef icon = destinationIcon(destinations[index]);
-    const int16_t iconTop = static_cast<int16_t>(tileRect.y + 16);
-    if (icon) {
-      screen.target().bitmap(fui::Rect{static_cast<int16_t>(tileRect.x + (tileRect.width - tileIconSize) / 2), iconTop,
-                                       tileIconSize, tileIconSize},
-                             icon, fui::BitmapMode::Center, fui::Paint::solid(ink));
-    }
-    fui::TextStyle tileLabel = screen.theme().bodyText;
-    tileLabel.bold = true;
-    tileLabel.align = fui::TextAlign::Center;
-    tileLabel.color = ink;
-    tileLabel.maxLines = 2;
-    const int16_t labelTop = static_cast<int16_t>(iconTop + tileIconSize + 6);
-    screen.target().text(
-        fui::Rect{tileRect.x, labelTop, tileRect.width, static_cast<int16_t>(tileRect.bottom() - labelTop - 4)},
-        destinationLabel(destinations[index]), tileLabel);
+    golfui::drawTile(screen, golfui::tileCell(tiles, destinationCount, index), ACTION_TILE, index,
+                     !resumeFocused && index == selected, destinationIcon(destinations[index]),
+                     destinationLabel(destinations[index]));
   }
 
   if (hasOpenRound) {
@@ -355,25 +329,7 @@ void GolfHomeActivity::buildScreen(UiScreen& screen) {
     screen.button(resume, screen.takeBottom(64, static_cast<int16_t>(metrics.verticalSpacing)));
   }
 
-  fui::TextStyle title = screen.theme().titleText;
-  title.bold = true;
-  fui::TextStyle body = screen.theme().bodyText;
-  body.maxLines = 3;
-  constexpr int16_t detailPaddingY = 18;
-  constexpr int16_t detailPaddingX = 20;
-  const int16_t titleHeight = screen.target().lineHeight(title.font);
-  const int16_t bodyWidth = static_cast<int16_t>(screen.body().width - detailPaddingX * 2);
-  const int16_t bodyHeight = fui::measureWrappedText(screen.target(), detailLine, body, bodyWidth).height;
-  const int16_t detailHeight =
-      static_cast<int16_t>(detailPaddingY * 2 + titleHeight + metrics.verticalSpacing + bodyHeight);
-  const fui::Rect detail = screen.takeTop(detailHeight);
-  screen.target().stroke(detail, fui::Paint::solid(fui::Color::Black), 2, screen.theme().controlRadius);
-  const fui::Rect inset = detail.inset(fui::Insets{detailPaddingY, detailPaddingX, detailPaddingY, detailPaddingX});
-  screen.target().text(fui::Rect{inset.x, inset.y, inset.width, static_cast<int16_t>(titleHeight)},
-                       destinationLabel(destinations[selected]), title);
-  screen.target().text(fui::Rect{inset.x, static_cast<int16_t>(inset.y + titleHeight + metrics.verticalSpacing),
-                                 inset.width, bodyHeight},
-                       detailLine, body);
+  golfui::drawDetail(screen, destinationLabel(destinations[selected]), detailLine, metrics.verticalSpacing);
 
   if (!quotePresent) return;
   const fui::Rect band = screen.body();

@@ -352,3 +352,35 @@ TEST(CatalogPlay, InfoReturnPreservesBrowseMyCoursesAndFallback) {
   EXPECT_EQ(route.picker.selected, 0);
   EXPECT_FALSE(route.picker.skipHub);
 }
+
+TEST(GolfCatalog, RegionsSortByCountThenNameWithoutLosingIndexRanges) {
+  GolfCatalogRegion regions[] = {{"Beta", 9, 0, 0}, {"Zulu", 27, 9, 1}, {"Alpha", 9, 36, 2}, {"Empty", 0, 45, 3}};
+  golfSortCatalogRegions(regions, 4);
+  EXPECT_STREQ(regions[0].name, "Zulu");
+  EXPECT_EQ(regions[0].index, 1);
+  EXPECT_EQ(regions[0].firstRecord, 9);
+  EXPECT_STREQ(regions[1].name, "Alpha");
+  EXPECT_EQ(regions[1].index, 2);
+  EXPECT_EQ(regions[1].firstRecord, 36);
+  EXPECT_STREQ(regions[2].name, "Beta");
+  EXPECT_EQ(regions[2].index, 0);
+  EXPECT_EQ(regions[2].firstRecord, 0);
+  EXPECT_STREQ(regions[3].name, "Empty");
+}
+
+TEST_F(CatalogStore, CardsFindLegacyAndExplicitMapDirectoriesIncludingLaterHoles) {
+  GolfCourse course{};
+  strcpy(course.courseName, "Synthetic Course");
+  course.nineCount = 2;
+  EXPECT_FALSE(CourseStore::hasMaps(course));
+  char slug[40];
+  ASSERT_TRUE(golfCourseMapsDir(course, slug, sizeof(slug)));
+  const auto legacy = golfTestStorageRoot / "golf/maps" / slug;
+  std::filesystem::create_directories(legacy);
+  std::ofstream(legacy / "hole-18.bmp") << "synthetic";
+  EXPECT_TRUE(CourseStore::hasMaps(course));
+  strcpy(course.mapsDir, "explicit");
+  EXPECT_FALSE(CourseStore::hasMaps(course));
+  write("golf/maps/explicit/hole-2.bmp", "synthetic");
+  EXPECT_TRUE(CourseStore::hasMaps(course));
+}

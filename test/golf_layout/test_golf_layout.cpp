@@ -388,3 +388,90 @@ TEST(GolfUiLayout, TouchFooterEmptyLabelsAreInert) {
 }
 
 }  // namespace
+
+TEST(GolfBlocks, X4MainMenuMatchesPreExtractionRects) {
+  for (const Case test : cases()) {
+    const fui::Rect frame = golfui::inset({0, 0, test.width, test.height}, BEZEL);
+    const auto chrome = golfui::makeChromeLayout(frame, golfui::reserveHintEdge(frame, test.edge, HINT_RESERVE), 5, 46);
+    for (int spacing : {8, 12, 16}) {
+      const fui::Rect strip{chrome.body.x, static_cast<int16_t>(chrome.body.y + spacing), chrome.body.width, 112};
+      for (uint8_t count : {3, 4}) {
+        for (uint8_t i = 0; i < count; ++i) {
+          const int left = strip.x + static_cast<int32_t>(strip.width) * i / count;
+          const int right = strip.x + static_cast<int32_t>(strip.width) * (i + 1) / count;
+          const auto rect = golfui::tileCell(strip, count, i);
+          EXPECT_EQ(rect.x, left);
+          EXPECT_EQ(rect.y, strip.y);
+          EXPECT_EQ(rect.width, right - left);
+          EXPECT_EQ(rect.height, 112);
+          const auto geometry = golfui::tileGeometry(rect);
+          EXPECT_EQ(geometry.icon.x, left + (right - left - 32) / 2);
+          EXPECT_EQ(geometry.icon.y, strip.y + 16);
+          EXPECT_EQ(geometry.icon.width, 32);
+          EXPECT_EQ(geometry.icon.height, 32);
+          EXPECT_EQ(geometry.label.x, left);
+          EXPECT_EQ(geometry.label.y, strip.y + 54);
+          EXPECT_EQ(geometry.label.width, right - left);
+          EXPECT_EQ(geometry.label.height, 54);
+        }
+      }
+      const fui::Rect available{strip.x, static_cast<int16_t>(strip.bottom() + spacing), strip.width, 350};
+      for (int bodyHeight : {24, 48, 72}) {
+        const auto detail = golfui::detailGeometry(available, 28, bodyHeight, spacing);
+        EXPECT_EQ(detail.box.x, available.x);
+        EXPECT_EQ(detail.box.y, available.y);
+        EXPECT_EQ(detail.box.width, available.width);
+        EXPECT_EQ(detail.box.height, 36 + 28 + spacing + bodyHeight);
+        EXPECT_EQ(detail.title.x, available.x + 20);
+        EXPECT_EQ(detail.title.y, available.y + 18);
+        EXPECT_EQ(detail.title.width, available.width - 40);
+        EXPECT_EQ(detail.title.height, 28);
+        EXPECT_EQ(detail.body.x, available.x + 20);
+        EXPECT_EQ(detail.body.y, available.y + 18 + 28 + spacing);
+        EXPECT_EQ(detail.body.width, available.width - 40);
+        EXPECT_EQ(detail.body.height, bodyHeight);
+      }
+    }
+  }
+}
+
+TEST(GolfBlocks, TilesGridCardsAndSortHaveExactHitBoundaries) {
+  constexpr fui::Rect strip{13, 47, 453, 190};
+  EXPECT_EQ(golfui::tileAt(strip, 3, 13, 47), 0);
+  EXPECT_EQ(golfui::tileAt(strip, 3, 164, 47), 1);
+  EXPECT_EQ(golfui::tileAt(strip, 3, 466, 47), -1);
+  EXPECT_EQ(golfui::tileAt(strip, 3, 13, 237), -1);
+  EXPECT_EQ(golfui::tileAt(strip, 0, 13, 47), -1);
+  for (const fui::Rect grid : {fui::Rect{13, 47, 453, 680}, fui::Rect{9, 50, 760, 350}}) {
+    for (uint8_t i = 0; i < 10; ++i) {
+      const auto cell = golfui::regionCell(grid, i);
+      EXPECT_TRUE(inside(grid, cell));
+      EXPECT_EQ(golfui::regionAt(grid, cell.x, cell.y), i);
+      EXPECT_EQ(golfui::regionAt(grid, cell.right() - 1, cell.bottom() - 1), i);
+      if (i % 2) EXPECT_EQ(golfui::regionCell(grid, i - 1).right(), cell.x);
+    }
+    EXPECT_EQ(golfui::regionAt(grid, grid.right(), grid.y), -1);
+    EXPECT_EQ(golfui::regionAt(grid, grid.x, grid.bottom()), -1);
+    const int count = golfui::courseCardsPerPage(grid);
+    for (int i = 0; i < count; ++i) {
+      const auto card = golfui::courseCard(grid, i);
+      EXPECT_GE(card.height, 96);
+      EXPECT_TRUE(inside(grid, card));
+      EXPECT_TRUE(golfui::contains(card, card.x, card.y));
+      EXPECT_FALSE(golfui::contains(card, card.x, card.bottom()));
+    }
+  }
+  EXPECT_EQ(golfui::sortSegmentCell(strip, 0).right(), golfui::sortSegmentCell(strip, 1).x);
+  EXPECT_EQ(golfui::tileAt(strip, 2, golfui::sortSegmentCell(strip, 1).x, strip.y), 1);
+  EXPECT_EQ(golfui::pageCount(31, 10), 4);
+  EXPECT_EQ(golfui::pageCount(64, 10), 7);
+  EXPECT_EQ(golfui::pageCount(0, 10), 0);
+}
+
+TEST(GolfBlocks, RestoredCourseWindowOnlyShowsSortOnFirstPage) {
+  constexpr fui::Rect body{0, 46, 480, 680};
+  EXPECT_TRUE(golfui::courseSortVisible(body, 0, 0));
+  EXPECT_TRUE(golfui::courseSortVisible(body, 6, 1));
+  EXPECT_FALSE(golfui::courseSortVisible(body, 10, 0));
+  EXPECT_FALSE(golfui::courseSortVisible(body, 4, 3));
+}

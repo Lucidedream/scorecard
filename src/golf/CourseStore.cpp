@@ -17,6 +17,7 @@
 #include "GolfCourseCatalogInfo.h"
 #include "GolfCourseParse.h"
 #include "GolfDirectoryScan.h"
+#include "GolfPaths.h"
 
 namespace {
 
@@ -40,6 +41,17 @@ void logValidationFailure(const char* filename, const GolfCourseValidationResult
 }
 
 }  // namespace
+
+bool CourseStore::hasMaps(const GolfCourse& course) {
+  char slug[40];
+  char path[80];
+  if (!golfCourseMapsDir(course, slug, sizeof(slug))) return false;
+  for (uint8_t hole = 1; hole <= course.nineCount * 9; ++hole) {
+    snprintf(path, sizeof(path), "/golf/maps/%s/hole-%u.bmp", slug, hole);
+    if (Storage.exists(path)) return true;
+  }
+  return false;
+}
 
 GolfCourseListResult CourseStore::enumerate(GolfCourseFile* files, uint8_t capacity) {
   GolfCourseListResult result{};

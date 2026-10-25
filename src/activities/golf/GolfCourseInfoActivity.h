@@ -14,7 +14,6 @@ class GolfCourseInfoActivity final : public GolfUiListActivity {
   void onEnter() override;
 
  private:
-  static constexpr uint8_t MAX_ROWS = 16;
   GolfCourseFile file;
   GolfCourse course{};
   GolfCourseCatalogInfo info{};
@@ -23,17 +22,17 @@ class GolfCourseInfoActivity final : public GolfUiListActivity {
   bool resolved = false;
   uint8_t count = 0;
   uint8_t mapsRow = 0;
-  int8_t scoresRow = -1;
-  freeink::ui::ListItem rows[MAX_ROWS]{};
-  char values[MAX_ROWS][96]{};
-  char facts[96]{};
-  freeink::ui::ListProps props{};
+  uint16_t par = 0;
+  uint32_t yards = 0;
+  char facts[160]{};
+  char nines[80]{};
   int listCount() const override { return count; }
   const char* headerTitle() const override { return resolved ? course.courseName : tr(STR_GOLF_NO_COURSES); }
   void buildScreen(UiScreen& screen) override;
   void drawChrome() override;
   void activateIndex(int index) override;
   void buildRows();
-  uint8_t addFact(const char* label, const char* value = nullptr);
+  golfui::FooterLabels golfFooterLabels() const override;
+  void navigateButtons() override;
 };
 #endif

@@ -7,6 +7,7 @@
 #include "GolfUiListActivity.h"
 #include "golf/CourseStore.h"
 #include "golf/GolfCatalog.h"
+#include "golf/GolfCourseCatalogInfo.h"
 
 class GolfCoursePickerActivity final : public GolfUiListActivity {
  public:
@@ -40,12 +41,23 @@ class GolfCoursePickerActivity final : public GolfUiListActivity {
     GolfCatalogRegionsReader catalog;
     GolfCourse course;
     GolfCatalogRecord a;
+    GolfCourseCatalogInfo info;
     char bytes[GOLF_CATALOG_RECORD_SIZE];
     char chunk[128];
   };
   std::unique_ptr<Scratch> scratch;
   GolfCourseFile recent[5]{};
   uint8_t recentCount = 0;
+  uint8_t ownerCount = 0;
+  char hubDetail[256]{};
+  uint16_t mapCount = 0;
+  char figures[PAGE_ROWS][16]{};
+  char units[PAGE_ROWS][32]{};
+  const char* hubLabel(int index) const;
+  bool handleCustomInput() override;
+  void navigateButtons() override;
+  golfui::FooterLabels golfFooterLabels() const override;
+
   uint16_t records[GOLF_CATALOG_MAX_REGION_COURSES]{};
   uint8_t ratingKeys[GOLF_CATALOG_MAX_REGION_COURSES]{};
   uint16_t recordCount = 0;

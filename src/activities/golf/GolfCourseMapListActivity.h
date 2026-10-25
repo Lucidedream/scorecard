@@ -37,6 +37,7 @@ class GolfCourseMapListActivity final : public GolfUiListActivity {
   bool overflow = false;
   bool noCourses = false;
 
+  golfui::FooterLabels golfFooterLabels() const override;
   int listCount() const override;
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;

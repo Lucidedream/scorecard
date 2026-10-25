@@ -77,6 +77,11 @@ bool golfParseCatalogRecord(const char* b, size_t size, GolfCatalogRecord& out) 
   out = r;
   return true;
 }
+void golfSortCatalogRegions(GolfCatalogRegion* regions, const uint8_t count) {
+  std::sort(regions, regions + count, [](const GolfCatalogRegion& a, const GolfCatalogRegion& b) {
+    return a.count != b.count ? a.count > b.count : strcmp(a.name, b.name) < 0;
+  });
+}
 void golfSortCatalogOrdinals(uint16_t* records, uint16_t count, const uint8_t* ratings, uint16_t firstRecord) {
   std::sort(records, records + count, [ratings, firstRecord](uint16_t a, uint16_t b) {
     const uint8_t left = ratings[a - firstRecord], right = ratings[b - firstRecord];

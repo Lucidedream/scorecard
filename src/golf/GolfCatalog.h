@@ -27,6 +27,7 @@ struct GolfCatalogRecord {
   bool hasRating = false;
   bool hasMaps = false;
 };
+void golfSortCatalogRegions(GolfCatalogRegion* regions, uint8_t count);
 bool golfParseCatalogRecord(const char* bytes, size_t size, GolfCatalogRecord& record);
 void golfSortCatalogOrdinals(uint16_t* records, uint16_t count, const uint8_t* ratings, uint16_t firstRecord);
 

@@ -11,6 +11,7 @@
 
 #include "GolfCourseInfoActivity.h"
 #include "GolfReviewFormat.h"
+#include "GolfTiles.h"
 #include "GolfUiLayout.h"
 #include "components/UITheme.h"
 #include "golf/CourseOrder.h"
@@ -46,6 +47,7 @@ void GolfCourseMapListActivity::loadCourses() {
     for (uint8_t n = 0; n < scratch->nineCount && n < 2; ++n)
       for (uint8_t par : scratch->nines[n].par) summary.defaultPar += par;
     golfFormatTeeList(*scratch, summary.teeList, sizeof(summary.teeList));
+    summary.hasMaps = CourseStore::hasMaps(*scratch);
   }
   golfSortCourses(courses, courseCount);
   noCourses = courseCount == 0;
@@ -68,8 +70,8 @@ void GolfCourseMapListActivity::loadCourses() {
 void GolfCourseMapListActivity::formatCourseRow(const uint8_t row) {
   if (row >= courseCount) return;
   const GolfCourseSummary& course = courses[row];
-  snprintf(courseDetails[row], sizeof(courseDetails[row]), tr(STR_GOLF_COURSE_ROW_FORMAT), 9 * course.nineCount,
-           course.teeList);
+  snprintf(courseDetails[row], sizeof(courseDetails[row]), tr(STR_GOLF_CARD_DETAIL_FORMAT), 9 * course.nineCount,
+           course.defaultPar, course.hasMaps ? tr(STR_GOLF_MAPS_LABEL) : tr(STR_GOLF_NO_MAPS_LABEL));
   const uint16_t par = course.defaultPar;
   char parValue[8]{};
   if (par == 0) {
@@ -78,6 +80,10 @@ void GolfCourseMapListActivity::formatCourseRow(const uint8_t row) {
     snprintf(parValue, sizeof(parValue), "%u", par);
   }
   snprintf(parLabels[row], sizeof(parLabels[row]), tr(STR_GOLF_PAR_VALUE_FORMAT), parValue);
+}
+
+golfui::FooterLabels GolfCourseMapListActivity::golfFooterLabels() const {
+  return {tr(STR_BACK), tr(STR_GOLF_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN)};
 }
 
 int GolfCourseMapListActivity::listCount() const { return courseCount + (overflow ? 1 : 0); }
@@ -113,8 +119,28 @@ void GolfCourseMapListActivity::buildScreen(UiScreen& screen) {
   listProps.action = ACTION_ROW;
   listProps.inputMask = fui::InputTouch;
   listProps.rowHeight = 96;
-  syncListViewport(screen, listProps, true);
-  screen.list(listProps);
+  const auto body = screen.body();
+  const int visible = golfui::courseCardsPerPage(body);
+  nav.visibleRows = visible;
+  if (nav.followOnBuild) {
+    nav.follow(listCount());
+    nav.followOnBuild = false;
+  }
+  nav.scrollBy(0, listCount());
+  nav.drawnRows = visible;
+  nav.followPending = false;
+  for (int offset = 0; offset < visible && nav.top + offset < listCount(); ++offset) {
+    const int row = nav.top + offset;
+    if (row >= courseCount) {
+      golfui::drawCourseCard(screen, golfui::courseCard(body, offset), ACTION_ROW, row, false,
+                             tr(STR_GOLF_COURSE_OVERFLOW), "", "", "", false);
+      continue;
+    }
+    char par[8];
+    snprintf(par, sizeof(par), "%u", courses[row].defaultPar);
+    golfui::drawCourseCard(screen, golfui::courseCard(body, offset), ACTION_ROW, row, row == nav.selected,
+                           courses[row].courseName, courseDetails[row], par, tr(STR_GOLF_PAR));
+  }
 }
 
 void GolfCourseMapListActivity::drawChrome() {

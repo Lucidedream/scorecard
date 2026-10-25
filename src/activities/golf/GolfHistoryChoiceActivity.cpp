@@ -13,6 +13,7 @@
 #include "GolfCareerStatsActivity.h"
 #include "GolfHistoryActivity.h"
 #include "GolfNavigation.h"
+#include "GolfTiles.h"
 #include "GolfTrendsActivity.h"
 #include "GolfUiLayout.h"
 #include "components/UITheme.h"
@@ -201,61 +202,13 @@ void GolfHistoryChoiceActivity::buildScreen(UiScreen& screen) {
   screen.setContentMargin(layout.contentMargins);
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
 
-  // Tile strip and detail box copy the main menu's constants verbatim
-  // (GolfHomeActivity::buildScreen, CONTRACTS-V2 §25.3 / §34.3).
   const fui::Rect tiles = screen.takeTop(112, static_cast<int16_t>(metrics.verticalSpacing));
-  constexpr int16_t tileIconSize = 32;
   for (uint8_t index = 0; index < TILE_COUNT; ++index) {
-    const int left = tiles.x + static_cast<int32_t>(tiles.width) * index / TILE_COUNT;
-    const int right = tiles.x + static_cast<int32_t>(tiles.width) * (index + 1) / TILE_COUNT;
-    const fui::Rect tileRect{static_cast<int16_t>(left), tiles.y, static_cast<int16_t>(right - left), tiles.height};
-    const bool tileSelected = index == selected;
-
-    fui::ButtonProps tile{};
-    tile.action = ACTION_TILE;
-    tile.value = index;
-    tile.inputMask = fui::InputTouch;
-    tile.state = tileSelected ? fui::StateSelected : fui::StateNormal;
-    screen.button(tile, tileRect);  // box, selection fill and hit target only
-
-    const fui::Color ink = tileSelected ? fui::Color::White : fui::Color::Black;
-    const fui::BitmapRef icon = tileIcon(index);
-    const int16_t iconTop = static_cast<int16_t>(tileRect.y + 16);
-    if (icon) {
-      screen.target().bitmap(fui::Rect{static_cast<int16_t>(tileRect.x + (tileRect.width - tileIconSize) / 2), iconTop,
-                                       tileIconSize, tileIconSize},
-                             icon, fui::BitmapMode::Center, fui::Paint::solid(ink));
-    }
-    fui::TextStyle labelStyle = screen.theme().bodyText;
-    labelStyle.bold = true;
-    labelStyle.align = fui::TextAlign::Center;
-    labelStyle.color = ink;
-    labelStyle.maxLines = 2;
-    const int16_t labelTop = static_cast<int16_t>(iconTop + tileIconSize + 6);
-    screen.target().text(
-        fui::Rect{tileRect.x, labelTop, tileRect.width, static_cast<int16_t>(tileRect.bottom() - labelTop - 4)},
-        tileLabel(index), labelStyle);
+    golfui::drawTile(screen, golfui::tileCell(tiles, TILE_COUNT, index), ACTION_TILE, index, index == selected,
+                     tileIcon(index), tileLabel(index));
   }
 
-  fui::TextStyle title = screen.theme().titleText;
-  title.bold = true;
-  fui::TextStyle body = screen.theme().bodyText;
-  body.maxLines = 3;
-  constexpr int16_t detailPaddingY = 18;
-  constexpr int16_t detailPaddingX = 20;
-  const int16_t titleHeight = screen.target().lineHeight(title.font);
-  const int16_t bodyWidth = static_cast<int16_t>(screen.body().width - detailPaddingX * 2);
-  const int16_t bodyHeight = fui::measureWrappedText(screen.target(), tileDetail(selected), body, bodyWidth).height;
-  const int16_t detailHeight =
-      static_cast<int16_t>(detailPaddingY * 2 + titleHeight + metrics.verticalSpacing + bodyHeight);
-  const fui::Rect detail = screen.takeTop(detailHeight);
-  screen.target().stroke(detail, fui::Paint::solid(fui::Color::Black), 2, screen.theme().controlRadius);
-  const fui::Rect inset = detail.inset(fui::Insets{detailPaddingY, detailPaddingX, detailPaddingY, detailPaddingX});
-  screen.target().text(fui::Rect{inset.x, inset.y, inset.width, static_cast<int16_t>(titleHeight)}, tileLabel(selected),
-                       title);
-  screen.target().text(fui::Rect{inset.x, static_cast<int16_t>(inset.y + titleHeight + metrics.verticalSpacing),
-                                 inset.width, bodyHeight},
-                       tileDetail(selected), body);
+  golfui::drawDetail(screen, tileLabel(selected), tileDetail(selected), metrics.verticalSpacing);
 }
 
 void GolfHistoryChoiceActivity::drawFooter() const {

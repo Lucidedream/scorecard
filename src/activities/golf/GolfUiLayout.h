@@ -78,6 +78,67 @@ constexpr fui::Rect reserveHintEdge(const fui::Rect screen, const HintEdge edge,
   }
 }
 
+constexpr fui::Rect tileCell(const fui::Rect strip, const uint8_t count, const uint8_t index) {
+  if (!count || index >= count) return {};
+  const int left = strip.x + static_cast<int32_t>(strip.width) * index / count;
+  const int right = strip.x + static_cast<int32_t>(strip.width) * (index + 1) / count;
+  return {static_cast<int16_t>(left), strip.y, static_cast<int16_t>(right - left), strip.height};
+}
+struct TileGeometry {
+  fui::Rect icon{};
+  fui::Rect label{};
+};
+constexpr TileGeometry tileGeometry(const fui::Rect rect) {
+  return {{static_cast<int16_t>(rect.x + (rect.width - 32) / 2), static_cast<int16_t>(rect.y + 16), 32, 32},
+          {rect.x, static_cast<int16_t>(rect.y + 54), rect.width, static_cast<int16_t>(rect.height - 58)}};
+}
+struct DetailGeometry {
+  fui::Rect box{};
+  fui::Rect title{};
+  fui::Rect body{};
+};
+constexpr DetailGeometry detailGeometry(const fui::Rect available, const int titleHeight, const int bodyHeight,
+                                        const int spacing) {
+  const fui::Rect box{available.x, available.y, available.width,
+                      static_cast<int16_t>(minValue(available.height, 36 + titleHeight + spacing + bodyHeight))};
+  return {box,
+          {static_cast<int16_t>(box.x + 20), static_cast<int16_t>(box.y + 18), static_cast<int16_t>(box.width - 40),
+           static_cast<int16_t>(titleHeight)},
+          {static_cast<int16_t>(box.x + 20), static_cast<int16_t>(box.y + 18 + titleHeight + spacing),
+           static_cast<int16_t>(box.width - 40), static_cast<int16_t>(bodyHeight)}};
+}
+constexpr bool contains(const fui::Rect rect, const int x, const int y) {
+  return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
+}
+constexpr int tileAt(const fui::Rect strip, const uint8_t count, const int x, const int y) {
+  for (uint8_t i = 0; i < count; ++i)
+    if (contains(tileCell(strip, count, i), x, y)) return i;
+  return -1;
+}
+inline constexpr uint8_t REGION_PAGE_SIZE = 10;
+constexpr int pageCount(const int count, const int size) { return size > 0 ? (count + size - 1) / size : 0; }
+constexpr fui::Rect regionCell(const fui::Rect grid, const uint8_t index) {
+  if (index >= REGION_PAGE_SIZE) return {};
+  return tileCell(
+      fui::Rect{grid.x, static_cast<int16_t>(grid.y + static_cast<int32_t>(grid.height) * (index / 2) / 5), grid.width,
+                static_cast<int16_t>(static_cast<int32_t>(grid.height) * (index / 2 + 1) / 5 -
+                                     static_cast<int32_t>(grid.height) * (index / 2) / 5)},
+      2, index % 2);
+}
+constexpr fui::Rect courseCard(const fui::Rect body, const int index, const int height = 104) {
+  return {body.x, static_cast<int16_t>(body.y + index * height), body.width, static_cast<int16_t>(height)};
+}
+constexpr int courseCardsPerPage(const fui::Rect body) { return maxValue(body.height / 104, 1); }
+constexpr bool courseSortVisible(const fui::Rect body, const int selected, const int top) {
+  const fui::Rect cards{body.x, body.y, body.width, static_cast<int16_t>(maxValue(body.height - 48, 0))};
+  return top <= 1 && selected <= courseCardsPerPage(cards);
+}
+constexpr fui::Rect sortSegmentCell(const fui::Rect segment, const uint8_t half) { return tileCell(segment, 2, half); }
+constexpr int regionAt(const fui::Rect grid, const int x, const int y) {
+  for (uint8_t i = 0; i < REGION_PAGE_SIZE; ++i)
+    if (contains(regionCell(grid, i), x, y)) return i;
+  return -1;
+}
 enum class FooterAction : uint8_t { None, Back, Confirm, Previous, Next };
 
 struct FooterLabels {
