@@ -124,7 +124,7 @@ TEST_F(GolfExportTest, EmitsFairwayAndGreenInRegulationForV5DetailedRound) {
   golfSetFairwayHit(data.round.players[0].score, 0, true);
   const auto json = render(GolfExportFormat::Json);
   EXPECT_NE(json.find("\"fairways_recorded\":\"recorded\""), std::string::npos);
-  EXPECT_NE(json.find("\"fairway\":1,"), std::string::npos);
+  EXPECT_NE(json.find("\"fairway\":true,"), std::string::npos);
   EXPECT_NE(json.find("\"fairways_hit\":1,"), std::string::npos);
   EXPECT_NE(json.find("\"fairway_holes\":1,"), std::string::npos);
   EXPECT_NE(json.find("\"greens_in_reg\":0,"), std::string::npos);
@@ -314,3 +314,21 @@ TEST_F(GolfHttpTest, StalledClientExpiresAndServerCanRestart) {
 }
 #endif
 }  // namespace
+
+TEST_F(GolfExportTest, FairwayExportsHitMissedAndNoneWithoutInventingAMiss) {
+  auto& score = data.round.players[0].score;
+  for (auto state : {GolfFairwayState::Hit, GolfFairwayState::Missed, GolfFairwayState::None}) {
+    golfSetFairwayState(score, 0, state);
+    const auto json = render(GolfExportFormat::Json);
+    const auto first = json.find("\"fairway\":");
+    ASSERT_NE(first, std::string::npos);
+    const std::string expected = state == GolfFairwayState::Hit      ? "\"fairway\":true,"
+                                 : state == GolfFairwayState::Missed ? "\"fairway\":false,"
+                                                                     : "\"fairway\":null,";
+    EXPECT_EQ(json.substr(first, expected.size()), expected);
+    if (state == GolfFairwayState::None) {
+      EXPECT_NE(render(GolfExportFormat::Html).find("<dt>Fairway hit (1=yes, 0=no)</dt><dd>—</dd>"), std::string::npos);
+      EXPECT_NE(render(GolfExportFormat::Text).find("Fairway hit (1=yes, 0=no): —"), std::string::npos);
+    }
+  }
+}

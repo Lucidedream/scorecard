@@ -96,11 +96,15 @@ class Writer {
       raw("\n");
     }
   }
-  void metric(const char* key, const char* label, int value, bool available, const char* missing) {
+  void metric(const char* key, const char* label, int value, bool available, const char* missing,
+              bool boolean = false) {
     if (format == Format::Json) {
       text(key);
       raw(":");
-      number(value, available);
+      if (boolean && available)
+        raw(value ? "true" : "false");
+      else
+        number(value, available);
       raw(",\n");
     } else {
       char textValue[16];
@@ -319,7 +323,9 @@ void holeBlock(Writer& w, const GolfExportData& d, uint8_t hole, GolfExportTrans
   w.metric("penalty_strokes", tr(Label::Penalty), golfPenaltyStrokesForHole(s, hole), d.penaltiesRecorded && played,
            missing);
   w.metric("fairway", tr(Label::Fairway), golfFairwayHit(s, hole) ? 1 : 0,
-           d.fairwaysRecorded && played && (r.par[hole] == 4 || r.par[hole] == 5), missing);
+           d.fairwaysRecorded && played && (r.par[hole] == 4 || r.par[hole] == 5) &&
+               golfFairwayState(s, hole) != GolfFairwayState::None,
+           tr(Label::EmDash), true);
   w.metric("gir", tr(Label::Gir), golfGreenInRegulation(r, s, hole) ? 1 : 0,
            played && r.par[hole] >= 3 && r.par[hole] <= 5, missing);
   if (w.format == Format::Json)
@@ -388,7 +394,8 @@ void csvBlock(Writer& w, const GolfExportData& d, uint16_t block, GolfExportTran
     w.raw(",");
     w.number(golfPenaltyStrokesForHole(s, hole), played && d.penaltiesRecorded);
     w.raw(",");
-    w.number(golfFairwayHit(s, hole) ? 1 : 0, d.fairwaysRecorded && played && (r.par[hole] == 4 || r.par[hole] == 5));
+    w.number(golfFairwayHit(s, hole) ? 1 : 0, d.fairwaysRecorded && played && (r.par[hole] == 4 || r.par[hole] == 5) &&
+                                                  golfFairwayState(s, hole) != GolfFairwayState::None);
     w.raw(",");
     w.number(golfGreenInRegulation(r, s, hole) ? 1 : 0, played && r.par[hole] >= 3 && r.par[hole] <= 5);
     w.raw(",\"");

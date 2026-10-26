@@ -569,3 +569,27 @@ TEST(GolfLayout, RegionSearchBarChoosesRowsByRemainingHeight) {
     EXPECT_EQ(golfui::regionCell(grid, rows * 2, rows).height, 0);
   }
 }
+
+TEST(GolfFairwayLayout, ChipAndFourPlayerPromptFitScoringSafeArea) {
+  for (const auto safe :
+       {freeink::ui::Rect{0, 0, 480, 700}, freeink::ui::Rect{0, 0, 800, 380}, freeink::ui::Rect{12, 16, 456, 680}}) {
+    const auto scoring = golfui::makeScoringLayout(safe, 0, 2, false, 24);
+    const auto chip = golfui::fairwayChipRect(scoring.hole);
+    EXPECT_GE(chip.width, 44);
+    EXPECT_GE(chip.height, 44);
+    EXPECT_GE(chip.x, scoring.hole.x);
+    EXPECT_GE(chip.y, scoring.hole.y);
+    EXPECT_LE(chip.right(), scoring.hole.right());
+    EXPECT_LE(chip.bottom(), scoring.hole.bottom());
+    const auto sheet = golfui::fairwayPromptSheet(safe, 15);
+    for (uint8_t row = 0; row < 4; ++row) {
+      const auto hit = golfui::fairwayPromptCell(sheet, row, 0);
+      const auto miss = golfui::fairwayPromptCell(sheet, row, 1);
+      EXPECT_EQ(hit.right(), miss.x);
+      EXPECT_GE(hit.width, 44);
+      EXPECT_GE(hit.height, 44);
+      EXPECT_LE(miss.right(), sheet.right());
+      EXPECT_LE(hit.bottom(), sheet.bottom());
+    }
+  }
+}

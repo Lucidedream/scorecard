@@ -62,6 +62,7 @@ enum class GolfExportLabel : uint8_t {
   GirHoles,
   FirPct,
   GirPct,
+  EmDash,
   Count
 };
 using GolfExportTranslate = const char* (*)(GolfExportLabel);

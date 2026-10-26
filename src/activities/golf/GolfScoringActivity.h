@@ -34,6 +34,21 @@ class GolfScoringActivity final : public Activity, protected UiAppHost {
   mutable char statusPlayerLabel[GOLF_PLAYER_LABEL_CAPACITY]{};
   mutable char statusTime[9]{};
 
+  // Session-only prompt history and deferred hole/player destination.
+  uint8_t fairwayPrompted[3]{};
+  uint8_t fairwayPromptPlayers = 0;
+  uint8_t pendingHole = 0;
+  uint8_t pendingPlayer = 0;
+  bool promptMissed = false;
+  bool finishAfterChange = false;
+  bool requestHoleChange(uint8_t hole, uint8_t player);
+  void completeHoleChange();
+  void handleFairwayPromptInput();
+  void answerFairwayPrompt(uint8_t player, bool missed);
+  void drawFairwayPrompt(freeink::ui::Rect safe) const;
+  golfui::FooterLabels fairwayPromptFooter() const;
+  bool fairwayPromptHasAnswer() const;
+
   // Mark picker (CONTRACTS-V2 §12, §31.2, §33.2). While pickerOpen the scoring
   // screen still renders in full and the sheet draws over it. pickerRow is the
   // highlighted row: 0 = Hazard, 1 = OB, 2 = the field-dependent third row --

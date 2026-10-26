@@ -419,6 +419,25 @@ constexpr MenuInfoLayout makeMenuInfoLayout(const fui::Rect body, const uint8_t 
   return result;
 }
 
+constexpr fui::Rect fairwayPromptSheet(const fui::Rect safe, const uint8_t players) {
+  int count = 0;
+  for (uint8_t slot = 0; slot < 4; ++slot)
+    if (players & (1 << slot)) ++count;
+  const int height = minValue(static_cast<int16_t>(44 + 64 * count), safe.height);
+  return {safe.x, static_cast<int16_t>(safe.y + safe.height - height), safe.width, static_cast<int16_t>(height)};
+}
+
+constexpr fui::Rect fairwayPromptCell(const fui::Rect sheet, const uint8_t row, const uint8_t cell) {
+  const int width = sheet.width / 4;
+  return {static_cast<int16_t>(sheet.x + sheet.width / 2 + width * cell), static_cast<int16_t>(sheet.y + 44 + row * 64),
+          static_cast<int16_t>(width), 64};
+}
+
+constexpr fui::Rect fairwayChipRect(const fui::Rect hole) {
+  return {static_cast<int16_t>(hole.x + hole.width * 3 / 8), static_cast<int16_t>(hole.y + (hole.height - 44) / 2), 72,
+          44};
+}
+
 struct ScoringLayout {
   fui::Rect safe{};
   fui::Rect header{};

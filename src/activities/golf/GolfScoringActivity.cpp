@@ -308,7 +308,7 @@ golfui::FooterLabels GolfScoringActivity::footerLabels() const {
 void GolfScoringActivity::openPenaltyPicker() {
   {
     RenderLock lock(*this);
-    pickerRow = 0;
+    pickerRow = fairwayRowAvailable() ? PICKER_ROW_THIRD : 0;
     pickerHoleFull = false;
     pickerOpen = true;
   }
@@ -317,19 +317,58 @@ void GolfScoringActivity::openPenaltyPicker() {
 }
 
 void GolfScoringActivity::jumpToHole(const uint8_t hole) {
-  if (rejectArchivedMutation()) return;
-  bool changed = false;
+  const auto& round = GOLF_ROUND_STORE.getRound();
+  if (hole >= round.holeCount || hole == round.currentHole) return;
+  requestHoleChange(hole, round.currentPlayer);
+}
+
+bool GolfScoringActivity::requestHoleChange(const uint8_t hole, const uint8_t player) {
+  if (rejectArchivedMutation()) return false;
+  bool prompt = false;
   {
     RenderLock lock(*this);
-    changed = golfJumpToHole(GOLF_ROUND_STORE.getRound(), hole);
-    if (changed) {
-      resetTurnState();
+    auto& round = GOLF_ROUND_STORE.getRound();
+    pendingHole = hole;
+    pendingPlayer = player;
+    if (hole != round.currentHole && !finishAfterChange) {
+      fairwayPromptPlayers = golfFairwayPromptPlayers(round, round.currentHole, fairwayPrompted);
+      prompt = fairwayPromptPlayers != 0;
+      if (prompt) {
+        fairwayPrompted[round.currentHole / 8] |= 1 << (round.currentHole % 8);
+        pickerOpen = false;
+        pickerRow = 0;
+        while (!(fairwayPromptPlayers & (1 << pickerRow))) ++pickerRow;
+        promptMissed = false;
+      }
     }
   }
-  if (!changed) return;
+  if (prompt) {
+    renderer.promoteNextRefresh(HalDisplay::HALF_REFRESH);
+    requestUpdate();
+  } else
+    completeHoleChange();
+  return prompt;
+}
+
+void GolfScoringActivity::completeHoleChange() {
+  bool changedHole;
+  {
+    RenderLock lock(*this);
+    auto& round = GOLF_ROUND_STORE.getRound();
+    changedHole = round.currentHole != pendingHole;
+    round.currentHole = pendingHole;
+    round.currentPlayer = pendingPlayer;
+    fairwayPromptPlayers = 0;
+    resetTurnState();
+  }
   markDirtyForIdle();
-  flushDirty();
+  if (changedHole) flushDirty();
+  renderer.promoteNextRefresh(HalDisplay::HALF_REFRESH);
   requestUpdate();
+  if (finishAfterChange) {
+    finishAfterChange = false;
+    offerFinishRound();
+  }
 }
 
 void GolfScoringActivity::closePenaltyPicker() {
@@ -457,14 +496,13 @@ void GolfScoringActivity::applyPenaltyPick() {
 
 void GolfScoringActivity::toggleFairwayHit() {
   if (rejectArchivedMutation()) return;
-  // A checkbox, not an add action (§31.2): flip the hole's bit, no counter
-  // moves, no cap. Seed first, exactly as every mutation path must (§13.1).
+  // Seed before cycling the recorded answer (§46.1).
   {
     RenderLock lock(*this);
     GolfRound& round = GOLF_ROUND_STORE.getRound();
     GolfPlayerScore& score = round.players[round.currentPlayer].score;
     ensureHoleSeeded();
-    golfSetFairwayHit(score, round.currentHole, !golfFairwayHit(score, round.currentHole));
+    golfSetFairwayState(score, round.currentHole, golfNextFairwayState(golfFairwayState(score, round.currentHole)));
   }
   markDirtyForIdle();
   closePenaltyPicker();
@@ -519,35 +557,25 @@ void GolfScoringActivity::commitAndAdvance() {
     offerFinish = !finishPromptShown && golfIsFinalCommit(GOLF_ROUND_STORE.getRound());
   }
   if (committed) markDirtyForIdle();
-  changeTurn(true);
   if (offerFinish) {
     finishPromptShown = true;
-    offerFinishRound();
+    finishAfterChange = true;
   }
+  changeTurn(true);
 }
 
 void GolfScoringActivity::changeTurn(const bool forward) {
   if (rejectArchivedMutation()) return;
-  bool changed = false;
-  bool holeChanged = false;
-  {
-    RenderLock lock(*this);
-    GolfRound& round = GOLF_ROUND_STORE.getRound();
-    const uint8_t previousHole = round.currentHole;
-    const uint8_t previousPlayer = round.currentPlayer;
-    const bool traversed = forward ? advanceGolfTurn(round) : retreatGolfTurn(round);
-    changed = traversed && (round.currentHole != previousHole || round.currentPlayer != previousPlayer);
-    holeChanged = changed && round.currentHole != previousHole;
-    if (changed) resetTurnState();
-  }
-  if (!changed) {
-    LOG_ERR("GOLF", "Turn change rejected");
-    return;
-  }
-
-  markDirtyForIdle();
-  if (holeChanged) flushDirty();
-  requestUpdate();
+  const auto& round = GOLF_ROUND_STORE.getRound();
+  if (round.holeCount == 0 || round.holeCount > GolfRound::MAX_HOLES) return;
+  const uint8_t player = forward ? golfNextEnabledPlayer(round, round.currentPlayer)
+                                 : golfPreviousEnabledPlayer(round, round.currentPlayer);
+  if (player == GolfRound::NO_PLAYER) return;
+  const bool wraps = forward ? player <= round.currentPlayer : round.currentPlayer == golfFirstEnabledPlayer(round);
+  const uint8_t hole =
+      wraps ? static_cast<uint8_t>((round.currentHole + (forward ? 1 : round.holeCount - 1)) % round.holeCount)
+            : round.currentHole;
+  requestHoleChange(hole, player);
 }
 
 void GolfScoringActivity::openRoundMenu() {
@@ -585,7 +613,13 @@ void GolfScoringActivity::openCourseMap() {
   openGolfCourseMap(*this, renderer, mappedInput);
 }
 
-bool GolfScoringActivity::handleHomeGesture() { return !flushDirty(); }
+bool GolfScoringActivity::handleHomeGesture() {
+  if (fairwayPromptPlayers) {
+    finishAfterChange = false;
+    completeHoleChange();
+  }
+  return !flushDirty();
+}
 
 void GolfScoringActivity::loop() {
   if (!mappedInput.hasTouch()) {
@@ -637,10 +671,165 @@ bool GolfScoringActivity::handleNavigationSwipe() {
   return true;
 }
 
+bool GolfScoringActivity::fairwayPromptHasAnswer() const {
+  const auto& round = GOLF_ROUND_STORE.getRound();
+  for (uint8_t slot = 0; slot < GolfRound::MAX_PLAYERS; ++slot) {
+    if ((fairwayPromptPlayers & (1 << slot)) &&
+        golfFairwayState(round.players[slot].score, round.currentHole) != GolfFairwayState::None)
+      return true;
+  }
+  return false;
+}
+
+golfui::FooterLabels GolfScoringActivity::fairwayPromptFooter() const {
+  return {tr(STR_GOLF_FAIRWAY_SKIP),
+          !mappedInput.hasTouch()    ? tr(STR_GOLF_FAIRWAY_SET)
+          : fairwayPromptHasAnswer() ? tr(STR_GOLF_FAIRWAY_DONE)
+                                     : "",
+          tr(STR_GOLF_FOOTER_PREVIOUS), tr(STR_GOLF_FOOTER_NEXT)};
+}
+
+void GolfScoringActivity::answerFairwayPrompt(const uint8_t player, const bool missed) {
+  if (rejectArchivedMutation() || !(fairwayPromptPlayers & (1 << player))) return;
+  bool complete = true;
+  {
+    RenderLock lock(*this);
+    auto& round = GOLF_ROUND_STORE.getRound();
+    auto& score = round.players[player].score;
+    seedGolfHoleAtPar(score, round.currentHole, round.par[round.currentHole]);
+    golfSetFairwayState(score, round.currentHole, missed ? GolfFairwayState::Missed : GolfFairwayState::Hit);
+    for (uint8_t slot = 0; slot < GolfRound::MAX_PLAYERS; ++slot) {
+      if ((fairwayPromptPlayers & (1 << slot)) &&
+          golfFairwayState(round.players[slot].score, round.currentHole) == GolfFairwayState::None) {
+        if (complete) pickerRow = slot;
+        complete = false;
+      }
+    }
+    promptMissed = false;
+  }
+  markDirtyForIdle();
+  if (complete)
+    completeHoleChange();
+  else
+    requestUpdate();
+}
+
+void GolfScoringActivity::handleFairwayPromptInput() {
+  golfui::FooterInput input(mappedInput, fairwayPromptFooter(), true);
+  if (input.wasReleased(golfui::FooterAction::Back) ||
+      input.wasLongPressed(golfui::FooterAction::Back, MAP_LONGPRESS_MS) || mappedInput.wasBackGesture()) {
+    completeHoleChange();
+    return;
+  }
+  if (input.wasReleased(golfui::FooterAction::Previous) || input.wasReleased(golfui::FooterAction::Next)) {
+    {
+      RenderLock lock(*this);
+      promptMissed = input.wasReleased(golfui::FooterAction::Next);
+    }
+    requestUpdate();
+    return;
+  }
+  if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
+      mappedInput.wasPressed(MappedInputManager::Button::Down)) {
+    const int delta = mappedInput.wasPressed(MappedInputManager::Button::Up) ? -1 : 1;
+    {
+      RenderLock lock(*this);
+      do {
+        pickerRow = static_cast<uint8_t>((pickerRow + GolfRound::MAX_PLAYERS + delta) % GolfRound::MAX_PLAYERS);
+      } while (!(fairwayPromptPlayers & (1 << pickerRow)));
+      promptMissed = false;
+    }
+    requestUpdate();
+    return;
+  }
+  if (input.wasTouchReleased(golfui::FooterAction::Confirm)) {
+    if (fairwayPromptHasAnswer()) completeHoleChange();
+    return;
+  }
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (mappedInput.hasTouch()) {
+      if (fairwayPromptHasAnswer()) completeHoleChange();
+      return;
+    }
+    answerFairwayPrompt(pickerRow, promptMissed);
+    return;
+  }
+  if (mappedInput.wasReleased(MappedInputManager::Button::Power)) {
+    if (mappedInput.hasTouch() && SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PWR_CONFIRM) return;
+    completeHoleChange();
+    return;
+  }
+  if (mappedInput.wasSwipe() != MappedInputManager::SwipeDir::None) {
+    completeHoleChange();
+    return;
+  }
+  if (!input.hasTap()) return;
+  const auto chrome = golfui::chromeLayout(renderer, mappedInput, 0, {}, true);
+  const auto sheet = golfui::fairwayPromptSheet(chrome.safe, fairwayPromptPlayers);
+  if (!input.tapIn(sheet)) {
+    // A disabled Done cell is inert.
+    if (input.tapIn(golfui::touchFooterLayout(renderer).cells[1])) return;
+    completeHoleChange();
+    return;
+  }
+  uint8_t row = 0;
+  for (uint8_t slot = 0; slot < GolfRound::MAX_PLAYERS; ++slot) {
+    if (!(fairwayPromptPlayers & (1 << slot))) continue;
+    for (uint8_t cell = 0; cell < 2; ++cell) {
+      if (input.tapIn(golfui::fairwayPromptCell(sheet, row, cell))) {
+        answerFairwayPrompt(slot, cell != 0);
+        return;
+      }
+    }
+    ++row;
+  }
+}
+
+void GolfScoringActivity::drawFairwayPrompt(const freeink::ui::Rect safe) const {
+  const auto& round = GOLF_ROUND_STORE.getRound();
+  const auto sheet = golfui::fairwayPromptSheet(safe, fairwayPromptPlayers);
+  renderer.fillRectDither(safe.x, safe.y, safe.width, sheet.y - safe.y, Color::LightGray);
+  renderer.fillRect(sheet.x, sheet.y, sheet.width, sheet.height, false);
+  renderer.fillRect(sheet.x, sheet.y, sheet.width, SHEET_BORDER, true);
+  char title[64];
+  snprintf(title, sizeof(title), tr(STR_GOLF_FAIRWAY_PROMPT_FORMAT), static_cast<unsigned>(round.currentHole + 1));
+  renderer.drawText(UI_10_FONT_ID, sheet.x + SHEET_PAD_X, sheet.y + 8, title, true, EpdFontFamily::BOLD);
+  uint8_t row = 0;
+  for (uint8_t slot = 0; slot < GolfRound::MAX_PLAYERS; ++slot) {
+    if (!(fairwayPromptPlayers & (1 << slot))) continue;
+    const auto hit = golfui::fairwayPromptCell(sheet, row, 0);
+    const auto miss = golfui::fairwayPromptCell(sheet, row, 1);
+    const int y = hit.y + (hit.height - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
+    const bool selected = slot == pickerRow;
+    char name[GolfPlayer::NAME_CAPACITY];
+    snprintf(name, sizeof(name), "%s", round.players[slot].name);
+    ellipsize(renderer, name, sizeof(name), sheet.width / 2 - SHEET_PAD_X - 4);
+    renderer.drawText(UI_10_FONT_ID, sheet.x + SHEET_PAD_X, y, name, true,
+                      selected ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
+    const auto state = golfFairwayState(round.players[slot].score, round.currentHole);
+    for (uint8_t cell = 0; cell < 2; ++cell) {
+      const auto rect = cell == 0 ? hit : miss;
+      const bool answered = state == (cell == 0 ? GolfFairwayState::Hit : GolfFairwayState::Missed);
+      if (answered) renderer.fillRect(rect.x, rect.y, rect.width, rect.height, true);
+      renderer.drawRect(rect.x, rect.y, rect.width, rect.height, selected && promptMissed == (cell != 0) ? 3 : 1,
+                        !answered);
+      const char* label = cell == 0 ? tr(STR_GOLF_FAIRWAY_HIT_CHOICE) : tr(STR_GOLF_FAIRWAY_MISSED);
+      renderer.drawText(UI_10_FONT_ID, rect.x + (rect.width - renderer.getTextWidth(UI_10_FONT_ID, label)) / 2, y,
+                        label, !answered);
+    }
+    ++row;
+  }
+  golfui::drawFooter(renderer, mappedInput, fairwayPromptFooter(), true);
+}
+
 void GolfScoringActivity::handleScoringInput() {
   if (GOLF_ROUND_STORE.isArchived()) {
     LOG_ERR("GOLF", "Leaving committed archive scoring surface");
     openGolfHome(activityManager, renderer, mappedInput);
+    return;
+  }
+  if (fairwayPromptPlayers) {
+    handleFairwayPromptInput();
     return;
   }
   if (pickerOpen) {
@@ -702,6 +891,12 @@ void GolfScoringActivity::handleScoringInput() {
     const auto layout =
         golfui::makeScoringLayout(chrome.safe, metrics.topPadding, static_cast<uint8_t>(focusedField),
                                   score.penaltyCount[round.currentHole] > 0, renderer.getLineHeight(UI_10_FONT_ID));
+    if (golfFairwayEligible(round, round.currentHole) &&
+        (score.in100[round.currentHole] || score.out100[round.currentHole]) &&
+        input.tapIn(golfui::fairwayChipRect(layout.hole))) {
+      toggleFairwayHit();
+      return;
+    }
     if (input.tapIn(layout.hole)) return;
     if (input.tapIn(layout.nineStrip)) {
       const auto tap = input.tapPoint();
@@ -775,6 +970,17 @@ void GolfScoringActivity::drawHoleBand(const golfui::ScoringLayout& layout) cons
   const int digitHeight = golfui::scoringHoleDigitHeight(rect.height, lineHeight);
   golfDrawLargeNumber(renderer, rect.x + rect.width / 4, golfui::scoringHoleDigitTop(rect, digitHeight), digitHeight,
                       hole + 1);
+  if (golfFairwayEligible(round, hole) && (player.score.in100[hole] || player.score.out100[hole])) {
+    const auto chip = golfui::fairwayChipRect(rect);
+    renderer.drawRect(chip.x, chip.y, chip.width, chip.height, 2, true);
+    renderer.drawText(UI_10_FONT_ID, chip.x + 5, chip.y + (chip.height - lineHeight) / 2, tr(STR_GOLF_FW), true);
+    const auto state = golfFairwayState(player.score, hole);
+    blitIcon(renderer,
+             state == GolfFairwayState::Hit      ? icon_circle_check_16
+             : state == GolfFairwayState::Missed ? icon_circle_x_16
+                                                 : icon_circle_16,
+             chip.right() - 22, chip.y + (chip.height - 16) / 2, true);
+  }
   char text[32];
   const int right = rect.x + rect.width - padding;
   if (rect.height < lineHeight * 3 + 4) {
@@ -887,8 +1093,8 @@ void GolfScoringActivity::drawCounters(const golfui::ScoringLayout& layout) cons
     // zone (§31.3), mountain for a greenside bunker on Inside 100 (§33.2). Its
     // fixed slot is reserved out of the marker budget.
     const freeink::Icon* markIcon = nullptr;
-    if (index == 2 && golfFairwayHit(score, hole)) {
-      markIcon = &icon_circle_check_16;
+    if (index == 2 && golfFairwayState(score, hole) != GolfFairwayState::None) {
+      markIcon = golfFairwayState(score, hole) == GolfFairwayState::Hit ? &icon_circle_check_16 : &icon_circle_x_16;
     } else if (index == 1 && golfGreensideBunker(score, hole)) {
       markIcon = &icon_mountain_16;
     }
@@ -1069,16 +1275,20 @@ void GolfScoringActivity::drawPenaltyPicker(const freeink::ui::Rect safe) const 
     const bool bunkerRow = thirdRow && thirdRowBunker;
     const bool fairwayRow = thirdRow && !thirdRowBunker;
     const char* name = bunkerRow    ? tr(STR_GOLF_GREENSIDE_BUNKER)
-                       : fairwayRow ? tr(STR_GOLF_FAIRWAY_HIT)
+                       : fairwayRow ? tr(STR_GOLF_FAIRWAY)
                                     : (option == 0 ? tr(STR_GOLF_HAZARD) : tr(STR_GOLF_OUT_OF_BOUNDS));
     const char* cost = bunkerRow    ? tr(STR_GOLF_GREENSIDE_BUNKER_COST)
-                       : fairwayRow ? tr(STR_GOLF_FAIRWAY_HIT_COST)
+                       : fairwayRow ? tr(STR_GOLF_FAIRWAY_CYCLE)
                                     : (option == 0 ? tr(STR_GOLF_HAZARD_COST) : tr(STR_GOLF_OUT_OF_BOUNDS_COST));
 
     if (thirdRow) {
       // The tag column carries an icon, not a letter: circle-check for a fairway
       // hit (§31.3), mountain for a greenside bunker (§33.2).
-      blitIcon(renderer, bunkerRow ? icon_mountain_24 : icon_circle_check_24,
+      blitIcon(renderer,
+               bunkerRow                                                   ? icon_mountain_24
+               : golfFairwayState(score, hole) == GolfFairwayState::Hit    ? icon_circle_check_24
+               : golfFairwayState(score, hole) == GolfFairwayState::Missed ? icon_circle_x_24
+                                                                           : icon_circle_24,
                safe.x + (tagColumn - MARK_ICON_SHEET_PX) / 2, rowTop + (rowHeight - MARK_ICON_SHEET_PX) / 2, ink);
     } else {
       const char* tag = option == 0 ? tr(STR_GOLF_HAZARD_TAG) : tr(STR_GOLF_OUT_OF_BOUNDS_TAG);
@@ -1092,7 +1302,7 @@ void GolfScoringActivity::drawPenaltyPicker(const freeink::ui::Rect safe) const 
     renderer.drawText(UI_12_FONT_ID, textX, textTop, name, ink, EpdFontFamily::BOLD);
     renderer.drawText(UI_10_FONT_ID, textX, textTop + nameHeight, cost, ink);
 
-    if (thirdRow) {
+    if (bunkerRow) {
       // A checkbox reflecting the hole's current state; Confirm toggles it.
       constexpr int box = 22;
       const int boxX = safe.x + safe.width - SHEET_PAD_X - box;
@@ -1126,6 +1336,7 @@ void GolfScoringActivity::render(RenderLock&&) {
   drawNineStrip(layout);
   drawFooter();
   if (pickerOpen) drawPenaltyPicker(layout.safe);
+  if (fairwayPromptPlayers) drawFairwayPrompt(layout.safe);
   ++paintCount;
   if (paintCount % 8 == 0) renderer.promoteNextRefresh(HalDisplay::HALF_REFRESH);
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);

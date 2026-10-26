@@ -3456,8 +3456,11 @@ an **eligible hole** below is an eligible hole the player has a score on.
 * **Statistics:** the FIR denominator becomes **answered** eligible holes, through
   `golfFairwaysAnswered(round, score)`, which replaces the denominator use of
   `golfFairwaysEligible`. The numerator is unchanged. `index.csv` keeps its v5 columns;
-  `fairwayHoles` simply holds the answered count. History, Trends, Career stats and the
-  phone report therefore need no change and stay correct for old rows. Rebuild (§31.6)
+  `fairwayHoles` simply holds the answered count. History, Trends and Career stats
+  therefore need no change and stay correct for old rows. In the **phone report**, the
+  per-hole fairway value for an eligible hole with no answer is `null` (rendered as `—`),
+  not `false`, so a forgotten hole never reads as a miss. Legacy rounds are unaffected:
+  every eligible hole counts as answered. Rebuild (§31.6)
   uses the same rule, including legacy files.
 
 ### 46.2 The FW chip on the scoring screen
@@ -3491,11 +3494,14 @@ an **eligible hole** below is an eligible hole the player has a score on.
     PREV/NEXT cells); Confirm sets the row.
   - When every row has an answer, the sheet closes and the hole change it interrupted
     completes.
-  - The footer reads `Skip` / `Done`: Skip (Back) leaves the rest unanswered and
-    continues; Done is enabled once any row is answered.
+  - Skip (Back) leaves the rest unanswered and continues. The X4 footer reads
+    `Skip` / `Set`: Confirm always sets the selected row. The Pro footer reads
+    `Skip` / `Done`: Done is enabled once any row is answered and closes the sheet;
+    a configured Power-as-Confirm also acts as Done on the Pro.
   - It asks on any move away, backwards included, so the rule is simple and predictable.
 * **Never blocks scoring.** Any input not meant for the sheet behaves like Skip:
-  - MENU, a MENU long press, or the Home key;
+  - MENU or a MENU long press simply skips (it does not also open the menu or map);
+  - the Home key skips, then goes Home normally;
   - on the Pro, a tap outside the sheet.
   The sheet adds no new save path; its answers go through the §46.1 setter.
 * **Finish and Abandon** do not show the prompt. That is the optional "remind at Finish"

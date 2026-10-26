@@ -19,7 +19,7 @@ for kind in ('detailed', 'summary'):
         assert data['fairways_recorded'] == 'recorded'
         assert data['fairways_hit'] == 1 and data['fairway_holes'] == 1
         assert data['greens_in_reg'] == 0 and data['gir_holes'] == 1
-        assert data['holes'][0]['fairway'] == 1 and data['holes'][0]['gir'] == 0
+        assert data['holes'][0]['fairway'] is True and data['holes'][0]['gir'] == 0
         assert data['holes'][1]['fairway'] is None and data['holes'][1]['gir'] is None
     else:
         assert data['fairways_recorded'] == 'unavailable'

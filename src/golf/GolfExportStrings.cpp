@@ -113,6 +113,8 @@ const char* golfExportTranslate(const GolfExportLabel label) {
       return tr(STR_GOLF_EXPORT_FIR_PCT);
     case GolfExportLabel::GirPct:
       return tr(STR_GOLF_EXPORT_GIR_PCT);
+    case GolfExportLabel::EmDash:
+      return tr(STR_GOLF_EXPORT_EM_DASH);
     default:
       return "";
   }
