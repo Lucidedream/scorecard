@@ -3428,3 +3428,89 @@ from the tile, still shows the courses as cards.
   and one query buffer. The scan reads one 96-byte record at a time.
 * **Both devices:** the X4 types with its buttons (slow but complete), and the X4 Pro with
   the touch keyboard.
+
+## 46. Quick fairway hit: a chip, a prompt on leaving the hole, and "not answered" (v8)
+
+*Owner request 2026-10-26: "I always forget to mark the fairway hit."* Today (§31) the
+fairway is a checkbox three presses deep in the Mark sheet. A forgotten hole is stored as a
+**miss**, which quietly lowers fairway %. Three changes fix both problems. The §31.2
+eligibility rule is unchanged: par-4/5 holes, or every hole on a par-free course. For short,
+an **eligible hole** below is an eligible hole the player has a score on.
+
+### 46.1 Three states: hit, missed, not answered
+
+* `GolfPlayerScore` gains `uint8_t fairwayAnswered[3]`, the same bit shape as `fairwayHit`
+  (§31.5): bit set = the player answered for that hole.
+  - Answered with the hit bit set means **hit**.
+  - Answered with the hit bit clear means **missed**.
+  - Not answered means **no answer**; the hit bit is then clear.
+  Update the size `static_assert`s. Accessors sit next to the §31.5 ones:
+  `golfFairwayState(score, hole)` → `{None, Hit, Missed}` and
+  `golfSetFairwayState(score, hole, state)`. Seeding (§13.1) runs before any change, as
+  for every mutation.
+* **Round file / `state.json`:** each player object gains an optional `"fairwaysAnswered"`
+  18-element `0/1` array. There is **no version bump**, the same approach as §40's `nines`.
+  - Absent, in every older file: an eligible hole counts as answered (hit or miss, as its
+    `fairways` bit says), so legacy rounds keep exactly the statistics they had.
+  - Present but malformed: the round is rejected, like any malformed per-hole array.
+* **Statistics:** the FIR denominator becomes **answered** eligible holes, through
+  `golfFairwaysAnswered(round, score)`, which replaces the denominator use of
+  `golfFairwaysEligible`. The numerator is unchanged. `index.csv` keeps its v5 columns;
+  `fairwayHoles` simply holds the answered count. History, Trends, Career stats and the
+  phone report therefore need no change and stay correct for old rows. Rebuild (§31.6)
+  uses the same rule, including legacy files.
+
+### 46.2 The FW chip on the scoring screen
+
+* On an eligible hole, the current player's hole band shows a **FW chip** beside the hole
+  number with the state as an icon: Lucide `circle` = no answer, `circle-check` = hit,
+  `circle-x` = missed. Add `circle` and `circle-x` to `golfTileIcons.manifest` at 16 and 24
+  px. Existing icons stay byte-identical; fetch only those SVGs.
+* The chip does not appear on non-eligible holes.
+* **Touch:** tapping the chip cycles **no answer → hit → missed → no answer**. The chip has
+  its own hit rectangle of at least 44 × 44 px; §39's hole-band swipe still steps holes,
+  and a swipe that starts on the chip is still a swipe.
+* **X4 (buttons):** on an eligible hole's To Score Zone field, the Mark sheet opens with
+  the **Fairway** row highlighted first. That row is now the same three-state cycle, so
+  Confirm, Confirm records a hit.
+* The §31.3 marker beside the To Score Zone number shows `circle-check` for hit and
+  `circle-x` for missed, and nothing for no answer.
+
+### 46.3 Ask on leaving the hole
+
+* **When:** the current hole changes by any means (NEXT/PREV, a hole-band swipe, a
+  nine-strip tap, an auto-advance) away from a hole that is eligible for at least one
+  enabled player with a score and no answer. Each hole asks **at most once per scoring
+  session**, tracked in an activity RAM bitmask that is never saved. After a reboot it
+  may ask again, which is acceptable.
+* **What:** an in-place sheet like the Mark sheet, titled `Fairway · hole N`.
+  - It has one row per such player: the player's name and two cells, **Hit** and
+    **Missed**.
+  - Touch: tap a cell.
+  - X4: the rocker moves between rows; ◀ ▶ choose (on the Pro, the kept Scoring footer's
+    PREV/NEXT cells); Confirm sets the row.
+  - When every row has an answer, the sheet closes and the hole change it interrupted
+    completes.
+  - The footer reads `Skip` / `Done`: Skip (Back) leaves the rest unanswered and
+    continues; Done is enabled once any row is answered.
+  - It asks on any move away, backwards included, so the rule is simple and predictable.
+* **Never blocks scoring.** Any input not meant for the sheet behaves like Skip:
+  - MENU, a MENU long press, or the Home key;
+  - on the Pro, a tap outside the sheet.
+  The sheet adds no new save path; its answers go through the §46.1 setter.
+* **Finish and Abandon** do not show the prompt. That is the optional "remind at Finish"
+  idea, which the owner did not choose.
+
+### 46.4 Tests and limits
+
+Host tests, synthetic only:
+* the three-state accessors;
+* the legacy rule for a file without `fairwaysAnswered`;
+* the FIR numerator and denominator for hit/miss/none mixes;
+* the chip cycle order;
+* the prompt trigger: which players are asked, at most once per hole, and none on
+  non-eligible or unscored holes;
+* JSON round trip, including a malformed `fairwaysAnswered`.
+
+RAM: three bytes per player plus a 3-byte prompted mask; the sheet reuses the Mark sheet
+drawing.
