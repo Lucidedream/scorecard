@@ -555,3 +555,17 @@ TEST(GolfFooterless, PlayerCountKeepsOriginalFooterAndRosterReleasesItsSpace) {
               actions[i]);
   }
 }
+
+TEST(GolfLayout, RegionSearchBarChoosesRowsByRemainingHeight) {
+  EXPECT_EQ(golfui::regionRowsPerPage(280), 5);
+  EXPECT_EQ(golfui::regionRowsPerPage(279), 4);
+  EXPECT_EQ(golfui::regionRowsPerPage(400), 5);
+  for (const int height : {224, 279, 280, 340}) {
+    const uint8_t rows = golfui::regionRowsPerPage(height);
+    const freeink::ui::Rect grid{0, 48, 400, static_cast<int16_t>(height)};
+    const auto last = golfui::regionCell(grid, rows * 2 - 1, rows);
+    EXPECT_EQ(last.bottom(), grid.bottom());
+    EXPECT_EQ(last.right(), grid.right());
+    EXPECT_EQ(golfui::regionCell(grid, rows * 2, rows).height, 0);
+  }
+}

@@ -11,6 +11,7 @@
 #include "GolfCourseInfoActivity.h"
 #include "GolfCourseMapListActivity.h"
 #include "GolfTiles.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "components/icons/golfTileIcons.h"
 
@@ -37,14 +38,18 @@ void GolfCoursePickerActivity::onEnter() {
         RenderLock lock(*self);
         self->byRating = event.value == 0;
         self->sortRegion();
-        self->enterLevel(Level::Courses);
+        self->enterLevel(self->level);
       },
       this);
   {
     RenderLock lock(*this);
     region = initial.region;
     byRating = initial.byRating;
-    if (initial.level == Level::Courses) {
+    if (initial.level == Level::Search && hasCatalog) {
+      loadSearch();
+    } else if (initial.level == Level::Search) {
+      initial.level = Level::Hub;
+    } else if (initial.level == Level::Courses) {
       if (hasCatalog && region < scratch->catalog.count)
         loadRegion();
       else
@@ -64,6 +69,7 @@ void GolfCoursePickerActivity::onEnter() {
 }
 void GolfCoursePickerActivity::onExit() {
   indexFile.close();
+  searchKeys.reset();
   scratch.reset();
   GolfUiListActivity::onExit();
 }
@@ -123,6 +129,7 @@ void GolfCoursePickerActivity::loadRecent() {
   LOG_DBG("GOLF", "Recent loaded %u courses in %lu ms", recentCount, static_cast<unsigned long>(millis() - started));
 }
 void GolfCoursePickerActivity::enterLevel(Level next) {
+  if (level == Level::Search && next != Level::Search) searchKeys.reset();
   level = next;
   nav.reset();
   closeRouting();
@@ -131,8 +138,8 @@ void GolfCoursePickerActivity::enterLevel(Level next) {
 }
 int GolfCoursePickerActivity::listCount() const {
   if (!scratch) return 0;
-  if (level == Level::Regions) return scratch->catalog.count;
-  if (level == Level::Courses) return recordCount + 1;
+  if (level == Level::Regions) return scratch->catalog.count + 1;
+  if (isCourseLevel()) return recordCount + (hasSort() ? 1 : 0);
   if (level == Level::Recent) return recentCount;
   return (recentCount ? 1 : 0) + 1 + (hasCatalog ? 1 : 0);
 }
@@ -155,6 +162,58 @@ bool GolfCoursePickerActivity::readRecord(uint16_t ordinal, GolfCatalogRecord& r
   if ((++recordReads & 63) == 0) delay(1);
   return true;
 }
+void GolfCoursePickerActivity::openSearch() {
+  // Reuse the established keyboard activity; its layout and text state cannot live on the task stack.
+  auto keyboard = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_GOLF_SEARCH_COURSES),
+                                                           initial.query, size_t{24}, InputType::Text);
+  if (!keyboard) {
+    LOG_ERR("GOLF", "OOM: catalog search keyboard");
+    return;
+  }
+  startActivityForResult(std::move(keyboard), [this](const ActivityResult& result) {
+    if (result.isCancelled || !std::holds_alternative<KeyboardResult>(result.data)) return;
+    const auto& text = std::get<KeyboardResult>(result.data).text;
+    RenderLock lock(*this);
+    if (!golfCatalogQueryHasWords(text)) {
+      enterLevel(Level::Regions);
+      return;
+    }
+    snprintf(initial.query, sizeof(initial.query), "%s", text.c_str());
+    byRating = true;
+    loadSearch();
+    enterLevel(Level::Search);
+  });
+}
+void GolfCoursePickerActivity::loadSearch() {
+  recordCount = 0;
+  searchCapped = false;
+  // Bounded RAM sort keys avoid SD reads on sort; release on leaving Results.
+  searchKeys = makeUniqueNoThrow<GolfCatalogSearchKey[]>(GOLF_CATALOG_MAX_REGION_COURSES);
+  if (!searchKeys) LOG_ERR("GOLF", "OOM: catalog search sort keys; retaining index order");
+  if (!indexFile.seek(0)) {
+    LOG_ERR("GOLF", "Search index seek failed");
+    return;
+  }
+  for (uint16_t ordinal = 0; ordinal < scratch->catalog.courseCount; ++ordinal) {
+    if (indexFile.read(scratch->bytes, sizeof(scratch->bytes)) != sizeof(scratch->bytes)) {
+      LOG_ERR("GOLF", "Search index read failed at %u", ordinal);
+      break;
+    }
+    if (!golfParseCatalogRecord(scratch->bytes, sizeof(scratch->bytes), scratch->a)) {
+      LOG_ERR("GOLF", "Skipped malformed search record %u", ordinal);
+    } else if (golfCatalogNameMatches(scratch->a.name, initial.query)) {
+      golfCatalogCollectMatch(records, searchKeys.get(), recordCount, searchCapped, ordinal, scratch->a);
+    }
+    if ((ordinal & 63) == 63) delay(1);
+  }
+  sortSearch();
+}
+void GolfCoursePickerActivity::sortSearch() {
+  if (!searchKeys) return;
+  std::sort(searchKeys.get(), searchKeys.get() + recordCount,
+            [this](const auto& a, const auto& b) { return golfCatalogSearchLess(a, b, byRating); });
+  for (uint16_t i = 0; i < recordCount; ++i) records[i] = searchKeys[i].ordinal();
+}
 void GolfCoursePickerActivity::loadRegion() {
   recordCount = 0;
   memset(ratingKeys, 255, sizeof(ratingKeys));
@@ -171,6 +230,10 @@ void GolfCoursePickerActivity::loadRegion() {
   sortRegion();
 }
 void GolfCoursePickerActivity::sortRegion() {
+  if (level == Level::Search) {
+    sortSearch();
+    return;
+  }
   const auto& r = scratch->catalog.regions[region];
   if (byRating) {
     golfSortCatalogOrdinals(records, recordCount, ratingKeys, r.firstRecord);
@@ -185,7 +248,8 @@ const char* GolfCoursePickerActivity::hubLabel(int index) const {
   return index == (recentCount ? 1 : 0) ? tr(STR_GOLF_MY_COURSES) : tr(STR_GOLF_BY_REGION);
 }
 golfui::FooterLabels GolfCoursePickerActivity::golfFooterLabels() const {
-  const bool card = level == Level::Recent || (level == Level::Courses && nav.selected > 0);
+  const bool card = level == Level::Recent || (isCourseLevel() && recordCount && nav.selected >= (hasSort() ? 1 : 0));
+  if (level == Level::Search && !recordCount) return {tr(STR_BACK), "", "", ""};
   return {tr(STR_BACK), card && mode == Mode::Play ? tr(STR_GOLF_START) : tr(STR_GOLF_OPEN),
           tr(STR_GOLF_BUTTON_PREVIOUS), tr(STR_GOLF_BUTTON_NEXT)};
 }
@@ -209,9 +273,10 @@ bool GolfCoursePickerActivity::handleCustomInput() {
                     : swipe == MappedInputManager::SwipeDir::Right ? -1
                                                                    : 0;
   if (!delta) return false;
-  const int pages = golfui::pageCount(listCount(), golfui::REGION_PAGE_SIZE);
+  const int pages = golfui::pageCount(listCount() - 1, regionPageSize);
   if (!pages) return false;
-  moveSelectionTo(((nav.selected / 10 + pages + delta) % pages) * 10);
+  moveSelectionTo(((golfui::maxValue(nav.selected - 1, 0) / regionPageSize + pages + delta) % pages) * regionPageSize +
+                  1);
   return true;
 }
 void GolfCoursePickerActivity::fillRow(uint8_t slot, uint16_t absolute) {
@@ -244,7 +309,7 @@ void GolfCoursePickerActivity::fillRow(uint8_t slot, uint16_t absolute) {
     } else
       snprintf(figures[slot], sizeof(figures[slot]), "%s", tr(STR_GOLF_EM_DASH));
     return;
-  } else if (!readRecord(records[absolute - 1], scratch->a)) {
+  } else if (!readRecord(records[absolute - (hasSort() ? 1 : 0)], scratch->a)) {
     row.enabled = false;
     return;
   }
@@ -279,13 +344,6 @@ void GolfCoursePickerActivity::buildScreen(UiScreen& screen) {
     hubDetail[0] = 0;
     if (recentCount && nav.selected == 0) {
       snprintf(hubDetail, sizeof(hubDetail), tr(STR_GOLF_CATALOG_COUNT_FORMAT), recentCount);
-      for (uint8_t i = 0; i < recentCount && i < 4; ++i) {
-        if (!CourseStore::load(recent[i], scratch->course)) continue;
-        snprintf(details[i], sizeof(details[i]), tr(STR_GOLF_RECENT_PREVIEW_FORMAT), scratch->course.courseName,
-                 scratch->course.nineCount * 9);
-        const size_t used = strlen(hubDetail);
-        snprintf(hubDetail + used, sizeof(hubDetail) - used, "%s%s", used ? "\n" : "", details[i]);
-      }
     } else if (nav.selected == (recentCount ? 1 : 0)) {
       snprintf(hubDetail, sizeof(hubDetail), tr(STR_GOLF_ON_CARD_FORMAT), ownerCount);
     } else
@@ -295,21 +353,32 @@ void GolfCoursePickerActivity::buildScreen(UiScreen& screen) {
     return;
   }
   if (level == Level::Regions) {
+    fui::ButtonProps search{};
+    search.label = tr(STR_GOLF_SEARCH_COURSES);
+    search.icon = fui::bitmapFromIcon(icon_search_24);
+    search.text = screen.theme().bodyText;
+    search.action = ACTION_ROW;
+    search.value = 0;
+    search.inputMask = fui::InputTouch;
+    search.state = nav.selected == 0 ? fui::StateSelected : fui::StateNormal;
+    screen.button(search, screen.takeTop(48));
     const auto pager = screen.takeBottom(40);
     const auto grid = screen.body();
-    const int page = nav.selected / 10;
-    nav.visibleRows = 10;
-    for (int i = 0; i < 10 && page * 10 + i < listCount(); ++i) {
-      const int row = page * 10 + i;
-      const auto& region = scratch->catalog.regions[row];
+    const uint8_t gridRows = golfui::regionRowsPerPage(grid.height);
+    regionPageSize = gridRows * 2;
+    const int page = golfui::maxValue(nav.selected - 1, 0) / regionPageSize;
+    nav.visibleRows = regionPageSize + 1;
+    for (int i = 0; i < regionPageSize && page * regionPageSize + i + 1 < listCount(); ++i) {
+      const int row = page * regionPageSize + i + 1;
+      const auto& region = scratch->catalog.regions[row - 1];
       snprintf(figures[i], sizeof(figures[i]), "%u", region.count);
-      golfui::drawRegion(screen, golfui::regionCell(grid, i), ACTION_ROW, row, row == nav.selected, region.name,
-                         region.count);
+      golfui::drawRegion(screen, golfui::regionCell(grid, i, gridRows), ACTION_ROW, row, row == nav.selected,
+                         region.name, region.count);
     }
-    snprintf(details[0], sizeof(details[0]), "%d / %d", page + 1, golfui::pageCount(listCount(), 10));
+    snprintf(details[0], sizeof(details[0]), "%d / %d", page + 1, golfui::pageCount(listCount() - 1, regionPageSize));
     auto style = screen.theme().smallText;
     style.align = fui::TextAlign::Center;
-    const int pages = golfui::pageCount(listCount(), 10);
+    const int pages = golfui::pageCount(listCount() - 1, regionPageSize);
     screen.target().text({pager.x, pager.y, pager.width, 22}, details[0], style);
     const int start = pager.x + (pager.width - pages * 16) / 2;
     for (int i = 0; i < pages; ++i) {
@@ -321,7 +390,11 @@ void GolfCoursePickerActivity::buildScreen(UiScreen& screen) {
     }
     return;
   }
-  const bool sortVisible = level == Level::Courses && golfui::courseSortVisible(screen.body(), nav.selected, nav.top);
+  if (level == Level::Search && !recordCount) {
+    screen.target().text(screen.body(), tr(STR_GOLF_NO_COURSES_MATCH), screen.theme().bodyText);
+    return;
+  }
+  const bool sortVisible = hasSort() && golfui::courseSortVisible(screen.body(), nav.selected, nav.top);
   if (sortVisible) {
     const auto segment = screen.takeTop(48);
     for (uint8_t i = 0; i < 2; ++i) {
@@ -348,7 +421,7 @@ void GolfCoursePickerActivity::buildScreen(UiScreen& screen) {
   }
   nav.drawnRows = nav.visibleRows;
   nav.followPending = false;
-  const int first = level == Level::Courses ? golfui::maxValue(nav.top, 1) : nav.top;
+  const int first = hasSort() ? golfui::maxValue(nav.top, 1) : nav.top;
   for (int offset = 0; offset < nav.visibleRows && first + offset < listCount(); ++offset) {
     fillRow(offset, first + offset);
     golfui::drawCourseCard(screen, golfui::courseCard(body, offset), ACTION_ROW, first + offset,
@@ -358,10 +431,20 @@ void GolfCoursePickerActivity::buildScreen(UiScreen& screen) {
 }
 void GolfCoursePickerActivity::drawChrome() {
   const auto chrome = golfui::chromeLayout(renderer, mappedInput, UITheme::getInstance().getMetrics().topPadding);
-  golfui::drawHeader(renderer, chrome.header, headerTitle());
+  if (level == Level::Search) {
+    snprintf(hubDetail, sizeof(hubDetail), tr(STR_GOLF_SEARCH_RESULTS_FORMAT), initial.query, recordCount,
+             searchCapped ? "+" : "");
+  }
+  golfui::drawHeader(renderer, chrome.header, level == Level::Search ? hubDetail : headerTitle());
 }
 GolfPickerContext GolfCoursePickerActivity::context(uint16_t selected) const {
-  return {mode, level, region, byRating, selected, initial.parentSelected, initial.skipHub};
+  auto saved = initial;
+  saved.mode = mode;
+  saved.level = level;
+  saved.region = region;
+  saved.byRating = byRating;
+  saved.selected = selected;
+  return saved;
 }
 void GolfCoursePickerActivity::openInfo(const GolfCourseFile& file) {
   if (mode == Mode::Play) {
@@ -412,25 +495,29 @@ void GolfCoursePickerActivity::activateIndex(int index) {
   app.clearTapFlash();
   if (!scratch || index < 0 || index >= listCount()) return;
   if (level == Level::Regions) {
+    if (!index) {
+      openSearch();
+      return;
+    }
     {
       RenderLock lock(*this);
-      region = index;
+      region = index - 1;
       byRating = true;
       loadRegion();
       enterLevel(Level::Courses);
     }
-  } else if (level == Level::Courses) {
-    if (!index) {
+  } else if (isCourseLevel()) {
+    if (hasSort() && !index) {
       RenderLock lock(*this);
       byRating = !byRating;
       sortRegion();
-      enterLevel(Level::Courses);
+      enterLevel(level);
       return;
     }
     GolfCourseFile file{};
     {
       RenderLock lock(*this);
-      if (!readRecord(records[index - 1], scratch->a)) return;
+      if (!readRecord(records[index - (hasSort() ? 1 : 0)], scratch->a)) return;
       file.source = GolfCourseSource::Catalog;
       snprintf(file.filename, sizeof(file.filename), "bg-%lu.json", static_cast<unsigned long>(scratch->a.id));
     }
@@ -459,6 +546,6 @@ void GolfCoursePickerActivity::onBackButton() {
     return;
   }
   RenderLock lock(*this);
-  enterLevel(level == Level::Courses ? Level::Regions : Level::Hub);
+  enterLevel(isCourseLevel() ? Level::Regions : Level::Hub);
 }
 #endif

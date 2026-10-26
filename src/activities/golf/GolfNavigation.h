@@ -34,7 +34,7 @@ constexpr GolfHomeEntryDecision golfDecideHomeEntry(const bool archiveMarkedAtEn
 }
 
 enum class GolfPickerMode : uint8_t { Browse, Play };
-enum class GolfPickerLevel : uint8_t { Hub, Regions, Courses, MyCourses, Recent };
+enum class GolfPickerLevel : uint8_t { Hub, Regions, Courses, MyCourses, Recent, Search };
 
 struct GolfPickerContext {
   GolfPickerMode mode = GolfPickerMode::Play;
@@ -44,6 +44,7 @@ struct GolfPickerContext {
   uint16_t selected = 0;
   uint16_t parentSelected = 0;
   bool skipHub = false;
+  char query[25]{};
 };
 
 GolfPickerContext golfSetupReturnContext();

@@ -84,6 +84,14 @@ class GolfCoursePickerActivity final : public GolfUiListActivity {
   void loadRecent();
   bool readRecord(uint16_t ordinal, GolfCatalogRecord& record);
   void loadRegion();
+  void openSearch();
+  void loadSearch();
+  void sortSearch();
+  uint8_t regionPageSize = 10;
+  std::unique_ptr<GolfCatalogSearchKey[]> searchKeys;
+  bool searchCapped = false;
+  bool isCourseLevel() const { return level == Level::Courses || level == Level::Search; }
+  bool hasSort() const { return level == Level::Courses || (level == Level::Search && recordCount && searchKeys); }
   void sortRegion();
   void fillRow(uint8_t slot, uint16_t absoluteIndex);
   static bool resolveRecent(const char* name, void* user);

@@ -121,12 +121,14 @@ constexpr int tileAt(const fui::Rect strip, const uint8_t count, const int x, co
 }
 inline constexpr uint8_t REGION_PAGE_SIZE = 10;
 constexpr int pageCount(const int count, const int size) { return size > 0 ? (count + size - 1) / size : 0; }
-constexpr fui::Rect regionCell(const fui::Rect grid, const uint8_t index) {
-  if (index >= REGION_PAGE_SIZE) return {};
+constexpr uint8_t regionRowsPerPage(const int height) { return height >= 5 * 56 ? 5 : 4; }
+constexpr fui::Rect regionCell(const fui::Rect grid, const uint8_t index, const uint8_t rows = 5) {
+  if (!rows || index >= rows * 2) return {};
   return tileCell(
-      fui::Rect{grid.x, static_cast<int16_t>(grid.y + static_cast<int32_t>(grid.height) * (index / 2) / 5), grid.width,
-                static_cast<int16_t>(static_cast<int32_t>(grid.height) * (index / 2 + 1) / 5 -
-                                     static_cast<int32_t>(grid.height) * (index / 2) / 5)},
+      fui::Rect{grid.x, static_cast<int16_t>(grid.y + static_cast<int32_t>(grid.height) * (index / 2) / rows),
+                grid.width,
+                static_cast<int16_t>(static_cast<int32_t>(grid.height) * (index / 2 + 1) / rows -
+                                     static_cast<int32_t>(grid.height) * (index / 2) / rows)},
       2, index % 2);
 }
 constexpr fui::Rect courseCard(const fui::Rect body, const int index, const int height = 104) {

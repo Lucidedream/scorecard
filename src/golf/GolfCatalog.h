@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 
 #include "GolfCsv.h"
 
@@ -27,6 +28,18 @@ struct GolfCatalogRecord {
   bool hasRating = false;
   bool hasMaps = false;
 };
+struct GolfCatalogSearchKey {
+  uint8_t ordinalBytes[2]{};
+  uint8_t rating = 0;
+  char prefix[12]{};
+  uint16_t ordinal() const { return ordinalBytes[0] | (static_cast<uint16_t>(ordinalBytes[1]) << 8); }
+};
+static_assert(sizeof(GolfCatalogSearchKey) == 15);
+bool golfCatalogSearchLess(const GolfCatalogSearchKey& a, const GolfCatalogSearchKey& b, bool byRating);
+void golfCatalogCollectMatch(uint16_t* records, GolfCatalogSearchKey* keys, uint16_t& count, bool& capped,
+                             uint16_t ordinal, const GolfCatalogRecord& record);
+bool golfCatalogQueryHasWords(std::string_view query);
+bool golfCatalogNameMatches(std::string_view name, std::string_view query);
 void golfSortCatalogRegions(GolfCatalogRegion* regions, uint8_t count);
 bool golfParseCatalogRecord(const char* bytes, size_t size, GolfCatalogRecord& record);
 void golfSortCatalogOrdinals(uint16_t* records, uint16_t count, const uint8_t* ratings, uint16_t firstRecord);

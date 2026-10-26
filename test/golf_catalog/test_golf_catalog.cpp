@@ -384,3 +384,63 @@ TEST_F(CatalogStore, CardsFindLegacyAndExplicitMapDirectoriesIncludingLaterHoles
   write("golf/maps/explicit/hole-2.bmp", "synthetic");
   EXPECT_TRUE(CourseStore::hasMaps(course));
 }
+
+TEST(CatalogSearch, AllWordsAsciiCaseFoldAndBounds) {
+  EXPECT_TRUE(golfCatalogNameMatches("Synthetic North Links", "  LINKS north  "));
+  EXPECT_TRUE(golfCatalogNameMatches("Synthetic North Links", "the"));
+  EXPECT_FALSE(golfCatalogNameMatches("Synthetic North Links", "north south"));
+  EXPECT_FALSE(golfCatalogNameMatches("Synthetic North Links", ""));
+  EXPECT_FALSE(golfCatalogNameMatches("Synthetic North Links", "    "));
+  EXPECT_FALSE(golfCatalogNameMatches("abcdefghijklmnopqrstuvwxyz", "abcdefghijklmnopqrstuvwxy"));
+  EXPECT_TRUE(golfCatalogNameMatches("ABCDEFGHIJKLMNOPQRSTUVWX", "abcdefghijklmnopqrstuvwx"));
+  EXPECT_FALSE(golfCatalogNameMatches("École", "école"));
+}
+
+TEST(CatalogSearch, BoundedCollectionAndRamSortKeys) {
+  uint16_t records[GOLF_CATALOG_MAX_REGION_COURSES]{};
+  GolfCatalogSearchKey keys[GOLF_CATALOG_MAX_REGION_COURSES]{};
+  uint16_t count = 0;
+  bool capped = false;
+  GolfCatalogRecord record{};
+  strcpy(record.name, "SYNTHETIC Long Name");
+  record.hasRating = true;
+  record.rating = 42;
+  for (uint16_t i = 0; i < 512; ++i) golfCatalogCollectMatch(records, keys, count, capped, i + 256, record);
+  EXPECT_FALSE(capped);
+  golfCatalogCollectMatch(records, keys, count, capped, 900, record);
+  EXPECT_TRUE(capped);
+  EXPECT_EQ(count, 512);
+  EXPECT_EQ(records[511], 767);
+  EXPECT_EQ(keys[511].ordinal(), 767);
+  EXPECT_EQ(std::string(keys[0].prefix, 12), "synthetic lo");
+  auto a = keys[0], b = keys[1];
+  b.rating = 50;
+  EXPECT_TRUE(golfCatalogSearchLess(b, a, true));
+  EXPECT_TRUE(golfCatalogSearchLess(a, b, false));
+  b.prefix[0] = 'a';
+  EXPECT_TRUE(golfCatalogSearchLess(b, a, false));
+  b.rating = a.rating;
+  EXPECT_TRUE(golfCatalogSearchLess(a, b, true));
+  count = 0;
+  capped = false;
+  golfCatalogCollectMatch(records, nullptr, count, capped, 42, record);
+  EXPECT_EQ(records[0], 42);
+  EXPECT_EQ(count, 1);
+}
+
+TEST(CatalogSearch, ReturnContextPreservesQueryLevelSortAndRow) {
+  GolfSetupReturn route;
+  GolfPickerContext context{};
+  context.level = GolfPickerLevel::Search;
+  context.selected = 19;
+  context.byRating = false;
+  strcpy(context.query, "Synthetic links");
+  route.selectPicker(context);
+  const auto saved = route.picker;
+  route.selectInfo({}, 4);
+  route.selectPicker(saved);
+  EXPECT_EQ(route.picker.level, GolfPickerLevel::Search);
+  EXPECT_EQ(route.picker.selected, 19);
+  EXPECT_FALSE(route.picker.byRating);
+  EXPECT_STREQ(route.picker.query, "Synthetic links");
+}

@@ -43,6 +43,60 @@ bool fieldNumber(const char*& p, uint32_t& out, char delimiter) {
 }
 }  // namespace
 
+bool golfCatalogSearchLess(const GolfCatalogSearchKey& a, const GolfCatalogSearchKey& b, bool byRating) {
+  if (byRating && a.rating != b.rating) return a.rating > b.rating;
+  if (!byRating) {
+    const int order = memcmp(a.prefix, b.prefix, sizeof(a.prefix));
+    if (order) return order < 0;
+  }
+  return a.ordinal() < b.ordinal();
+}
+void golfCatalogCollectMatch(uint16_t* records, GolfCatalogSearchKey* keys, uint16_t& count, bool& capped,
+                             uint16_t ordinal, const GolfCatalogRecord& record) {
+  if (count == GOLF_CATALOG_MAX_REGION_COURSES) {
+    capped = true;
+    return;
+  }
+  records[count] = ordinal;
+  if (keys) {
+    auto& key = keys[count];
+    key = {};
+    key.ordinalBytes[0] = ordinal & 255;
+    key.ordinalBytes[1] = ordinal >> 8;
+    key.rating = record.hasRating ? record.rating : 0;
+    for (size_t i = 0; i < sizeof(key.prefix) && record.name[i]; ++i) {
+      const unsigned char c = record.name[i];
+      key.prefix[i] = c >= 'A' && c <= 'Z' ? c + ('a' - 'A') : c;
+    }
+  }
+  ++count;
+}
+
+bool golfCatalogQueryHasWords(std::string_view query) {
+  return query.size() <= 24 && query.find_first_not_of(' ') != std::string_view::npos;
+}
+bool golfCatalogNameMatches(std::string_view name, std::string_view query) {
+  if (!golfCatalogQueryHasWords(query)) return false;
+  const auto fold = [](unsigned char c) { return c >= 'A' && c <= 'Z' ? c + ('a' - 'A') : c; };
+  for (size_t start = 0; start < query.size();) {
+    if (query[start] == ' ') {
+      ++start;
+      continue;
+    }
+    size_t end = query.find(' ', start);
+    if (end == std::string_view::npos) end = query.size();
+    bool found = false;
+    for (size_t n = 0; n + end - start <= name.size() && !found; ++n) {
+      size_t w = start;
+      while (w < end && fold(name[n + w - start]) == fold(query[w])) ++w;
+      found = w == end;
+    }
+    if (!found) return false;
+    start = end;
+  }
+  return true;
+}
+
 bool golfParseCatalogRecord(const char* b, size_t size, GolfCatalogRecord& out) {
   if (!b || size != GOLF_CATALOG_RECORD_SIZE) return false;
   for (uint8_t i : {8, 11, 13, 17, 20, 26, 28, 69})
