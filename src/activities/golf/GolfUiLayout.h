@@ -166,6 +166,12 @@ struct FooterLabels {
   const char* next = "";
 };
 
+constexpr FooterLabels fairwayPromptFooterLabels(const bool hasTouch, const bool hasAnswer, const FooterLabels buttons,
+                                                 const char* done) {
+  return {buttons.back, hasTouch ? (hasAnswer ? done : "") : buttons.confirm, hasTouch ? "" : buttons.previous,
+          hasTouch ? "" : buttons.next};
+}
+
 struct TouchFooterLayout {
   fui::Rect safe{};
   fui::Rect footer{};

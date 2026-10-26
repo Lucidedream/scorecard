@@ -647,3 +647,28 @@ TEST(GolfFairwayLayout, ChipTapKeepsSelectionRegardlessOfFocusedCounter) {
     EXPECT_EQ(golfui::counterSelectionAfterTap(selected, 2, golfui::CounterTapZone::Increment), 2);
   }
 }
+
+TEST(GolfFairwayLayout, PromptFooterHasOnlySkipAndDoneOnTouch) {
+  constexpr golfui::FooterLabels buttons{"Skip", "Set", "Prev", "Next"};
+  const auto layout = golfui::makeTouchFooterLayout({0, 0, 480, 800});
+  for (const bool hasAnswer : {false, true}) {
+    const auto touch = golfui::fairwayPromptFooterLabels(true, hasAnswer, buttons, "Done");
+    EXPECT_STREQ(touch.back, "Skip");
+    EXPECT_STREQ(touch.confirm, hasAnswer ? "Done" : "");
+    EXPECT_STREQ(touch.previous, "");
+    EXPECT_STREQ(touch.next, "");
+    for (uint8_t cell = 2; cell < 4; ++cell) {
+      EXPECT_EQ(golfui::touchFooterActionAt(layout, touch, layout.cells[cell].x + 1, layout.cells[cell].y + 1),
+                golfui::FooterAction::None);
+    }
+    EXPECT_EQ(golfui::touchFooterActionAt(layout, touch, layout.cells[0].x + 1, layout.cells[0].y + 1),
+              golfui::FooterAction::Back);
+    EXPECT_EQ(golfui::touchFooterActionAt(layout, touch, layout.cells[1].x + 1, layout.cells[1].y + 1),
+              hasAnswer ? golfui::FooterAction::Confirm : golfui::FooterAction::None);
+    const auto physical = golfui::fairwayPromptFooterLabels(false, hasAnswer, buttons, "Done");
+    EXPECT_STREQ(physical.back, "Skip");
+    EXPECT_STREQ(physical.confirm, "Set");
+    EXPECT_STREQ(physical.previous, "Prev");
+    EXPECT_STREQ(physical.next, "Next");
+  }
+}

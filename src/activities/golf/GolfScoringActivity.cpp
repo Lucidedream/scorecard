@@ -681,11 +681,10 @@ bool GolfScoringActivity::fairwayPromptHasAnswer() const {
 }
 
 golfui::FooterLabels GolfScoringActivity::fairwayPromptFooter() const {
-  return {tr(STR_GOLF_FAIRWAY_SKIP),
-          !mappedInput.hasTouch()    ? tr(STR_GOLF_FAIRWAY_SET)
-          : fairwayPromptHasAnswer() ? tr(STR_GOLF_FAIRWAY_DONE)
-                                     : "",
-          tr(STR_GOLF_FOOTER_PREVIOUS), tr(STR_GOLF_FOOTER_NEXT)};
+  return golfui::fairwayPromptFooterLabels(
+      mappedInput.hasTouch(), fairwayPromptHasAnswer(),
+      {tr(STR_GOLF_FAIRWAY_SKIP), tr(STR_GOLF_FAIRWAY_SET), tr(STR_GOLF_FOOTER_PREVIOUS), tr(STR_GOLF_FOOTER_NEXT)},
+      tr(STR_GOLF_FAIRWAY_DONE));
 }
 
 void GolfScoringActivity::answerFairwayPrompt(const uint8_t player, const bool missed) {
@@ -818,7 +817,12 @@ void GolfScoringActivity::drawFairwayPrompt(const freeink::ui::Rect safe) const 
     }
     ++row;
   }
-  golfui::drawFooter(renderer, mappedInput, fairwayPromptFooter(), true);
+  const auto labels = fairwayPromptFooter();
+  if (mappedInput.hasTouch()) {
+    golfui::drawFooterTwo(renderer, mappedInput, labels.back, labels.confirm, true);
+  } else {
+    golfui::drawFooter(renderer, mappedInput, labels, true);
+  }
 }
 
 void GolfScoringActivity::handleScoringInput() {

@@ -3507,8 +3507,10 @@ an **eligible hole** below is an eligible hole the player has a score on.
   - It has one row per such player: the player's name and two cells, **Hit** and
     **Missed**.
   - Touch: tap a cell.
-  - X4: the rocker moves between rows; ◀ ▶ choose (on the Pro, the kept Scoring footer's
-    PREV/NEXT cells); Confirm sets the row.
+  - X4: the rocker moves between rows; ◀ ▶ choose; Confirm sets the row. On the **X4
+    Pro** the prompt's footer has only two cells, **Skip** and **Done**, drawn with the
+    two-cell footer (owner 2026-10-26). Hit and Missed are tapped directly, so the
+    PREV/NEXT cells are not drawn and have no tap target.
   - When every row has an answer, the sheet closes and the hole change it interrupted
     completes.
   - Skip (Back) leaves the rest unanswered and continues. The X4 footer reads
