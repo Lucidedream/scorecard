@@ -204,6 +204,8 @@ bool golfFairwayEligible(const GolfRound& round, const uint8_t hole) {
   return hole < holesInRound(round) && (!golfHasPar(round) || round.par[hole] == 4 || round.par[hole] == 5);
 }
 
+bool golfFairwayChipVisible(const GolfRound& round, const uint8_t hole) { return golfFairwayEligible(round, hole); }
+
 uint8_t golfFairwayPromptPlayers(const GolfRound& round, const uint8_t hole, const uint8_t (&prompted)[3]) {
   if (!golfFairwayEligible(round, hole) || (prompted[hole / 8] & (1 << (hole % 8)))) return 0;
   uint8_t players = 0;

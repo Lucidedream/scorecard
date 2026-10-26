@@ -3469,7 +3469,11 @@ an **eligible hole** below is an eligible hole the player has a score on.
   number with the state as an icon: Lucide `circle` = no answer, `circle-check` = hit,
   `circle-x` = missed. Add `circle` and `circle-x` to `golfTileIcons.manifest` at 16 and 24
   px. Existing icons stay byte-identical; fetch only those SVGs.
-* The chip does not appear on non-eligible holes.
+* The chip appears on **every §31.2-eligible hole as soon as it is the current hole**,
+  whether or not it has a score yet (owner feedback 2026-10-26), so jumping to a par 4 or
+  5 shows it immediately. It does not appear on non-eligible holes. Setting a state on an
+  unscored hole seeds it first (§13.1/§31.5), exactly as the Mark sheet's Fairway row
+  does. The leave-hole prompt (§46.3) still asks only about scored holes.
 * **Touch:** tapping the chip cycles **no answer → hit → missed → no answer**. The chip has
   its own hit rectangle of at least 44 × 44 px; §39's hole-band swipe still steps holes,
   and a swipe that starts on the chip is still a swipe.

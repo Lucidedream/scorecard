@@ -891,9 +891,7 @@ void GolfScoringActivity::handleScoringInput() {
     const auto layout =
         golfui::makeScoringLayout(chrome.safe, metrics.topPadding, static_cast<uint8_t>(focusedField),
                                   score.penaltyCount[round.currentHole] > 0, renderer.getLineHeight(UI_10_FONT_ID));
-    if (golfFairwayEligible(round, round.currentHole) &&
-        (score.in100[round.currentHole] || score.out100[round.currentHole]) &&
-        input.tapIn(golfui::fairwayChipRect(layout.hole))) {
+    if (golfFairwayChipVisible(round, round.currentHole) && input.tapIn(golfui::fairwayChipRect(layout.hole))) {
       toggleFairwayHit();
       return;
     }
@@ -970,7 +968,7 @@ void GolfScoringActivity::drawHoleBand(const golfui::ScoringLayout& layout) cons
   const int digitHeight = golfui::scoringHoleDigitHeight(rect.height, lineHeight);
   golfDrawLargeNumber(renderer, rect.x + rect.width / 4, golfui::scoringHoleDigitTop(rect, digitHeight), digitHeight,
                       hole + 1);
-  if (golfFairwayEligible(round, hole) && (player.score.in100[hole] || player.score.out100[hole])) {
+  if (golfFairwayChipVisible(round, hole)) {
     const auto chip = golfui::fairwayChipRect(rect);
     renderer.drawRect(chip.x, chip.y, chip.width, chip.height, 2, true);
     renderer.drawText(UI_10_FONT_ID, chip.x + 5, chip.y + (chip.height - lineHeight) / 2, tr(STR_GOLF_FW), true);

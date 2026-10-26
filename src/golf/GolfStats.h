@@ -38,6 +38,8 @@ uint8_t golfFairwaysHit(const GolfRound& round, const GolfPlayerScore& score);
 // FIR denominator: entered par-4/5 holes; 0 on a par-free round (golfHasPar false).
 uint8_t golfFairwaysAnswered(const GolfRound& round, const GolfPlayerScore& score);
 bool golfFairwayEligible(const GolfRound& round, uint8_t hole);
+// The chip is available before any score is recorded.
+bool golfFairwayChipVisible(const GolfRound& round, uint8_t hole);
 uint8_t golfFairwayPromptPlayers(const GolfRound& round, uint8_t hole, const uint8_t (&prompted)[3]);
 uint8_t golfFairwaysEligible(const GolfRound& round, const GolfPlayerScore& score);
 

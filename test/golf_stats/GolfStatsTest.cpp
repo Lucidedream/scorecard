@@ -427,3 +427,33 @@ TEST_F(GolfStatsTest, SandSaveChancesAndMadeCountEnteredBunkerHoles) {
 }
 
 }  // namespace
+
+TEST_F(GolfStatsTest, FairwayChipIsVisibleBeforeScoringEligibleHoles) {
+  round.par[0] = 4;
+  round.par[1] = 5;
+  round.par[2] = 3;
+  uint8_t prompted[3]{};
+  EXPECT_TRUE(golfFairwayChipVisible(round, 0));
+  EXPECT_TRUE(golfFairwayChipVisible(round, 1));
+  EXPECT_FALSE(golfFairwayChipVisible(round, 2));
+  EXPECT_FALSE(golfFairwayChipVisible(round, round.holeCount));
+  EXPECT_EQ(golfFairwayPromptPlayers(round, 0, prompted), 0);
+  EXPECT_EQ(golfFairwayPromptPlayers(round, 1, prompted), 0);
+  for (auto& par : round.par) par = 0;
+  EXPECT_TRUE(golfFairwayChipVisible(round, 2));
+  EXPECT_EQ(golfFairwayPromptPlayers(round, 2, prompted), 0);
+}
+
+TEST_F(GolfStatsTest, SeedingBeforeFirstFairwayAnswerPreservesParPreview) {
+  for (uint8_t hole = 0; hole < 2; ++hole) {
+    round.par[hole] = 4 + hole;
+    ASSERT_TRUE(golfFairwayChipVisible(round, hole));
+    ASSERT_TRUE(seedGolfHoleAtPar(score(), hole, round.par[hole]));
+    golfSetFairwayState(score(), hole, golfNextFairwayState(golfFairwayState(score(), hole)));
+    EXPECT_EQ(golfFairwayState(score(), hole), GolfFairwayState::Hit);
+    EXPECT_EQ(score().putts[hole], 2);
+    EXPECT_EQ(score().in100[hole], 2);
+    EXPECT_EQ(score().out100[hole], round.par[hole] - 2);
+    EXPECT_EQ(golfHoleScore(round, score(), hole), round.par[hole]);
+  }
+}
