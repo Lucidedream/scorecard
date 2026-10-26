@@ -3463,25 +3463,36 @@ an **eligible hole** below is an eligible hole the player has a score on.
   every eligible hole counts as answered. Rebuild (§31.6)
   uses the same rule, including legacy files.
 
-### 46.2 The FW chip on the scoring screen
+### 46.2 The FW chip in the To Score Zone row
 
-* On an eligible hole, the current player's hole band shows a **FW chip** beside the hole
-  number with the state as an icon: Lucide `circle` = no answer, `circle-check` = hit,
-  `circle-x` = missed. Add `circle` and `circle-x` to `golfTileIcons.manifest` at 16 and 24
-  px. Existing icons stay byte-identical; fetch only those SVGs.
-* The chip appears on **every §31.2-eligible hole as soon as it is the current hole**,
-  whether or not it has a score yet (owner feedback 2026-10-26), so jumping to a par 4 or
-  5 shows it immediately. It does not appear on non-eligible holes. Setting a state on an
-  unscored hole seeds it first (§13.1/§31.5), exactly as the Mark sheet's Fairway row
-  does. The leave-hole prompt (§46.3) still asks only about scored holes.
-* **Touch:** tapping the chip cycles **no answer → hit → missed → no answer**. The chip has
-  its own hit rectangle of at least 44 × 44 px; §39's hole-band swipe still steps holes,
-  and a swipe that starts on the chip is still a swipe.
-* **X4 (buttons):** on an eligible hole's To Score Zone field, the Mark sheet opens with
-  the **Fairway** row highlighted first. That row is now the same three-state cycle, so
-  Confirm, Confirm records a hit.
-* The §31.3 marker beside the To Score Zone number shows `circle-check` for hit and
-  `circle-x` for missed, and nothing for no answer.
+*Revised 2026-10-26 (owner): the chip moves from the hole band into the To Score Zone row.*
+
+* On every §31.2-eligible hole, from the moment it is current and scored or not, the
+  current player's **To Score Zone** counter row (`ScoringLayout::counters` for that field)
+  shows a **FW chip** at its **right end**. The chip shows `FW` plus the state icon:
+  Lucide `circle` = no answer, `circle-check` = hit, `circle-x` = missed. Use the icons
+  `circle` and `circle-x` (16 and 24 px) already added. It never appears on non-eligible
+  holes, and the hole band no longer has a chip.
+* **Chip geometry:** full row height, width `max(56, min(row height, rightThird / 2))` px.
+  On the 480 px portrait panel that is 80 px, so the chip never reaches the centre third
+  and +1 keeps the other half of the right third. It sits **flush with the
+  row's right edge** (0 px inset, so no sliver of +1 remains beyond it). Visual padding
+  goes inside the chip's own rect. The chip replaces the §31.3 marker beside the To Score Zone number, which
+  is removed because the chip shows the same state in the same row.
+* **Tap zones in that row** (§38.1, revised): the row is still split into thirds of its
+  **full** width. Left third = −1 and centre third = nothing are **unchanged**. The right
+  third = +1 **minus the chip rect**, so on eligible holes +1 is narrower by exactly the
+  chip's width. Boundaries are deterministic. The classifier stays a host-tested
+  `constexpr` in `GolfUiLayout.h` and gains a `Fairway` zone. On non-eligible holes the
+  row is exactly as in §38.
+* **Touch:** tapping the chip cycles **no answer → hit → missed → no answer**, whether or
+  not the row is selected. It does not change the selected row or count a stroke.
+  Setting a state on an unscored hole seeds it first (§13.1/§31.5).
+* **X4 (buttons):** the chip shows the state in the same place. On an eligible hole's To
+  Score Zone field, the Mark sheet opens with the **Fairway** row highlighted first, and
+  that row is the same three-state cycle, so Confirm, Confirm records a hit.
+* `golfFairwayChipVisible(round, hole)` remains the single rule for drawing, tapping and
+  the zone split.
 
 ### 46.3 Ask on leaving the hole
 

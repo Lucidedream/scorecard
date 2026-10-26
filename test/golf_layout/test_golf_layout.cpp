@@ -574,13 +574,14 @@ TEST(GolfFairwayLayout, ChipAndFourPlayerPromptFitScoringSafeArea) {
   for (const auto safe :
        {freeink::ui::Rect{0, 0, 480, 700}, freeink::ui::Rect{0, 0, 800, 380}, freeink::ui::Rect{12, 16, 456, 680}}) {
     const auto scoring = golfui::makeScoringLayout(safe, 0, 2, false, 24);
-    const auto chip = golfui::fairwayChipRect(scoring.hole);
+    const auto row = scoring.counters[2];
+    const auto chip = golfui::fairwayChipRect(row);
     EXPECT_GE(chip.width, 44);
     EXPECT_GE(chip.height, 44);
-    EXPECT_GE(chip.x, scoring.hole.x);
-    EXPECT_GE(chip.y, scoring.hole.y);
-    EXPECT_LE(chip.right(), scoring.hole.right());
-    EXPECT_LE(chip.bottom(), scoring.hole.bottom());
+    EXPECT_GE(chip.x, row.x + row.width * 2 / 3);
+    EXPECT_EQ(chip.y, row.y);
+    EXPECT_EQ(chip.right(), row.right());
+    EXPECT_EQ(chip.bottom(), row.bottom());
     const auto sheet = golfui::fairwayPromptSheet(safe, 15);
     for (uint8_t row = 0; row < 4; ++row) {
       const auto hit = golfui::fairwayPromptCell(sheet, row, 0);
@@ -591,5 +592,58 @@ TEST(GolfFairwayLayout, ChipAndFourPlayerPromptFitScoringSafeArea) {
       EXPECT_LE(miss.right(), sheet.right());
       EXPECT_LE(hit.bottom(), sheet.bottom());
     }
+  }
+}
+
+TEST(GolfFairwayLayout, CounterThirdsAndChipHaveExactEdges) {
+  constexpr fui::Rect row{7, 11, 480, 160};
+  constexpr auto chip = golfui::fairwayChipRect(row);
+  static_assert(chip.width == 80);
+  static_assert(golfui::counterTapZoneAt(row, chip.x, row.y, true) == golfui::CounterTapZone::Fairway);
+  for (const bool visible : {false, true}) {
+    EXPECT_EQ(golfui::counterTapZoneAt(row, 166, 11, visible), golfui::CounterTapZone::Decrement);
+    EXPECT_EQ(golfui::counterTapZoneAt(row, 167, 11, visible), golfui::CounterTapZone::Centre);
+    EXPECT_EQ(golfui::counterTapZoneAt(row, 326, 11, visible), golfui::CounterTapZone::Centre);
+    EXPECT_EQ(golfui::counterTapZoneAt(row, 327, 11, visible), golfui::CounterTapZone::Increment);
+    EXPECT_EQ(golfui::counterTapZoneAt(row, chip.x - 1, 11, visible), golfui::CounterTapZone::Increment);
+    const auto expected = visible ? golfui::CounterTapZone::Fairway : golfui::CounterTapZone::Increment;
+    EXPECT_EQ(golfui::counterTapZoneAt(row, chip.x, 11, visible), expected);
+    EXPECT_EQ(golfui::counterTapZoneAt(row, chip.right() - 1, row.bottom() - 1, visible), expected);
+    EXPECT_EQ(golfui::counterTapZoneAt(row, chip.right(), 11, visible), golfui::CounterTapZone::None);
+    EXPECT_EQ(golfui::counterTapZoneAt(row, chip.x, row.y - 1, visible), golfui::CounterTapZone::None);
+    EXPECT_EQ(golfui::counterTapZoneAt(row, chip.x, row.bottom(), visible), golfui::CounterTapZone::None);
+  }
+}
+
+TEST(GolfFairwayLayout, ChipLeavesCentreUntouchedAtEverySupportedWidthAndHeight) {
+  for (const Case test : cases()) {
+    const fui::Rect screen{0, 0, test.width, test.height};
+    const auto safe =
+        golfui::intersect(golfui::inset(screen, BEZEL), golfui::reserveHintEdge(screen, test.edge, HINT_RESERVE));
+    const int rightThirdStart = safe.x + safe.width * 2 / 3;
+    const int rightThird = safe.right() - rightThirdStart;
+    ASSERT_GE(rightThird, 56) << "56 px floor must fit at the narrowest supported width";
+    for (int16_t height = 1; height <= 1024; ++height) {
+      const fui::Rect row{safe.x, safe.y, safe.width, height};
+      const auto chip = golfui::fairwayChipRect(row);
+      EXPECT_EQ(chip.width, golfui::maxValue(56, golfui::minValue(height, rightThird / 2)));
+      EXPECT_GE(chip.x, rightThirdStart);
+      EXPECT_EQ(chip.y, row.y);
+      EXPECT_EQ(chip.height, row.height);
+      EXPECT_EQ(chip.right(), row.right());
+      EXPECT_EQ(golfui::counterTapZoneAt(row, rightThirdStart - 1, row.y, true), golfui::CounterTapZone::Centre);
+    }
+  }
+}
+
+TEST(GolfFairwayLayout, ChipTapKeepsSelectionRegardlessOfFocusedCounter) {
+  constexpr fui::Rect row{0, 0, 480, 120};
+  const auto chip = golfui::fairwayChipRect(row);
+  const auto zone = golfui::counterTapZoneAt(row, chip.x, chip.y, true);
+  ASSERT_EQ(zone, golfui::CounterTapZone::Fairway);
+  for (uint8_t selected = 0; selected < 3; ++selected) {
+    EXPECT_EQ(golfui::counterSelectionAfterTap(selected, 2, zone), selected);
+    EXPECT_EQ(golfui::counterSelectionAfterTap(selected, 2, golfui::CounterTapZone::Centre), 2);
+    EXPECT_EQ(golfui::counterSelectionAfterTap(selected, 2, golfui::CounterTapZone::Increment), 2);
   }
 }

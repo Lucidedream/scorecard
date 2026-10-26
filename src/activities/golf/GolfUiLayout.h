@@ -301,9 +301,20 @@ constexpr int scoringHoleDigitTop(const fui::Rect rect, const int digitHeight) {
   return rect.y + rect.height - digitHeight - SCORING_HOLE_DIGIT_RULE_GAP;
 }
 
-enum class CounterTapZone : uint8_t { None, Decrement, Centre, Increment };
+constexpr fui::Rect fairwayChipRect(const fui::Rect row) {
+  const int rightThird = row.width - static_cast<int32_t>(row.width) * 2 / 3;
+  const int width = maxValue(56, minValue(row.height, rightThird / 2));
+  return {static_cast<int16_t>(row.x + row.width - width), row.y, static_cast<int16_t>(width), row.height};
+}
 
-constexpr CounterTapZone counterTapZoneAt(const fui::Rect band, const int x, const int y) {
+enum class CounterTapZone : uint8_t { None, Decrement, Centre, Increment, Fairway };
+
+constexpr uint8_t counterSelectionAfterTap(const uint8_t selected, const uint8_t tapped, const CounterTapZone zone) {
+  return zone == CounterTapZone::Fairway || zone == CounterTapZone::None ? selected : tapped;
+}
+
+constexpr CounterTapZone counterTapZoneAt(const fui::Rect band, const int x, const int y,
+                                          const bool fairwayChipVisible = false) {
   if (band.width <= 0 || band.height <= 0 || x < band.x || x >= band.x + band.width || y < band.y ||
       y >= band.y + band.height) {
     return CounterTapZone::None;
@@ -311,6 +322,7 @@ constexpr CounterTapZone counterTapZoneAt(const fui::Rect band, const int x, con
   const int offset = x - band.x;
   if (offset < static_cast<int32_t>(band.width) / 3) return CounterTapZone::Decrement;
   if (offset < static_cast<int32_t>(band.width) * 2 / 3) return CounterTapZone::Centre;
+  if (fairwayChipVisible && x >= fairwayChipRect(band).x) return CounterTapZone::Fairway;
   return CounterTapZone::Increment;
 }
 
@@ -431,11 +443,6 @@ constexpr fui::Rect fairwayPromptCell(const fui::Rect sheet, const uint8_t row, 
   const int width = sheet.width / 4;
   return {static_cast<int16_t>(sheet.x + sheet.width / 2 + width * cell), static_cast<int16_t>(sheet.y + 44 + row * 64),
           static_cast<int16_t>(width), 64};
-}
-
-constexpr fui::Rect fairwayChipRect(const fui::Rect hole) {
-  return {static_cast<int16_t>(hole.x + hole.width * 3 / 8), static_cast<int16_t>(hole.y + (hole.height - 44) / 2), 72,
-          44};
 }
 
 struct ScoringLayout {

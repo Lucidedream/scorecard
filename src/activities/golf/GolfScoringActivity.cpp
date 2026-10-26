@@ -47,9 +47,8 @@ constexpr int SHEET_PAD_X = 20;
 constexpr int SHEET_TAG_COL_W = 72;  // centred "H" / "OB" / icon column
 constexpr int SHEET_TEXT_X = 92;     // title / subtitle left edge
 
-// A recorded-outcome marker on a counter row: circle-check for a fairway hit
-// (§31.3), mountain for a greenside bunker (§33.2). 16 px beside the field's
-// number, 24 px in the sheet's checkbox row.
+// The greenside-bunker marker uses 16 px beside the Inside 100 number;
+// Mark sheet outcome icons use 24 px in the tag column.
 constexpr int MARK_ICON_PX = 16;
 constexpr int MARK_ICON_SHEET_PX = 24;
 constexpr int MARK_ICON_GUTTER = 6;  // gap between the icon and the marker run
@@ -891,10 +890,6 @@ void GolfScoringActivity::handleScoringInput() {
     const auto layout =
         golfui::makeScoringLayout(chrome.safe, metrics.topPadding, static_cast<uint8_t>(focusedField),
                                   score.penaltyCount[round.currentHole] > 0, renderer.getLineHeight(UI_10_FONT_ID));
-    if (golfFairwayChipVisible(round, round.currentHole) && input.tapIn(golfui::fairwayChipRect(layout.hole))) {
-      toggleFairwayHit();
-      return;
-    }
     if (input.tapIn(layout.hole)) return;
     if (input.tapIn(layout.nineStrip)) {
       const auto tap = input.tapPoint();
@@ -904,15 +899,23 @@ void GolfScoringActivity::handleScoringInput() {
     }
     for (uint8_t counter = 0; counter < 3; ++counter) {
       if (!input.tapIn(layout.counters[counter])) continue;
-      if (focusedField != static_cast<GolfField>(counter)) {
+      const freeink::ui::Point tap = input.tapPoint();
+      const bool hasFairwayChip =
+          counter == static_cast<uint8_t>(GolfField::Out100) && golfFairwayChipVisible(round, round.currentHole);
+      const auto zone = golfui::counterTapZoneAt(layout.counters[counter], tap.x, tap.y, hasFairwayChip);
+      const auto selection =
+          static_cast<GolfField>(golfui::counterSelectionAfterTap(static_cast<uint8_t>(focusedField), counter, zone));
+      if (zone == golfui::CounterTapZone::Fairway) {
+        toggleFairwayHit();
+        return;
+      }
+      if (focusedField != selection) {
         {
           RenderLock lock(*this);
-          focusedField = static_cast<GolfField>(counter);
+          focusedField = selection;
         }
         requestUpdate();
       } else {
-        const freeink::ui::Point tap = input.tapPoint();
-        const golfui::CounterTapZone zone = golfui::counterTapZoneAt(layout.counters[counter], tap.x, tap.y);
         if (zone == golfui::CounterTapZone::Decrement) {
           removeOrDecrement();
         } else if (zone == golfui::CounterTapZone::Increment) {
@@ -968,17 +971,6 @@ void GolfScoringActivity::drawHoleBand(const golfui::ScoringLayout& layout) cons
   const int digitHeight = golfui::scoringHoleDigitHeight(rect.height, lineHeight);
   golfDrawLargeNumber(renderer, rect.x + rect.width / 4, golfui::scoringHoleDigitTop(rect, digitHeight), digitHeight,
                       hole + 1);
-  if (golfFairwayChipVisible(round, hole)) {
-    const auto chip = golfui::fairwayChipRect(rect);
-    renderer.drawRect(chip.x, chip.y, chip.width, chip.height, 2, true);
-    renderer.drawText(UI_10_FONT_ID, chip.x + 5, chip.y + (chip.height - lineHeight) / 2, tr(STR_GOLF_FW), true);
-    const auto state = golfFairwayState(player.score, hole);
-    blitIcon(renderer,
-             state == GolfFairwayState::Hit      ? icon_circle_check_16
-             : state == GolfFairwayState::Missed ? icon_circle_x_16
-                                                 : icon_circle_16,
-             chip.right() - 22, chip.y + (chip.height - 16) / 2, true);
-  }
   char text[32];
   const int right = rect.x + rect.width - padding;
   if (rect.height < lineHeight * 3 + 4) {
@@ -1086,19 +1078,34 @@ void GolfScoringActivity::drawCounters(const golfui::ScoringLayout& layout) cons
     golfDrawLargeNumber(renderer, rect.x + rect.width / 2, rect.y + (rect.height - digitHeight) / 2 + 12, digitHeight,
                         display.counters[index], !inverse, display.seeded);
 
-    // A recorded-outcome icon shares the marker run, sitting left of any H / OB
-    // letters -- good news first: circle-check for a fairway hit on the score
-    // zone (§31.3), mountain for a greenside bunker on Inside 100 (§33.2). Its
-    // fixed slot is reserved out of the marker budget.
+    const bool hasFairwayChip = index == static_cast<uint8_t>(GolfField::Out100) && golfFairwayChipVisible(round, hole);
+    const auto chip = golfui::fairwayChipRect(rect);
+    if (hasFairwayChip) {
+      const int iconSize = chip.height < 64 ? 16 : 24;
+      const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+      const int top = chip.y + (chip.height - lineHeight - iconSize - 4) / 2;
+      const char* label = tr(STR_GOLF_FW);
+      renderer.drawRect(chip.x, chip.y, chip.width, chip.height, 2, !inverse);
+      renderer.drawText(UI_10_FONT_ID, chip.x + (chip.width - renderer.getTextWidth(UI_10_FONT_ID, label)) / 2, top,
+                        label, !inverse, EpdFontFamily::BOLD);
+      const auto state = golfFairwayState(score, hole);
+      const auto& icon = iconSize == 16 ? (state == GolfFairwayState::Hit      ? icon_circle_check_16
+                                           : state == GolfFairwayState::Missed ? icon_circle_x_16
+                                                                               : icon_circle_16)
+                                        : (state == GolfFairwayState::Hit      ? icon_circle_check_24
+                                           : state == GolfFairwayState::Missed ? icon_circle_x_24
+                                                                               : icon_circle_24);
+      blitIcon(renderer, icon, chip.x + (chip.width - iconSize) / 2, top + lineHeight + 4, !inverse);
+    }
+
+    // The greenside-bunker icon precedes Inside 100's penalty markers.
     const freeink::Icon* markIcon = nullptr;
-    if (index == 2 && golfFairwayState(score, hole) != GolfFairwayState::None) {
-      markIcon = golfFairwayState(score, hole) == GolfFairwayState::Hit ? &icon_circle_check_16 : &icon_circle_x_16;
-    } else if (index == 1 && golfGreensideBunker(score, hole)) {
+    if (index == 1 && golfGreensideBunker(score, hole)) {
       markIcon = &icon_mountain_16;
     }
     const int iconSlot = markIcon != nullptr ? MARK_ICON_PX + MARK_ICON_GUTTER : 0;
     const int markerLine = rect.y + (rect.height - renderer.getLineHeight(MARKER_FONT_ID)) / 2;
-    const int runRight = rect.x + rect.width - MARKER_RIGHT_MARGIN;
+    const int runRight = hasFairwayChip ? chip.x - MARK_ICON_GUTTER : rect.x + rect.width - MARKER_RIGHT_MARGIN;
     const int markerLeft = rect.x + rect.width / 2 + digitHeight + MARKER_GUTTER;
     const int markerMaxWidth = runRight - markerLeft - iconSlot;
     int markerTextLeft = runRight;
