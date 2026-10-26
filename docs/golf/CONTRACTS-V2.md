@@ -3469,7 +3469,9 @@ an **eligible hole** below is an eligible hole the player has a score on.
 
 * On every §31.2-eligible hole, from the moment it is current and scored or not, the
   current player's **To Score Zone** counter row (`ScoringLayout::counters` for that field)
-  shows a **FW chip** at its **right end**. The chip shows `FW` plus the state icon:
+  shows a **FW chip** at its **right end**. The chip draws **no border or fill** (owner
+  2026-10-26), only the text `FW` and the state icon, both centred in its rect. Its
+  tap rect is unchanged. The icons are:
   Lucide `circle` = no answer, `circle-check` = hit, `circle-x` = missed. Use the icons
   `circle` and `circle-x` (16 and 24 px) already added. It never appears on non-eligible
   holes, and the hole band no longer has a chip.

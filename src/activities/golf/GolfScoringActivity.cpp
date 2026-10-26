@@ -1085,9 +1085,9 @@ void GolfScoringActivity::drawCounters(const golfui::ScoringLayout& layout) cons
       const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
       const int top = chip.y + (chip.height - lineHeight - iconSize - 4) / 2;
       const char* label = tr(STR_GOLF_FW);
-      renderer.drawRect(chip.x, chip.y, chip.width, chip.height, 2, !inverse);
-      renderer.drawText(UI_10_FONT_ID, chip.x + (chip.width - renderer.getTextWidth(UI_10_FONT_ID, label)) / 2, top,
-                        label, !inverse, EpdFontFamily::BOLD);
+      renderer.drawText(UI_10_FONT_ID,
+                        chip.x + (chip.width - renderer.getTextWidth(UI_10_FONT_ID, label, EpdFontFamily::BOLD)) / 2,
+                        top, label, !inverse, EpdFontFamily::BOLD);
       const auto state = golfFairwayState(score, hole);
       const auto& icon = iconSize == 16 ? (state == GolfFairwayState::Hit      ? icon_circle_check_16
                                            : state == GolfFairwayState::Missed ? icon_circle_x_16
