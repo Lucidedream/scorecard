@@ -58,6 +58,8 @@ class GolfPlayerSetupActivity final : public GolfUiListActivity {
   bool rowIsEnabled(int index) const;
   int nextFocusableIndex(int current, int direction) const;
   void stepPlayerCount(int direction);
+  void onCountTouch(const freeink::ui::ActionEvent& event);
+  void drawTouchCount(UiScreen& screen);
   void showPlayers();
   void openTeeChoice(uint8_t player);
   void selectTee(const char* tee);

@@ -2,6 +2,7 @@
 
 #if defined(CROSSPOINT_GOLF)
 
+#include <FreeInkUIIcon.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <Memory.h>
@@ -14,6 +15,7 @@
 #include "GolfUiLayout.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
+#include "components/icons/golfTileIcons.h"
 #include "golf/CourseOrder.h"
 #include "golf/GolfRoundStore.h"
 #include "golf/GolfRules.h"
@@ -43,6 +45,12 @@ void GolfPlayerSetupActivity::onEnter() {
   refreshPlayerRows();
   initializeTeeRows();
   UiListActivity::onEnter();
+  app.on(
+      ACTION_USER,
+      [](const fui::ActionEvent& event, void* user) {
+        static_cast<GolfPlayerSetupActivity*>(user)->onCountTouch(event);
+      },
+      this);
   nav.reset();
 }
 
@@ -178,6 +186,68 @@ void GolfPlayerSetupActivity::stepPlayerCount(const int direction) {
     teeResolutionFailed = false;
   }
   requestUpdate();
+}
+
+void GolfPlayerSetupActivity::onCountTouch(const fui::ActionEvent& event) {
+  if (loadFailed || phase != Phase::Count || !mappedInput.hasTouch()) return;
+  if (event.value == 0) {
+    app.clearTapFlash();
+    onFooterConfirm();
+    return;
+  }
+  if (event.value < 1 || event.value > GOLF_MAX_PLAYERS || event.value == playerCount) return;
+  {
+    RenderLock lock(*this);
+    golfSetPlayerCount(draft, playerCount, static_cast<uint8_t>(event.value), defaultTee);
+    saveFailed = false;
+    teeResolutionFailed = false;
+  }
+  requestUpdate();
+}
+
+void GolfPlayerSetupActivity::drawTouchCount(UiScreen& screen) {
+  auto question = screen.theme().titleText;
+  question.align = fui::TextAlign::Center;
+  question.bold = true;
+  const auto value = question;
+  auto unit = screen.theme().bodyText;
+  unit.align = fui::TextAlign::Center;
+  unit.bold = true;
+  const auto layout =
+      golfui::makePlayerCountTouchLayout(screen.body(), screen.target().lineHeight(question.font),
+                                         screen.target().lineHeight(value.font), screen.target().lineHeight(unit.font));
+  screen.target().text(layout.question, tr(STR_GOLF_HOW_MANY_PLAYERS), question);
+  const char count[2] = {static_cast<char>('0' + playerCount), '\0'};
+  screen.target().text(layout.value, count, value);
+  screen.target().text(layout.unit, playerCount == 1 ? tr(STR_GOLF_PLAYER) : tr(STR_GOLF_PLAYERS), unit);
+  for (uint8_t index = 0; index < GOLF_MAX_PLAYERS; ++index) {
+    const auto dot = golfui::playerCountDotRect(layout, index);
+    screen.frame().hit(golfui::playerCountDotHitRect(layout, index), ACTION_USER, index + 1, fui::InputTouch);
+    if (index < playerCount)
+      screen.target().fill(dot, fui::Paint::solid(fui::Color::Black), dot.width / 2);
+    else
+      screen.target().stroke(dot, fui::Paint::solid(fui::Color::Black), 2, dot.width / 2);
+  }
+  screen.frame().hit(layout.next, ACTION_USER, 0, fui::InputTouch);
+  screen.target().fill(layout.next, fui::Paint::solid(fui::Color::Black));
+  auto nextText = screen.theme().bodyText;
+  nextText.bold = true;
+  nextText.color = fui::Color::White;
+  const char* label = tr(STR_GOLF_NEXT);
+  const int labelWidth = screen.target().measureText(nextText.font, label, nextText).width;
+  constexpr int ICON_SIZE = 24;
+  constexpr int ICON_GAP = 8;
+  const int x = layout.next.x + (layout.next.width - labelWidth - ICON_GAP - ICON_SIZE) / 2;
+  const int lineHeight = screen.target().lineHeight(nextText.font);
+  nextText.align = fui::TextAlign::Left;
+  screen.target().text(
+      {static_cast<int16_t>(x), static_cast<int16_t>(layout.next.y + (layout.next.height - lineHeight) / 2),
+       static_cast<int16_t>(labelWidth), static_cast<int16_t>(lineHeight)},
+      label, nextText);
+  screen.target().bitmap(
+      {static_cast<int16_t>(x + labelWidth + ICON_GAP),
+       static_cast<int16_t>(layout.next.y + (layout.next.height - ICON_SIZE) / 2), ICON_SIZE, ICON_SIZE},
+      fui::bitmapFromIcon(icon_chevron_right_24), fui::BitmapMode::Center, fui::Paint::solid(fui::Color::White));
 }
 
 void GolfPlayerSetupActivity::showPlayers() {
@@ -435,6 +505,10 @@ void GolfPlayerSetupActivity::buildScreen(UiScreen& screen) {
       golfui::chromeLayout(renderer, mappedInput, screen.frame().safeRect(), metrics.topPadding, {}, keepTouchFooter());
   screen.setContentMargin(layout.contentMargins);
   if (phase == Phase::Count) {
+    if (mappedInput.hasTouch()) {
+      drawTouchCount(screen);
+      return;
+    }
     const fui::Rect body = screen.body();
     fui::TextStyle question = screen.theme().titleText;
     question.align = fui::TextAlign::Center;

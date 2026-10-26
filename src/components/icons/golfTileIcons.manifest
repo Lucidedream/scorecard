@@ -30,3 +30,6 @@ search = search
 # §46 quick fairway states; generated at 16 and 24 px only.
 circle = circle
 circle-x = circle-x
+
+# §47 Count Next button; generated at 24 px only.
+chevron-right = chevron-right

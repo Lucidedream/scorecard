@@ -3537,3 +3537,32 @@ Host tests, synthetic only:
 
 RAM: three bytes per player plus a 3-byte prompted mask; the sheet reuses the Mark sheet
 drawing.
+
+## 47. Player count by touch: tap a dot, then Next (v8)
+
+*Owner request 2026-10-26. Supersedes the §44 table row that kept a footer on Player
+setup's Count step, for touch boards only. The X4 (buttons) is unchanged: small pips,
+◀ ▶ adjust, and its button footer.*
+
+On a touch board (`mappedInput.hasTouch()`), Player setup's **Count** step has **no
+footer**. Back is the host's left-edge swipe. The centred question, the big count and the
+`player`/`players` label stay as they are. Below them:
+
+* **Dots are the control.** The `GOLF_MAX_PLAYERS` pips become tappable dots: at least 48
+  px in diameter, with a gap of at least 20 px between them, centred as a row. Dots 1…N
+  are filled and the rest are outlined, where N is the count. Tapping dot *k* sets the
+  count to *k*, and the big number and label update. Each dot's hit rect is its bounding
+  square, expanded so that neighbouring rects meet halfway across the gap, leaving no
+  dead zone between them.
+* **Next button,** placed below the dots with a gap of at least 28 px.
+  - Size: about 60% of the body width, at least 220 px wide and 64 px tall, centred.
+  - Look: a **solid black** block with white text, the main menu's selected-tile look, as
+    the screen's one primary action. Square corners, matching the app's blocks.
+  - Content: the bold label `tr(STR_GOLF_NEXT)` followed by the Lucide `chevron-right`
+    icon at 24 px, centred together as one group.
+  - Tapping it does exactly what Count's Confirm/Next does today.
+* The whole group — question, number, label, dots and button — is vertically centred in
+  the body, and the gaps are kept as the body height changes.
+* Pure geometry (dot rects, hit rects, button rect) is `constexpr` in `GolfUiLayout.h` and
+  host-tested. The tests cover the hit rects touching halfway with no gap or overlap,
+  every dot index, and the button below the dots inside the body at 480 × 800.

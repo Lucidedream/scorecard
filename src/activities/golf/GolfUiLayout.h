@@ -4,6 +4,8 @@
 
 #include <cstdint>
 
+#include "golf/GolfRound.h"
+
 class GfxRenderer;
 class MappedInputManager;
 
@@ -446,6 +448,64 @@ constexpr fui::Rect fairwayPromptSheet(const fui::Rect safe, const uint8_t playe
 
 constexpr fui::Rect fairwayPromptRow(const fui::Rect sheet, const uint8_t row) {
   return {sheet.x, static_cast<int16_t>(sheet.y + 44 + row * 64), sheet.width, 64};
+}
+
+inline constexpr int PLAYER_COUNT_DOT_SIZE = 48;
+inline constexpr int PLAYER_COUNT_DOT_GAP = 20;
+inline constexpr int PLAYER_COUNT_BLOCK_GAP = 18;
+inline constexpr int PLAYER_COUNT_NEXT_GAP = 28;
+inline constexpr int PLAYER_COUNT_NEXT_HEIGHT = 64;
+
+struct PlayerCountTouchLayout {
+  fui::Rect group{};
+  fui::Rect question{};
+  fui::Rect value{};
+  fui::Rect unit{};
+  fui::Rect dots{};
+  fui::Rect next{};
+};
+
+constexpr PlayerCountTouchLayout makePlayerCountTouchLayout(const fui::Rect body, const int questionHeight,
+                                                            const int valueHeight, const int unitHeight) {
+  PlayerCountTouchLayout result{};
+  const int height = questionHeight + valueHeight + unitHeight + PLAYER_COUNT_BLOCK_GAP * 3 + PLAYER_COUNT_DOT_SIZE +
+                     PLAYER_COUNT_NEXT_GAP + PLAYER_COUNT_NEXT_HEIGHT;
+  int y = body.y + (body.height - height) / 2;
+  result.group = {body.x, static_cast<int16_t>(y), body.width, static_cast<int16_t>(height)};
+  result.question = {body.x, static_cast<int16_t>(y), body.width, static_cast<int16_t>(questionHeight)};
+  y += questionHeight + PLAYER_COUNT_BLOCK_GAP;
+  result.value = {body.x, static_cast<int16_t>(y), body.width, static_cast<int16_t>(valueHeight)};
+  y += valueHeight + PLAYER_COUNT_BLOCK_GAP;
+  result.unit = {body.x, static_cast<int16_t>(y), body.width, static_cast<int16_t>(unitHeight)};
+  y += unitHeight + PLAYER_COUNT_BLOCK_GAP;
+  const int dotsWidth = GOLF_MAX_PLAYERS * PLAYER_COUNT_DOT_SIZE + (GOLF_MAX_PLAYERS - 1) * PLAYER_COUNT_DOT_GAP;
+  result.dots = {static_cast<int16_t>(body.x + (body.width - dotsWidth) / 2), static_cast<int16_t>(y),
+                 static_cast<int16_t>(dotsWidth), PLAYER_COUNT_DOT_SIZE};
+  y += PLAYER_COUNT_DOT_SIZE + PLAYER_COUNT_NEXT_GAP;
+  const int nextWidth = maxValue(220, body.width * 3 / 5);
+  result.next = {static_cast<int16_t>(body.x + (body.width - nextWidth) / 2), static_cast<int16_t>(y),
+                 static_cast<int16_t>(nextWidth), PLAYER_COUNT_NEXT_HEIGHT};
+  return result;
+}
+
+constexpr fui::Rect playerCountDotRect(const PlayerCountTouchLayout& layout, const uint8_t index) {
+  if (index >= GOLF_MAX_PLAYERS) return {};
+  return {static_cast<int16_t>(layout.dots.x + index * (PLAYER_COUNT_DOT_SIZE + PLAYER_COUNT_DOT_GAP)), layout.dots.y,
+          PLAYER_COUNT_DOT_SIZE, PLAYER_COUNT_DOT_SIZE};
+}
+
+constexpr fui::Rect playerCountDotHitRect(const PlayerCountTouchLayout& layout, const uint8_t index) {
+  if (index >= GOLF_MAX_PLAYERS) return {};
+  const auto dot = playerCountDotRect(layout, index);
+  return {static_cast<int16_t>(dot.x - PLAYER_COUNT_DOT_GAP / 2), dot.y, PLAYER_COUNT_DOT_SIZE + PLAYER_COUNT_DOT_GAP,
+          dot.height};
+}
+
+constexpr uint8_t playerCountDotAt(const PlayerCountTouchLayout& layout, const int x, const int y) {
+  for (uint8_t index = 0; index < GOLF_MAX_PLAYERS; ++index) {
+    if (contains(playerCountDotHitRect(layout, index), x, y)) return index + 1;
+  }
+  return 0;
 }
 
 struct ScoringLayout {

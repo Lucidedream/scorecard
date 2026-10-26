@@ -532,16 +532,16 @@ TEST(GolfBlocks, HubAndCourseInfoUseMainMenuStripHeightAndLabelGeometry) {
   EXPECT_EQ(golfui::tileStripRect({0, 0, 480, 80}).height, 80);
 }
 
-TEST(GolfFooterless, PlayerCountKeepsOriginalFooterAndRosterReleasesItsSpace) {
+TEST(GolfFooterless, PlayerSetupHasNoTouchFooterAndKeepsX4Hints) {
   constexpr fui::Rect screen{0, 0, 480, 800};
   constexpr fui::Rect physicalHints{0, 0, 480, 760};
   for (const auto phase :
        {GolfPlayerSetupPhase::Count, GolfPlayerSetupPhase::Players, GolfPlayerSetupPhase::TeeChoice}) {
     const bool keep = golfPlayerSetupKeepsTouchFooter(phase);
-    EXPECT_EQ(keep, phase == GolfPlayerSetupPhase::Count);
+    EXPECT_FALSE(keep);
     const auto safe = golfui::footerSafeRect(screen, physicalHints, true, keep);
-    EXPECT_EQ(safe.height, phase == GolfPlayerSetupPhase::Count ? 704 : 800);
-    EXPECT_EQ(golfui::touchFooterHeight(true, keep), phase == GolfPlayerSetupPhase::Count ? 56 : 0);
+    EXPECT_EQ(safe.height, 800);
+    EXPECT_EQ(golfui::touchFooterHeight(true, keep), 0);
     const auto x4 = golfui::footerSafeRect(screen, physicalHints, false, keep);
     EXPECT_EQ(x4.height, physicalHints.height);
   }
@@ -660,4 +660,55 @@ TEST(GolfFairwayLayout, PromptFooterAlwaysOffersSkipDoneHitMissed) {
     EXPECT_EQ(golfui::touchFooterActionAt(layout, labels, layout.cells[cell].x + 1, layout.cells[cell].y + 1),
               actions[cell]);
   }
+}
+
+TEST(GolfPlayerCountTouch, DotsAndNextAreCenteredAndInsideTheBody) {
+  for (const auto body : {fui::Rect{0, 46, 480, 754}, fui::Rect{12, 61, 456, 720}, fui::Rect{0, 46, 800, 420}}) {
+    constexpr auto sample = golfui::makePlayerCountTouchLayout({0, 46, 480, 754}, 32, 32, 24);
+    static_assert(sample.next.width >= 220 && sample.next.height >= 64);
+    const auto layout = golfui::makePlayerCountTouchLayout(body, 32, 32, 24);
+    EXPECT_TRUE(inside(body, layout.group));
+    EXPECT_LE(abs((layout.group.y - body.y) - (body.bottom() - layout.group.bottom())), 1);
+    EXPECT_EQ(layout.dots.width, GOLF_MAX_PLAYERS * 48 + (GOLF_MAX_PLAYERS - 1) * 20);
+    EXPECT_LE(abs((layout.dots.x - body.x) - (body.right() - layout.dots.right())), 1);
+    EXPECT_LE(abs((layout.next.x - body.x) - (body.right() - layout.next.right())), 1);
+    EXPECT_GE(layout.next.width, 220);
+    EXPECT_GE(layout.next.height, 64);
+    EXPECT_EQ(layout.next.width, body.width * 3 / 5);
+    EXPECT_GE(layout.next.y - layout.dots.bottom(), 28);
+    EXPECT_TRUE(inside(body, layout.next));
+    EXPECT_EQ(layout.value.y - layout.question.bottom(), 18);
+    EXPECT_EQ(layout.unit.y - layout.value.bottom(), 18);
+    EXPECT_EQ(layout.dots.y - layout.unit.bottom(), 18);
+  }
+}
+
+TEST(GolfPlayerCountTouch, DotHitRectsMeetHalfwayAndSelectEveryCount) {
+  constexpr auto layout = golfui::makePlayerCountTouchLayout({0, 46, 480, 754}, 32, 32, 24);
+  for (uint8_t index = 0; index < GOLF_MAX_PLAYERS; ++index) {
+    const auto dot = golfui::playerCountDotRect(layout, index);
+    const auto hit = golfui::playerCountDotHitRect(layout, index);
+    EXPECT_GE(dot.width, 48);
+    EXPECT_EQ(dot.width, dot.height);
+    EXPECT_TRUE(inside(hit, dot));
+    EXPECT_EQ(golfui::playerCountDotAt(layout, hit.x, hit.y), index + 1);
+    EXPECT_EQ(golfui::playerCountDotAt(layout, hit.right() - 1, hit.bottom() - 1), index + 1);
+    EXPECT_EQ(golfui::playerCountDotAt(layout, dot.x + dot.width / 2, dot.y + dot.height / 2), index + 1);
+    if (index + 1 < GOLF_MAX_PLAYERS) {
+      const auto nextDot = golfui::playerCountDotRect(layout, index + 1);
+      const auto nextHit = golfui::playerCountDotHitRect(layout, index + 1);
+      EXPECT_GE(nextDot.x - dot.right(), 20);
+      EXPECT_EQ(hit.right(), nextHit.x);
+      EXPECT_EQ(hit.right(), (dot.right() + nextDot.x) / 2);
+      EXPECT_FALSE(overlaps(hit, nextHit));
+      EXPECT_EQ(golfui::playerCountDotAt(layout, hit.right(), hit.y), index + 2);
+    }
+    EXPECT_EQ(golfui::playerCountDotAt(layout, hit.x, hit.y - 1), 0);
+    EXPECT_EQ(golfui::playerCountDotAt(layout, hit.x, hit.bottom()), 0);
+  }
+  const auto first = golfui::playerCountDotHitRect(layout, 0);
+  const auto last = golfui::playerCountDotHitRect(layout, GOLF_MAX_PLAYERS - 1);
+  EXPECT_EQ(golfui::playerCountDotAt(layout, first.x - 1, first.y), 0);
+  EXPECT_EQ(golfui::playerCountDotAt(layout, last.right(), last.y), 0);
+  EXPECT_EQ(golfui::playerCountDotAt(layout, layout.next.x, layout.next.y), 0);
 }
