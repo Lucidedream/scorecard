@@ -584,13 +584,11 @@ TEST(GolfFairwayLayout, ChipAndFourPlayerPromptFitScoringSafeArea) {
     EXPECT_EQ(chip.bottom(), row.bottom());
     const auto sheet = golfui::fairwayPromptSheet(safe, 15);
     for (uint8_t row = 0; row < 4; ++row) {
-      const auto hit = golfui::fairwayPromptCell(sheet, row, 0);
-      const auto miss = golfui::fairwayPromptCell(sheet, row, 1);
-      EXPECT_EQ(hit.right(), miss.x);
-      EXPECT_GE(hit.width, 44);
-      EXPECT_GE(hit.height, 44);
-      EXPECT_LE(miss.right(), sheet.right());
-      EXPECT_LE(hit.bottom(), sheet.bottom());
+      const auto playerRow = golfui::fairwayPromptRow(sheet, row);
+      EXPECT_EQ(playerRow.x, sheet.x);
+      EXPECT_EQ(playerRow.width, sheet.width);
+      EXPECT_GE(playerRow.height, 44);
+      EXPECT_LE(playerRow.bottom(), sheet.bottom());
     }
   }
 }
@@ -648,27 +646,18 @@ TEST(GolfFairwayLayout, ChipTapKeepsSelectionRegardlessOfFocusedCounter) {
   }
 }
 
-TEST(GolfFairwayLayout, PromptFooterHasOnlySkipAndDoneOnTouch) {
-  constexpr golfui::FooterLabels buttons{"Skip", "Set", "Prev", "Next"};
+TEST(GolfFairwayLayout, PromptFooterAlwaysOffersSkipDoneHitMissed) {
+  constexpr auto labels = golfui::fairwayPromptFooterLabels("Skip", "Done", "Hit", "Missed");
+  static_assert(labels.previous[0] == 'H' && labels.next[0] == 'M');
+  EXPECT_STREQ(labels.back, "Skip");
+  EXPECT_STREQ(labels.confirm, "Done");
+  EXPECT_STREQ(labels.previous, "Hit");
+  EXPECT_STREQ(labels.next, "Missed");
   const auto layout = golfui::makeTouchFooterLayout({0, 0, 480, 800});
-  for (const bool hasAnswer : {false, true}) {
-    const auto touch = golfui::fairwayPromptFooterLabels(true, hasAnswer, buttons, "Done");
-    EXPECT_STREQ(touch.back, "Skip");
-    EXPECT_STREQ(touch.confirm, hasAnswer ? "Done" : "");
-    EXPECT_STREQ(touch.previous, "");
-    EXPECT_STREQ(touch.next, "");
-    for (uint8_t cell = 2; cell < 4; ++cell) {
-      EXPECT_EQ(golfui::touchFooterActionAt(layout, touch, layout.cells[cell].x + 1, layout.cells[cell].y + 1),
-                golfui::FooterAction::None);
-    }
-    EXPECT_EQ(golfui::touchFooterActionAt(layout, touch, layout.cells[0].x + 1, layout.cells[0].y + 1),
-              golfui::FooterAction::Back);
-    EXPECT_EQ(golfui::touchFooterActionAt(layout, touch, layout.cells[1].x + 1, layout.cells[1].y + 1),
-              hasAnswer ? golfui::FooterAction::Confirm : golfui::FooterAction::None);
-    const auto physical = golfui::fairwayPromptFooterLabels(false, hasAnswer, buttons, "Done");
-    EXPECT_STREQ(physical.back, "Skip");
-    EXPECT_STREQ(physical.confirm, "Set");
-    EXPECT_STREQ(physical.previous, "Prev");
-    EXPECT_STREQ(physical.next, "Next");
+  constexpr golfui::FooterAction actions[] = {golfui::FooterAction::Back, golfui::FooterAction::Confirm,
+                                              golfui::FooterAction::Previous, golfui::FooterAction::Next};
+  for (uint8_t cell = 0; cell < 4; ++cell) {
+    EXPECT_EQ(golfui::touchFooterActionAt(layout, labels, layout.cells[cell].x + 1, layout.cells[cell].y + 1),
+              actions[cell]);
   }
 }

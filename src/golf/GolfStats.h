@@ -41,6 +41,16 @@ bool golfFairwayEligible(const GolfRound& round, uint8_t hole);
 // The chip is available before any score is recorded.
 bool golfFairwayChipVisible(const GolfRound& round, uint8_t hole);
 uint8_t golfFairwayPromptPlayers(const GolfRound& round, uint8_t hole, const uint8_t (&prompted)[3]);
+// NO_PLAYER means every row has an answer; an invalid answer is not accepted.
+struct GolfFairwayPromptAnswer {
+  uint8_t nextPlayer = GolfRound::NO_PLAYER;
+  bool accepted = false;
+  bool complete() const { return accepted && nextPlayer == GolfRound::NO_PLAYER; }
+};
+uint8_t golfNextUnansweredFairwayPlayer(const GolfRound& round, uint8_t hole, uint8_t players,
+                                        uint8_t afterPlayer = GolfRound::NO_PLAYER);
+GolfFairwayPromptAnswer golfAnswerFairwayPrompt(GolfRound& round, uint8_t hole, uint8_t players, uint8_t player,
+                                                bool missed);
 uint8_t golfFairwaysEligible(const GolfRound& round, const GolfPlayerScore& score);
 
 // Hole score minus par. 0 when the hole is not entered or its par is unknown

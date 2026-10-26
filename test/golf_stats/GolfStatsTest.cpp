@@ -457,3 +457,56 @@ TEST_F(GolfStatsTest, SeedingBeforeFirstFairwayAnswerPreservesParPreview) {
     EXPECT_EQ(golfHoleScore(round, score(), hole), round.par[hole]);
   }
 }
+
+TEST_F(GolfStatsTest, OnePlayerFairwayPromptAnswerCompletesImmediately) {
+  for (const bool missed : {false, true}) {
+    score() = {};
+    score().in100[0] = 4;
+    uint8_t prompted[3]{};
+    const auto players = golfFairwayPromptPlayers(round, 0, prompted);
+    ASSERT_EQ(players, 1);
+    const auto selected = golfNextUnansweredFairwayPlayer(round, 0, players);
+    ASSERT_EQ(selected, 0);
+    const auto result = golfAnswerFairwayPrompt(round, 0, players, selected, missed);
+    EXPECT_TRUE(result.accepted);
+    EXPECT_TRUE(result.complete());
+    EXPECT_EQ(result.nextPlayer, GolfRound::NO_PLAYER);
+    EXPECT_EQ(golfFairwayState(score(), 0), missed ? GolfFairwayState::Missed : GolfFairwayState::Hit);
+    EXPECT_EQ(score().in100[0], 4);
+    EXPECT_EQ(score().out100[0], 0);
+  }
+}
+
+TEST_F(GolfStatsTest, ThreePlayerFairwayPromptAnswersAdvanceAndComplete) {
+  for (const uint8_t slot : {0, 1, 3}) {
+    golfSetTee(round.players[slot], "Blue");
+    score(slot).in100[0] = 4;
+  }
+  uint8_t prompted[3]{};
+  const auto players = golfFairwayPromptPlayers(round, 0, prompted);
+  ASSERT_EQ(players, 11);
+  uint8_t selected = golfNextUnansweredFairwayPlayer(round, 0, players);
+  ASSERT_EQ(selected, 0);
+  for (const uint8_t slot : {0, 1, 3}) {
+    ASSERT_EQ(selected, slot);
+    const auto result = golfAnswerFairwayPrompt(round, 0, players, selected, slot == 1);
+    ASSERT_TRUE(result.accepted);
+    EXPECT_EQ(result.complete(), slot == 3);
+    selected = result.nextPlayer;
+  }
+  EXPECT_EQ(selected, GolfRound::NO_PLAYER);
+  EXPECT_EQ(golfFairwayState(score(0), 0), GolfFairwayState::Hit);
+  EXPECT_EQ(golfFairwayState(score(1), 0), GolfFairwayState::Missed);
+  EXPECT_EQ(golfFairwayState(score(3), 0), GolfFairwayState::Hit);
+  EXPECT_EQ(golfFairwayState(score(2), 0), GolfFairwayState::None);
+
+  for (const uint8_t slot : {0, 1, 3}) golfSetFairwayState(score(slot), 0, GolfFairwayState::None);
+  // Touch can select any row; advancement continues after it and wraps.
+  const auto result = golfAnswerFairwayPrompt(round, 0, players, 3, true);
+  EXPECT_TRUE(result.accepted);
+  EXPECT_FALSE(result.complete());
+  EXPECT_EQ(result.nextPlayer, 0);
+  const auto rejected = golfAnswerFairwayPrompt(round, 0, players, 2, false);
+  EXPECT_FALSE(rejected.accepted);
+  EXPECT_FALSE(rejected.complete());
+}

@@ -3504,20 +3504,18 @@ an **eligible hole** below is an eligible hole the player has a score on.
   session**, tracked in an activity RAM bitmask that is never saved. After a reboot it
   may ask again, which is acceptable.
 * **What:** an in-place sheet like the Mark sheet, titled `Fairway · hole N`.
-  - It has one row per such player: the player's name and two cells, **Hit** and
-    **Missed**.
-  - Touch: tap a cell.
-  - X4: the rocker moves between rows; ◀ ▶ choose; Confirm sets the row. On the **X4
-    Pro** the prompt's footer has only two cells, **Skip** and **Done**, drawn with the
-    two-cell footer (owner 2026-10-26). Hit and Missed are tapped directly, so the
-    PREV/NEXT cells are not drawn and have no tap target.
-  - When every row has an answer, the sheet closes and the hole change it interrupted
-    completes.
-  - Skip (Back) leaves the rest unanswered and continues. The X4 footer reads
-    `Skip` / `Set`: Confirm always sets the selected row. The Pro footer reads
-    `Skip` / `Done`: Done is enabled once any row is answered and closes the sheet;
-    a configured Power-as-Confirm also acts as Done on the Pro.
-  - It asks on any move away, backwards included, so the rule is simple and predictable.
+  * **Rows:** one per such player, showing the name and the current answer icon
+    (`circle` / `circle-check` / `circle-x`). One row is selected, the first unanswered
+    one. Touch: tap a row to select it. X4: the rocker moves the selection.
+  * **Footer (both boards, owner 2026-10-26):** **Skip · Done · Hit · Missed**. Hit and
+    Missed sit in the Previous/Next positions, so on the X4 ◀ = Hit and ▶ = Missed, and on
+    the X4 Pro they are tapped.
+  * Hit or Missed answers the selected row, then moves the selection to the next
+    unanswered row. When every row is answered, the sheet closes and the interrupted hole
+    change completes. With one player, one tap or press finishes it.
+  * **Done** (Confirm, or a Power-as-Confirm click) closes the sheet. **Skip** (Back) also
+    closes it. Either way, answers already given are kept and the rest stay unanswered.
+  * It asks on any move away, backwards included, so the rule is simple and predictable.
 * **Never blocks scoring.** Any input not meant for the sheet behaves like Skip:
   - MENU or a MENU long press simply skips (it does not also open the menu or map);
   - the Home key skips, then goes Home normally;

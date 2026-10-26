@@ -166,10 +166,9 @@ struct FooterLabels {
   const char* next = "";
 };
 
-constexpr FooterLabels fairwayPromptFooterLabels(const bool hasTouch, const bool hasAnswer, const FooterLabels buttons,
-                                                 const char* done) {
-  return {buttons.back, hasTouch ? (hasAnswer ? done : "") : buttons.confirm, hasTouch ? "" : buttons.previous,
-          hasTouch ? "" : buttons.next};
+constexpr FooterLabels fairwayPromptFooterLabels(const char* skip, const char* done, const char* hit,
+                                                 const char* missed) {
+  return {skip, done, hit, missed};
 }
 
 struct TouchFooterLayout {
@@ -445,10 +444,8 @@ constexpr fui::Rect fairwayPromptSheet(const fui::Rect safe, const uint8_t playe
   return {safe.x, static_cast<int16_t>(safe.y + safe.height - height), safe.width, static_cast<int16_t>(height)};
 }
 
-constexpr fui::Rect fairwayPromptCell(const fui::Rect sheet, const uint8_t row, const uint8_t cell) {
-  const int width = sheet.width / 4;
-  return {static_cast<int16_t>(sheet.x + sheet.width / 2 + width * cell), static_cast<int16_t>(sheet.y + 44 + row * 64),
-          static_cast<int16_t>(width), 64};
+constexpr fui::Rect fairwayPromptRow(const fui::Rect sheet, const uint8_t row) {
+  return {sheet.x, static_cast<int16_t>(sheet.y + 44 + row * 64), sheet.width, 64};
 }
 
 struct ScoringLayout {

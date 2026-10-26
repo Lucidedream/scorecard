@@ -335,9 +335,7 @@ bool GolfScoringActivity::requestHoleChange(const uint8_t hole, const uint8_t pl
       if (prompt) {
         fairwayPrompted[round.currentHole / 8] |= 1 << (round.currentHole % 8);
         pickerOpen = false;
-        pickerRow = 0;
-        while (!(fairwayPromptPlayers & (1 << pickerRow))) ++pickerRow;
-        promptMissed = false;
+        pickerRow = golfNextUnansweredFairwayPlayer(round, round.currentHole, fairwayPromptPlayers);
       }
     }
   }
@@ -670,43 +668,26 @@ bool GolfScoringActivity::handleNavigationSwipe() {
   return true;
 }
 
-bool GolfScoringActivity::fairwayPromptHasAnswer() const {
-  const auto& round = GOLF_ROUND_STORE.getRound();
-  for (uint8_t slot = 0; slot < GolfRound::MAX_PLAYERS; ++slot) {
-    if ((fairwayPromptPlayers & (1 << slot)) &&
-        golfFairwayState(round.players[slot].score, round.currentHole) != GolfFairwayState::None)
-      return true;
-  }
-  return false;
-}
-
 golfui::FooterLabels GolfScoringActivity::fairwayPromptFooter() const {
-  return golfui::fairwayPromptFooterLabels(
-      mappedInput.hasTouch(), fairwayPromptHasAnswer(),
-      {tr(STR_GOLF_FAIRWAY_SKIP), tr(STR_GOLF_FAIRWAY_SET), tr(STR_GOLF_FOOTER_PREVIOUS), tr(STR_GOLF_FOOTER_NEXT)},
-      tr(STR_GOLF_FAIRWAY_DONE));
+  return golfui::fairwayPromptFooterLabels(tr(STR_GOLF_FAIRWAY_SKIP), tr(STR_GOLF_FAIRWAY_DONE),
+                                           tr(STR_GOLF_FAIRWAY_HIT_CHOICE), tr(STR_GOLF_FAIRWAY_MISSED));
 }
 
 void GolfScoringActivity::answerFairwayPrompt(const uint8_t player, const bool missed) {
-  if (rejectArchivedMutation() || !(fairwayPromptPlayers & (1 << player))) return;
-  bool complete = true;
+  if (rejectArchivedMutation()) return;
+  GolfFairwayPromptAnswer result;
   {
     RenderLock lock(*this);
     auto& round = GOLF_ROUND_STORE.getRound();
-    auto& score = round.players[player].score;
-    seedGolfHoleAtPar(score, round.currentHole, round.par[round.currentHole]);
-    golfSetFairwayState(score, round.currentHole, missed ? GolfFairwayState::Missed : GolfFairwayState::Hit);
-    for (uint8_t slot = 0; slot < GolfRound::MAX_PLAYERS; ++slot) {
-      if ((fairwayPromptPlayers & (1 << slot)) &&
-          golfFairwayState(round.players[slot].score, round.currentHole) == GolfFairwayState::None) {
-        if (complete) pickerRow = slot;
-        complete = false;
-      }
-    }
-    promptMissed = false;
+    result = golfAnswerFairwayPrompt(round, round.currentHole, fairwayPromptPlayers, player, missed);
+    if (result.accepted && !result.complete()) pickerRow = result.nextPlayer;
+  }
+  if (!result.accepted) {
+    LOG_ERR("GOLF", "Fairway prompt answer rejected for player %u", static_cast<unsigned>(player));
+    return;
   }
   markDirtyForIdle();
-  if (complete)
+  if (result.complete())
     completeHoleChange();
   else
     requestUpdate();
@@ -720,11 +701,7 @@ void GolfScoringActivity::handleFairwayPromptInput() {
     return;
   }
   if (input.wasReleased(golfui::FooterAction::Previous) || input.wasReleased(golfui::FooterAction::Next)) {
-    {
-      RenderLock lock(*this);
-      promptMissed = input.wasReleased(golfui::FooterAction::Next);
-    }
-    requestUpdate();
+    answerFairwayPrompt(pickerRow, input.wasReleased(golfui::FooterAction::Next));
     return;
   }
   if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
@@ -735,21 +712,12 @@ void GolfScoringActivity::handleFairwayPromptInput() {
       do {
         pickerRow = static_cast<uint8_t>((pickerRow + GolfRound::MAX_PLAYERS + delta) % GolfRound::MAX_PLAYERS);
       } while (!(fairwayPromptPlayers & (1 << pickerRow)));
-      promptMissed = false;
     }
     requestUpdate();
     return;
   }
-  if (input.wasTouchReleased(golfui::FooterAction::Confirm)) {
-    if (fairwayPromptHasAnswer()) completeHoleChange();
-    return;
-  }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (mappedInput.hasTouch()) {
-      if (fairwayPromptHasAnswer()) completeHoleChange();
-      return;
-    }
-    answerFairwayPrompt(pickerRow, promptMissed);
+  if (input.wasReleased(golfui::FooterAction::Confirm)) {
+    completeHoleChange();
     return;
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::Power)) {
@@ -765,19 +733,19 @@ void GolfScoringActivity::handleFairwayPromptInput() {
   const auto chrome = golfui::chromeLayout(renderer, mappedInput, 0, {}, true);
   const auto sheet = golfui::fairwayPromptSheet(chrome.safe, fairwayPromptPlayers);
   if (!input.tapIn(sheet)) {
-    // A disabled Done cell is inert.
-    if (input.tapIn(golfui::touchFooterLayout(renderer).cells[1])) return;
     completeHoleChange();
     return;
   }
   uint8_t row = 0;
   for (uint8_t slot = 0; slot < GolfRound::MAX_PLAYERS; ++slot) {
     if (!(fairwayPromptPlayers & (1 << slot))) continue;
-    for (uint8_t cell = 0; cell < 2; ++cell) {
-      if (input.tapIn(golfui::fairwayPromptCell(sheet, row, cell))) {
-        answerFairwayPrompt(slot, cell != 0);
-        return;
+    if (input.tapIn(golfui::fairwayPromptRow(sheet, row))) {
+      {
+        RenderLock lock(*this);
+        pickerRow = slot;
       }
+      requestUpdate();
+      return;
     }
     ++row;
   }
@@ -795,34 +763,24 @@ void GolfScoringActivity::drawFairwayPrompt(const freeink::ui::Rect safe) const 
   uint8_t row = 0;
   for (uint8_t slot = 0; slot < GolfRound::MAX_PLAYERS; ++slot) {
     if (!(fairwayPromptPlayers & (1 << slot))) continue;
-    const auto hit = golfui::fairwayPromptCell(sheet, row, 0);
-    const auto miss = golfui::fairwayPromptCell(sheet, row, 1);
-    const int y = hit.y + (hit.height - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
+    const auto rect = golfui::fairwayPromptRow(sheet, row);
+    const int y = rect.y + (rect.height - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
     const bool selected = slot == pickerRow;
+    if (selected) renderer.fillRect(rect.x, rect.y, rect.width, rect.height, true);
     char name[GolfPlayer::NAME_CAPACITY];
     snprintf(name, sizeof(name), "%s", round.players[slot].name);
-    ellipsize(renderer, name, sizeof(name), sheet.width / 2 - SHEET_PAD_X - 4);
-    renderer.drawText(UI_10_FONT_ID, sheet.x + SHEET_PAD_X, y, name, true,
+    ellipsize(renderer, name, sizeof(name), rect.width - SHEET_PAD_X * 2 - MARK_ICON_SHEET_PX - 8);
+    renderer.drawText(UI_10_FONT_ID, rect.x + SHEET_PAD_X, y, name, !selected,
                       selected ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
     const auto state = golfFairwayState(round.players[slot].score, round.currentHole);
-    for (uint8_t cell = 0; cell < 2; ++cell) {
-      const auto rect = cell == 0 ? hit : miss;
-      const bool answered = state == (cell == 0 ? GolfFairwayState::Hit : GolfFairwayState::Missed);
-      if (answered) renderer.fillRect(rect.x, rect.y, rect.width, rect.height, true);
-      renderer.drawRect(rect.x, rect.y, rect.width, rect.height, selected && promptMissed == (cell != 0) ? 3 : 1,
-                        !answered);
-      const char* label = cell == 0 ? tr(STR_GOLF_FAIRWAY_HIT_CHOICE) : tr(STR_GOLF_FAIRWAY_MISSED);
-      renderer.drawText(UI_10_FONT_ID, rect.x + (rect.width - renderer.getTextWidth(UI_10_FONT_ID, label)) / 2, y,
-                        label, !answered);
-    }
+    const auto& icon = state == GolfFairwayState::Hit      ? icon_circle_check_24
+                       : state == GolfFairwayState::Missed ? icon_circle_x_24
+                                                           : icon_circle_24;
+    blitIcon(renderer, icon, rect.x + rect.width - SHEET_PAD_X - MARK_ICON_SHEET_PX,
+             rect.y + (rect.height - MARK_ICON_SHEET_PX) / 2, !selected);
     ++row;
   }
-  const auto labels = fairwayPromptFooter();
-  if (mappedInput.hasTouch()) {
-    golfui::drawFooterTwo(renderer, mappedInput, labels.back, labels.confirm, true);
-  } else {
-    golfui::drawFooter(renderer, mappedInput, labels, true);
-  }
+  golfui::drawFooter(renderer, mappedInput, fairwayPromptFooter(), true);
 }
 
 void GolfScoringActivity::handleScoringInput() {

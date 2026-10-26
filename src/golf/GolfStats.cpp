@@ -218,6 +218,30 @@ uint8_t golfFairwayPromptPlayers(const GolfRound& round, const uint8_t hole, con
   return players;
 }
 
+uint8_t golfNextUnansweredFairwayPlayer(const GolfRound& round, const uint8_t hole, const uint8_t players,
+                                        const uint8_t afterPlayer) {
+  if (hole >= holesInRound(round)) return GolfRound::NO_PLAYER;
+  const uint8_t first = afterPlayer < GolfRound::MAX_PLAYERS ? (afterPlayer + 1) % GolfRound::MAX_PLAYERS : 0;
+  for (uint8_t offset = 0; offset < GolfRound::MAX_PLAYERS; ++offset) {
+    const uint8_t slot = (first + offset) % GolfRound::MAX_PLAYERS;
+    if ((players & (1 << slot)) && golfPlayerIsEnabled(round.players[slot]) &&
+        golfFairwayState(round.players[slot].score, hole) == GolfFairwayState::None)
+      return slot;
+  }
+  return GolfRound::NO_PLAYER;
+}
+
+GolfFairwayPromptAnswer golfAnswerFairwayPrompt(GolfRound& round, const uint8_t hole, const uint8_t players,
+                                                const uint8_t player, const bool missed) {
+  if (!golfFairwayEligible(round, hole) || player >= GolfRound::MAX_PLAYERS || !(players & (1 << player)) ||
+      !golfPlayerIsEnabled(round.players[player]))
+    return {};
+  auto& score = round.players[player].score;
+  seedGolfHoleAtPar(score, hole, round.par[hole]);
+  golfSetFairwayState(score, hole, missed ? GolfFairwayState::Missed : GolfFairwayState::Hit);
+  return {golfNextUnansweredFairwayPlayer(round, hole, players, player), true};
+}
+
 uint8_t golfFairwaysAnswered(const GolfRound& round, const GolfPlayerScore& score) {
   if (!golfHasPar(round)) return 0;
   uint8_t total = 0;

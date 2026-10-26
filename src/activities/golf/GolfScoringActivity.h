@@ -39,7 +39,6 @@ class GolfScoringActivity final : public Activity, protected UiAppHost {
   uint8_t fairwayPromptPlayers = 0;
   uint8_t pendingHole = 0;
   uint8_t pendingPlayer = 0;
-  bool promptMissed = false;
   bool finishAfterChange = false;
   bool requestHoleChange(uint8_t hole, uint8_t player);
   void completeHoleChange();
@@ -47,7 +46,6 @@ class GolfScoringActivity final : public Activity, protected UiAppHost {
   void answerFairwayPrompt(uint8_t player, bool missed);
   void drawFairwayPrompt(freeink::ui::Rect safe) const;
   golfui::FooterLabels fairwayPromptFooter() const;
-  bool fairwayPromptHasAnswer() const;
 
   // Mark picker (CONTRACTS-V2 §12, §31.2, §33.2). While pickerOpen the scoring
   // screen still renders in full and the sheet draws over it. pickerRow is the
