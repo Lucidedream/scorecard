@@ -3378,3 +3378,53 @@ Every action a footer cell performed must stay reachable by touch:
 
 The worker's report lists every golf screen with every action and how it is reached on the
 X4 Pro. Any action that cannot be reached means the work is not done.
+
+## 45. Recent shows a count; search the catalog from By region (v8)
+
+*Owner feedback 2026-10-26.*
+
+### 45.1 Recent's detail box is a count
+
+The §43.2 detail box for the focused **Recent** tile shows only `N courses`, like My
+courses and By region. It no longer lists course names. The Recent level itself, opened
+from the tile, still shows the courses as cards.
+
+### 45.2 Search courses
+
+* **Entry.** The Regions level (§43.3) gains a full-width **Search courses** bar (Lucide
+  `search` icon plus the label `tr(STR_GOLF_SEARCH_COURSES)`) above the grid, the same
+  height as the §43.4 sort segment. It is the first focusable item. Confirm or a tap
+  opens the existing `KeyboardEntryActivity`, titled `tr(STR_GOLF_SEARCH_COURSES)`, with a
+  limit of 24 characters, the same component Player setup uses for names.
+* **Grid.** The grid keeps 10 regions per page below the bar. If the bar leaves less than
+  5 rows of at least 56 px, the grid drops to 4 rows (8 per page); choose by measured
+  height, not by device.
+* **Matching** runs over every catalog course: one sequential `index.dat` read, the same
+  scan as `findCatalogByName`. The query and the 40-byte record name are compared after
+  ASCII case-folding. Split the query on spaces; a course matches when **every** word is
+  a substring of its name. An empty or all-space query returns to Regions without a
+  search.
+* **Results** form a new picker level, `Search`, listing matching ordinals (cap 512). It
+  shows the same §43.4 course cards and sort segment as Region courses, defaulting to
+  Rating.
+  - The header reads `"<query>" · N`.
+  - Zero matches shows `tr(STR_GOLF_NO_COURSES_MATCH)` with Back only.
+  - Picking a card behaves as in Region courses: Start in Play mode, Open → Course info in
+    Browse mode.
+* **Back.** Back from Results returns to Regions with the search bar focused. The §41.5
+  return context also records the Search level and the query (`char[25]`, RAM only), so
+  Back from the nine picker or player setup returns to the same results and row.
+* **Sorting without re-reading SD.** The single matching scan stores, per match, the
+  ordinal, the rating key (as in §41.5) and the first 12 bytes of the ASCII case-folded
+  name. Both sorts then run in RAM with zero SD reads:
+  - Rating: key descending, ties by ordinal;
+  - Name: prefix, ties by ordinal.
+  This sort-key array (≤512 × 15 B ≈ 7.5 KB) is allocated with `makeUniqueNoThrow` when
+  Results opens and freed when Results is left. On OOM, log it and show Results in index
+  order with the sort segment hidden.
+* **Cap:** keep the first 512 matches in index order, then sort those. When capped, the
+  header reads `"<query>" · 512+` so the owner knows to narrow the search.
+* **Memory:** apart from that sort-key array, nothing new beyond the existing ordinal list
+  and one query buffer. The scan reads one 96-byte record at a time.
+* **Both devices:** the X4 types with its buttons (slow but complete), and the X4 Pro with
+  the touch keyboard.
