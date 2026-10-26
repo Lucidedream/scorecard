@@ -188,10 +188,10 @@ int metric(const GolfExportData& d, uint8_t index, bool& available) {
     case 15:
       return d.detailed ? golfFairwaysHit(r, s) : h.fairways;
     case 16:
-      return d.detailed ? golfFairwaysEligible(r, s) : h.fairwayHoles;
+      return d.detailed ? golfFairwaysAnswered(r, s) : h.fairwayHoles;
     case 17: {
       const int made = d.detailed ? golfFairwaysHit(r, s) : h.fairways;
-      const int denom = d.detailed ? golfFairwaysEligible(r, s) : h.fairwayHoles;
+      const int denom = d.detailed ? golfFairwaysAnswered(r, s) : h.fairwayHoles;
       return denom ? (200 * made + denom) / (2 * denom) : 0;  // nearest whole percent
     }
     case 18:

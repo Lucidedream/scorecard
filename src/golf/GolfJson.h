@@ -108,6 +108,10 @@ inline void golfAddJsonPlayers(JsonDocument& doc, const GolfRound& round) {
     golfAddJsonHoleArray(encoded, "in100", player.score.in100, round.holeCount, disabled);
     golfAddJsonHoleArray(encoded, "out100", player.score.out100, round.holeCount, disabled);
     golfAddJsonFairways(encoded, player.score, round.holeCount, disabled);
+    JsonArray answered = encoded["fairwaysAnswered"].to<JsonArray>();
+    for (uint8_t hole = 0; hole < round.holeCount; ++hole) {
+      answered.add(!disabled && golfFairwayState(player.score, hole) != GolfFairwayState::None ? 1 : 0);
+    }
     golfAddJsonBunkers(encoded, player.score, round.holeCount, disabled);
     golfAddJsonPenalties(encoded, player.score, round.holeCount, disabled);
   }
@@ -192,7 +196,7 @@ inline bool golfReadJsonFairways(const JsonVariantConst value, GolfPlayerScore& 
     if (!element.is<int>()) return false;
     const int item = element.as<int>();
     if (item < 0 || item > 1) return false;
-    golfSetFairwayHit(score, static_cast<uint8_t>(hole), item != 0);
+    if (item != 0) score.fairwayHit[hole / 8] |= static_cast<uint8_t>(1 << (hole % 8));
   }
   return true;
 }
@@ -320,7 +324,31 @@ inline GolfRoundDecodeStatus golfDecodeRoundJson(const JsonVariantConst doc, con
     }
   }
 
-  return golfCheckRound(out, version, holes, currentHole, currentPlayer, lengths, validation);
+  const auto status = golfCheckRound(out, version, holes, currentHole, currentPlayer, lengths, validation);
+  if (status != GolfRoundDecodeStatus::Ok) return status;
+  bool hasPar = true;
+  for (uint8_t hole = 0; hole < out.holeCount; ++hole) hasPar &= out.par[hole] >= 3 && out.par[hole] <= 6;
+  for (uint8_t slot = 0; slot < GolfRound::MAX_PLAYERS; ++slot) {
+    auto& player = out.players[slot];
+    const auto value = doc["players"][slot]["fairwaysAnswered"];
+    const bool legacy = value.isUnbound();
+    const auto array = value.as<JsonArrayConst>();
+    if (!legacy && (array.isNull() || array.size() != out.holeCount)) return GolfRoundDecodeStatus::RejectedArrayLength;
+    for (uint8_t hole = 0; hole < out.holeCount; ++hole) {
+      if (!legacy && (!array[hole].is<int>() || array[hole].as<int>() < 0 || array[hole].as<int>() > 1))
+        return GolfRoundDecodeStatus::RejectedMetadata;
+      const bool eligible = !hasPar || out.par[hole] == 4 || out.par[hole] == 5;
+      const bool entered = player.score.in100[hole] != 0 || player.score.out100[hole] != 0;
+      const bool answered = legacy ? golfPlayerIsEnabled(player) && eligible && entered : array[hole].as<int>() != 0;
+      if (!golfPlayerIsEnabled(player) && answered) return GolfRoundDecodeStatus::RejectedDisabledPlayerData;
+      // Keep legacy hit bits, even on unentered holes, exactly as older decoders did.
+      const bool hit = golfFairwayHit(player.score, hole);
+      golfSetFairwayState(player.score, hole,
+                          answered ? (hit ? GolfFairwayState::Hit : GolfFairwayState::Missed) : GolfFairwayState::None);
+      if (legacy && hit) golfSetFairwayState(player.score, hole, GolfFairwayState::Hit);
+    }
+  }
+  return GolfRoundDecodeStatus::Ok;
 }
 
 #endif

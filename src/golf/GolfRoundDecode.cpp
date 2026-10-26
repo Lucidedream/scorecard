@@ -17,7 +17,7 @@ bool playerPayloadIsZero(const GolfPlayer& player, const uint8_t holes) {
     }
   }
   for (uint8_t byte = 0; byte < sizeof(player.score.fairwayHit); ++byte) {
-    if (player.score.fairwayHit[byte] != 0) return false;
+    if (player.score.fairwayHit[byte] != 0 || player.score.fairwayAnswered[byte] != 0) return false;
   }
   for (uint8_t byte = 0; byte < sizeof(player.score.greensideBunker); ++byte) {
     if (player.score.greensideBunker[byte] != 0) return false;

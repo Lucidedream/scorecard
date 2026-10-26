@@ -1,5 +1,6 @@
 add_executable(golf_round_json_tests
   test_golf_round_json.cpp
+  ${REPO_ROOT}/src/golf/GolfStats.cpp
   ${REPO_ROOT}/src/golf/GolfRoundDecode.cpp
   ${REPO_ROOT}/src/golf/GolfValidate.cpp
   ${REPO_ROOT}/src/golf/GolfPenalty.cpp

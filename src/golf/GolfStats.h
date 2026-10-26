@@ -36,6 +36,9 @@ uint8_t golfGreensEligible(const GolfRound& round, const GolfPlayerScore& score)
 // FIR numerator: entered holes with the fairway bit set (not re-filtered by par).
 uint8_t golfFairwaysHit(const GolfRound& round, const GolfPlayerScore& score);
 // FIR denominator: entered par-4/5 holes; 0 on a par-free round (golfHasPar false).
+uint8_t golfFairwaysAnswered(const GolfRound& round, const GolfPlayerScore& score);
+bool golfFairwayEligible(const GolfRound& round, uint8_t hole);
+uint8_t golfFairwayPromptPlayers(const GolfRound& round, uint8_t hole, const uint8_t (&prompted)[3]);
 uint8_t golfFairwaysEligible(const GolfRound& round, const GolfPlayerScore& score);
 
 // Hole score minus par. 0 when the hole is not entered or its par is unknown

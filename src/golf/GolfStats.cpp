@@ -200,6 +200,33 @@ uint8_t golfFairwaysHit(const GolfRound& round, const GolfPlayerScore& score) {
   return total;
 }
 
+bool golfFairwayEligible(const GolfRound& round, const uint8_t hole) {
+  return hole < holesInRound(round) && (!golfHasPar(round) || round.par[hole] == 4 || round.par[hole] == 5);
+}
+
+uint8_t golfFairwayPromptPlayers(const GolfRound& round, const uint8_t hole, const uint8_t (&prompted)[3]) {
+  if (!golfFairwayEligible(round, hole) || (prompted[hole / 8] & (1 << (hole % 8)))) return 0;
+  uint8_t players = 0;
+  for (uint8_t slot = 0; slot < GolfRound::MAX_PLAYERS; ++slot) {
+    const auto& player = round.players[slot];
+    if (golfPlayerIsEnabled(player) && isEntered(player.score, hole) &&
+        golfFairwayState(player.score, hole) == GolfFairwayState::None)
+      players |= 1 << slot;
+  }
+  return players;
+}
+
+uint8_t golfFairwaysAnswered(const GolfRound& round, const GolfPlayerScore& score) {
+  if (!golfHasPar(round)) return 0;
+  uint8_t total = 0;
+  for (uint8_t hole = 0; hole < holesInRound(round); ++hole) {
+    if (isEntered(score, hole) && golfFairwayEligible(round, hole) &&
+        golfFairwayState(score, hole) != GolfFairwayState::None)
+      ++total;
+  }
+  return total;
+}
+
 uint8_t golfFairwaysEligible(const GolfRound& round, const GolfPlayerScore& score) {
   if (!golfHasPar(round)) return 0;
   uint8_t total = 0;

@@ -44,7 +44,7 @@ GolfRoundExportActivity::GolfRoundExportActivity(GfxRenderer& renderer, MappedIn
   summary.hazards = golfHazardsForRound(player.score, round.holeCount);
   summary.obs = golfObsForRound(player.score, round.holeCount);
   summary.fairways = golfFairwaysHit(round, player.score);
-  summary.fairwayHoles = golfFairwaysEligible(round, player.score);
+  summary.fairwayHoles = golfFairwaysAnswered(round, player.score);
   summary.gir = golfGreensInRegulation(round, player.score);
   summary.girHoles = golfGreensEligible(round, player.score);
   summary.penaltiesRecorded = false;        // If archive reload fails, old provenance is unknown.

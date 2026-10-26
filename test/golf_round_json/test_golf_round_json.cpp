@@ -5,6 +5,7 @@
 #include "GolfPaths.h"
 #include "GolfRound.h"
 #include "GolfRoundDecode.h"
+#include "GolfStats.h"
 
 namespace {
 
@@ -361,4 +362,68 @@ TEST(GolfRoundNines, RejectsMalformedPresentField) {
     GolfRound out{};
     EXPECT_NE(decode(doc, false, out), GolfRoundDecodeStatus::Ok) << json;
   }
+}
+
+TEST(GolfRoundJson, AnsweredRoundTripAndLegacyFir) {
+  GolfRound original = makeFixtureRound();
+  JsonDocument legacy;
+  serializeRound(original, 6, legacy);
+  GolfRound decoded{};
+  ASSERT_EQ(decode(legacy, false, decoded), GolfRoundDecodeStatus::Ok);
+  EXPECT_EQ(golfFairwaysHit(decoded, decoded.players[0].score), golfFairwaysHit(original, original.players[0].score));
+  EXPECT_EQ(golfFairwaysAnswered(decoded, decoded.players[0].score),
+            golfFairwaysEligible(original, original.players[0].score));
+  EXPECT_EQ(golfFairwayState(decoded.players[0].score, 8), GolfFairwayState::None);
+  auto& score = original.players[0].score;
+  golfSetFairwayState(score, 0, GolfFairwayState::Hit);
+  golfSetFairwayState(score, 1, GolfFairwayState::Missed);
+  golfSetFairwayState(score, 2, GolfFairwayState::None);
+  JsonDocument current;
+  serializeRound(original, 6, current);
+  current.remove("players");
+  golfAddJsonPlayers(current, original);
+  ASSERT_EQ(decode(current, true, decoded), GolfRoundDecodeStatus::Ok);
+  EXPECT_EQ(golfFairwayState(decoded.players[0].score, 0), GolfFairwayState::Hit);
+  EXPECT_EQ(golfFairwayState(decoded.players[0].score, 1), GolfFairwayState::Missed);
+  EXPECT_EQ(golfFairwayState(decoded.players[0].score, 2), GolfFairwayState::None);
+  EXPECT_EQ(golfFairwaysHit(decoded, decoded.players[0].score), 1);
+  EXPECT_EQ(golfFairwaysAnswered(decoded, decoded.players[0].score), 2);
+  for (const char* malformed : {"null", "[]", "[0,1]", "\"bad\""}) {
+    JsonDocument value;
+    ASSERT_FALSE(deserializeJson(value, malformed));
+    current["players"][0]["fairwaysAnswered"] = value.as<JsonVariantConst>();
+    EXPECT_NE(decode(current, false, decoded), GolfRoundDecodeStatus::Ok);
+  }
+  golfAddJsonPlayers(current, original);
+  current["players"][0]["fairwaysAnswered"][0] = 2;
+  EXPECT_NE(decode(current, false, decoded), GolfRoundDecodeStatus::Ok);
+}
+
+TEST(GolfRoundJson, FairwayCycleAndPromptEligibility) {
+  GolfRound round = makeFixtureRound();
+  auto& score = round.players[0].score;
+  golfSetFairwayState(score, 0, GolfFairwayState::None);
+  EXPECT_FALSE(golfFairwayHit(score, 0));
+  for (auto expected : {GolfFairwayState::Hit, GolfFairwayState::Missed, GolfFairwayState::None}) {
+    golfSetFairwayState(score, 0, golfNextFairwayState(golfFairwayState(score, 0)));
+    EXPECT_EQ(golfFairwayState(score, 0), expected);
+    EXPECT_EQ(golfFairwayHit(score, 0), expected == GolfFairwayState::Hit);
+  }
+  golfSetFairwayState(score, 18, GolfFairwayState::Hit);
+  EXPECT_EQ(golfFairwayState(score, 18), GolfFairwayState::None);
+  uint8_t prompted[3]{};
+  golfSetTee(round.players[2], "White");
+  round.players[2].score.in100[0] = 4;
+  EXPECT_EQ(golfFairwayPromptPlayers(round, 0, prompted), 5);
+  golfSetFairwayState(round.players[2].score, 0, GolfFairwayState::Missed);
+  EXPECT_EQ(golfFairwayPromptPlayers(round, 0, prompted), 1);
+  prompted[0] = 1;
+  EXPECT_EQ(golfFairwayPromptPlayers(round, 0, prompted), 0);
+  prompted[0] = 0;
+  round.par[0] = 3;
+  EXPECT_EQ(golfFairwayPromptPlayers(round, 0, prompted), 0);
+  EXPECT_EQ(golfFairwayPromptPlayers(round, 8, prompted), 0);
+  memset(round.par, 0, sizeof(round.par));
+  EXPECT_EQ(golfFairwayPromptPlayers(round, 0, prompted), 1);
+  EXPECT_EQ(golfFairwaysAnswered(round, score), 0);
 }

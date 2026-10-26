@@ -38,6 +38,14 @@ uint16_t golfPenaltyStrokesForRound(const GolfPlayerScore& score, uint8_t holeCo
 // §31.5). It records a good outcome and adds no stroke. These are plain bit
 // accessors: they do not seed, touch counters, or consider par -- callers seed
 // first, exactly as every mutation path must (§13.1).
+enum class GolfFairwayState : uint8_t { None, Hit, Missed };
+GolfFairwayState golfFairwayState(const GolfPlayerScore& score, uint8_t hole);
+void golfSetFairwayState(GolfPlayerScore& score, uint8_t hole, GolfFairwayState state);
+constexpr GolfFairwayState golfNextFairwayState(GolfFairwayState state) {
+  return state == GolfFairwayState::None  ? GolfFairwayState::Hit
+         : state == GolfFairwayState::Hit ? GolfFairwayState::Missed
+                                          : GolfFairwayState::None;
+}
 bool golfFairwayHit(const GolfPlayerScore& score, uint8_t hole);
 void golfSetFairwayHit(GolfPlayerScore& score, uint8_t hole, bool hit);
 uint16_t golfFairwayHitsForRound(const GolfPlayerScore& score, uint8_t holeCount);

@@ -26,6 +26,7 @@ struct GolfPlayerScore {
   // Bit `hole` (fairwayHit[hole / 8] & (1 << (hole % 8))) set means the tee shot
   // found the fairway on that hole. Not a stroke and not a penalty.
   uint8_t fairwayHit[3];
+  uint8_t fairwayAnswered[3];
   // Same per-hole bit shape as fairwayHit: set means the ball lay in a greenside
   // bunker on the way to the hole. Feeds sand-save stats (CONTRACTS-V2 §33.1).
   uint8_t greensideBunker[3];
@@ -105,9 +106,9 @@ inline bool golfDisablePlayer(GolfRound& round, const uint8_t slot) {
   return true;
 }
 
-static_assert(sizeof(GolfPlayerScore) == 150);
-static_assert(sizeof(GolfPlayer) == 222);
-static_assert(sizeof(GolfRound) == 972);
+static_assert(sizeof(GolfPlayerScore) == 153);
+static_assert(sizeof(GolfPlayer) == 226);
+static_assert(sizeof(GolfRound) == 988);
 static_assert(std::is_standard_layout_v<GolfPlayerScore>);
 static_assert(std::is_trivially_copyable_v<GolfPlayerScore>);
 static_assert(std::is_standard_layout_v<GolfPlayer>);

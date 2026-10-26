@@ -357,7 +357,7 @@ bool golfMakeIndexRow(const GolfRound& round, const uint8_t playerSlot, const ch
   // (v5+). GIR is derived, so it is written for any round with usable par.
   if (fairwaysRecorded) {
     built.fairways = golfFairwaysHit(round, score);
-    built.fairwayHoles = golfFairwaysEligible(round, score);
+    built.fairwayHoles = golfFairwaysAnswered(round, score);
     built.fairwaysRecorded = true;
   }
   if (golfHasPar(round)) {

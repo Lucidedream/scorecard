@@ -164,9 +164,25 @@ bool golfFairwayHit(const GolfPlayerScore& score, const uint8_t hole) {
   return (score.fairwayHit[hole / 8] & (1 << (hole % 8))) != 0;
 }
 
+GolfFairwayState golfFairwayState(const GolfPlayerScore& score, const uint8_t hole) {
+  if (!validHole(hole) || !(score.fairwayAnswered[hole / 8] & (1 << (hole % 8)))) return GolfFairwayState::None;
+  return golfFairwayHit(score, hole) ? GolfFairwayState::Hit : GolfFairwayState::Missed;
+}
+
+void golfSetFairwayState(GolfPlayerScore& score, const uint8_t hole, const GolfFairwayState state) {
+  if (!validHole(hole)) return;
+  const uint8_t mask = static_cast<uint8_t>(1 << (hole % 8));
+  golfSetFairwayHit(score, hole, state == GolfFairwayState::Hit);
+  if (state == GolfFairwayState::None)
+    score.fairwayAnswered[hole / 8] &= static_cast<uint8_t>(~mask);
+  else
+    score.fairwayAnswered[hole / 8] |= mask;
+}
+
 void golfSetFairwayHit(GolfPlayerScore& score, const uint8_t hole, const bool hit) {
   if (!validHole(hole)) return;
   const uint8_t mask = static_cast<uint8_t>(1 << (hole % 8));
+  score.fairwayAnswered[hole / 8] |= mask;
   if (hit) {
     score.fairwayHit[hole / 8] |= mask;
   } else {
