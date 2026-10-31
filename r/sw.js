@@ -1,5 +1,5 @@
 'use strict';
-const CACHE='scorecard-report-v2';
+const CACHE='scorecard-report-v3';
 const ASSETS=['./','./index.html','./manifest.webmanifest'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',event=>{
@@ -8,7 +8,7 @@ self.addEventListener('activate',event=>{
     const upgrading=keys.some(key=>key.startsWith('scorecard-report-')&&key!==CACHE);
     await Promise.all(keys.filter(key=>key.startsWith('scorecard-report-')&&key!==CACHE).map(key=>caches.delete(key)));
     await self.clients.claim();
-    // A cached format-1 page has no update listener. Replace it with this report,
+    // Cached report pages have no update listener. Replace it with this report,
     // preserving its fragment, only when upgrading an existing report cache.
     if(upgrading){
       const root=new URL('./',self.location.href);

@@ -12,12 +12,12 @@
 :root{color-scheme:light dark;--bg:#f8faf8;--card:#fff;--ink:#172b24;--muted:#51675c;--line:#dce5de;--accent:#173f32}
 *{box-sizing:border-box}body{margin:0 auto;padding:24px 16px calc(32px + env(safe-area-inset-bottom));max-width:680px;font:17px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
 h1{font-size:28px;line-height:1.2;margin:8px 0}h2{font-size:21px;margin:0}p{margin:8px 0}.muted{color:var(--muted)}header{margin-bottom:24px}section{background:var(--card);padding:18px 14px;border:1px solid var(--line);border-radius:12px;margin:18px 0;overflow-wrap:anywhere}
-nav{display:grid;gap:10px}nav a{display:block;text-align:center;padding:12px;border:1px solid var(--line);border-radius:8px;color:var(--ink);text-decoration:none}button{font:inherit;background:var(--accent);color:#fff;border:0;border-radius:8px;min-height:48px;padding:10px 24px;width:100%;margin-top:12px;cursor:pointer}.score{font-size:32px;font-weight:650;letter-spacing:-1px}.metrics{display:flex;flex-wrap:wrap;gap:8px 24px;margin:10px 0 18px}.metrics p{margin:0}.field{display:flex;gap:16px;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line)}dt{flex:1}dd{flex:1;margin:0;text-align:right}details{margin-top:18px}summary{cursor:pointer;padding:12px 0}h3{font-size:18px}.table-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:15px;white-space:nowrap}th,td{text-align:right;padding:8px 6px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}th:first-child,td:first-child{text-align:left}caption{white-space:normal;text-align:left;color:var(--muted);font-size:14px;padding:8px 0}.notes{font-size:14px}.error{margin-top:32px}
+#phone-date label{display:flex;align-items:center;gap:12px;flex-wrap:wrap}input[type=date]{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:6px;min-height:44px;padding:6px}nav{display:grid;gap:10px}nav a{display:block;text-align:center;padding:12px;border:1px solid var(--line);border-radius:8px;color:var(--ink);text-decoration:none}button{font:inherit;background:var(--accent);color:#fff;border:0;border-radius:8px;min-height:48px;padding:10px 24px;width:100%;margin-top:12px;cursor:pointer}.score{font-size:32px;font-weight:650;letter-spacing:-1px}.metrics{display:flex;flex-wrap:wrap;gap:8px 24px;margin:10px 0 18px}.metrics p{margin:0}.field{display:flex;gap:16px;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line)}dt{flex:1}dd{flex:1;margin:0;text-align:right}details{margin-top:18px}summary{cursor:pointer;padding:12px 0}h3{font-size:18px}.table-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:15px;white-space:nowrap}th,td{text-align:right;padding:8px 6px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}th:first-child,td:first-child{text-align:left}caption{white-space:normal;text-align:left;color:var(--muted);font-size:14px;padding:8px 0}.notes{font-size:14px}.error{margin-top:32px}
 @media(prefers-color-scheme:dark){:root{--bg:#101b16;--card:#17271f;--ink:#e9f0eb;--muted:#b0c4b7;--line:#344d3e;--accent:#296446}}@media print{button{display:none}section{break-inside:avoid}}
 </style>
 </head>
 <body>
-<header><p class="muted">Scorecard · Round report</p><h1 id="course">Round report</h1><p id="details" class="muted"></p></header>
+<header><p class="muted">Scorecard · Round report</p><h1 id="course">Round report</h1><p id="details" class="muted"></p><div id="phone-date"></div></header>
 <nav id="downloads"></nav>
 <button id="share" type="button" hidden>Share</button><p id="share-status" role="status" class="muted"></p>
 <main id="report"><p class="error">Scan a round QR code to open its report.</p></main>
@@ -145,12 +145,28 @@ const ScorecardReport = (() => {
     });
     s.short=(s.in100-s.putts)&65535;return s;
   }
-  function date(r) {
+  function deviceDate(r) {
     if(!r.dateYmd)return '';
     const y=2000+(r.dateYmd>>9),m=(r.dateYmd>>5)&15,d=r.dateYmd&31;
     const v=new Date(Date.UTC(y,m-1,d));
     return v.getUTCFullYear()===y&&v.getUTCMonth()===m-1&&v.getUTCDate()===d?`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`:'';
   }
+  function validPhoneDate(value) {
+    if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;
+    const [y,m,d]=value.split('-').map(Number),v=new Date(0);
+    v.setUTCFullYear(y,m-1,d);
+    return y>0&&v.getUTCFullYear()===y&&v.getUTCMonth()===m-1&&v.getUTCDate()===d;
+  }
+  function localToday(now=new Date()) {
+    return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  }
+  function setPhoneDate(r,value=localToday()) {
+    if(deviceDate(r)||!validPhoneDate(value))return false;
+    r.phoneDate=value;return true;
+  }
+  function date(r) {return deviceDate(r)||(validPhoneDate(r.phoneDate)?r.phoneDate:'');}
+  function dateLabel(r) {const value=date(r);return value?value+(deviceDate(r)?'':' (set on phone)'):L.Unavailable;}
+  function filename(r,extension) {const value=date(r);return 'scorecard-round'+(value?'-'+value:'')+'.'+extension;}
   function quote(value) {
     if(typeof value==='number')return String(value);
     let text=String(value??'');if(/^[=+\-@\t\r\n]/.test(text))text="'"+text;
@@ -171,7 +187,7 @@ const ScorecardReport = (() => {
       .filter(h=>h.valid).sort((a,b)=>b.toPar-a.toPar).slice(0,3);
   }
   function metadataFields(r,p) {
-    return [[L.Course,r.course],[L.Player,p.name],[L.Slot,p.slot+1],[L.Date,date(r)||L.Unavailable],
+    return [[L.Course,r.course],[L.Player,p.name],[L.Slot,p.slot+1],[L.Date,dateLabel(r)],
       [L.Tee,p.tee],[L.Status,r.archived?L.Archived:L.InProgress],[L.Detail,L.Yes],
       [L.Events,r.penaltiesRecorded?L.Yes:L.Unavailable],[L.FairwaysHit,r.fairwaysRecorded?L.Yes:L.Unavailable],[L.Yards,L.Yards]];
   }
@@ -206,11 +222,12 @@ const ScorecardReport = (() => {
     return result;
   }
   function agentText(r) {return r.players.map((p,i)=>(r.players.length>1?`=== Player ${i+1} of ${r.players.length}: ${p.name} ===\n`:'')+text(r,p)).join('\n');}
-  return {decode,stats,csv,date,summary,gross,entered,gir,hasPar,toPar,CSV_HEADER,L,metadataFields,summaryFields,holeFields,worst,text,agentText};
+  return {decode,stats,csv,date,deviceDate,dateLabel,localToday,setPhoneDate,filename,summary,gross,entered,gir,hasPar,toPar,CSV_HEADER,L,metadataFields,summaryFields,holeFields,worst,text,agentText};
 })();
 if(typeof module!=='undefined')module.exports=ScorecardReport;
 if(typeof document!=='undefined') {
   let round;
+  let phoneDate='';
   const downloadUrls=[];
   const report=document.getElementById('report'),share=document.getElementById('share'),status=document.getElementById('share-status');
   const node=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
@@ -218,11 +235,21 @@ if(typeof document!=='undefined') {
   function render() {
     share.hidden=true;status.textContent='';round=null;
     downloadUrls.forEach(url=>URL.revokeObjectURL(url));downloadUrls.length=0;document.getElementById('downloads').replaceChildren();
-    document.getElementById('course').textContent='Round report';document.getElementById('details').textContent='';
+    document.getElementById('course').textContent='Round report';document.getElementById('details').textContent='';document.getElementById('phone-date').replaceChildren();
     if(!location.hash||location.hash==='#'){report.replaceChildren(node('p','Scan a round QR code to open its report.'));return;}
     try{round=ScorecardReport.decode(location.hash);}catch{round=null;document.getElementById('course').textContent='Round report';document.getElementById('details').textContent='';report.replaceChildren(node('p','This round link is invalid or unsupported.'));return;}
+    if(!ScorecardReport.deviceDate(round)) {
+      ScorecardReport.setPhoneDate(round,phoneDate||ScorecardReport.localToday());phoneDate=ScorecardReport.date(round);
+      const label=node('label',ScorecardReport.L.Date+' (set on phone)'),field=node('input');
+      field.type='date';field.min='0001-01-01';field.max='9999-12-31';field.required=true;field.value=phoneDate;
+      field.addEventListener('change',()=>{
+        if(!ScorecardReport.setPhoneDate(round,field.value)){field.value=ScorecardReport.date(round);return;}
+        phoneDate=ScorecardReport.date(round);render();
+      });
+      label.append(field);document.getElementById('phone-date').append(label);
+    }
     document.getElementById('course').textContent=round.course;
-    document.getElementById('details').textContent=[ScorecardReport.date(round)||'Date unavailable',...round.nineNames.filter(Boolean),round.archived?'Archived':'In progress'].join(' · ');
+    document.getElementById('details').textContent=[ScorecardReport.dateLabel(round),...round.nineNames.filter(Boolean),round.archived?'Archived':'In progress'].join(' · ');
     report.replaceChildren();
     if(round.repaired)report.append(node('p','Recovered round: some source data was repaired.','muted'));
     for(const player of round.players) {
@@ -249,7 +276,7 @@ if(typeof document!=='undefined') {
       section.append(detail);report.append(section);
     }
     const downloads=document.getElementById('downloads');
-    for(const [label,name,type,content] of [[ScorecardReport.L.DownloadAgent,'scorecard-round.txt','text/plain;charset=utf-8',ScorecardReport.agentText(round)],[ScorecardReport.L.DownloadCsv,'scorecard-round.csv','text/csv;charset=utf-8',ScorecardReport.csv(round)]]){
+    for(const [label,name,type,content] of [[ScorecardReport.L.DownloadAgent,ScorecardReport.filename(round,'txt'),'text/plain;charset=utf-8',ScorecardReport.agentText(round)],[ScorecardReport.L.DownloadCsv,ScorecardReport.filename(round,'csv'),'text/csv;charset=utf-8',ScorecardReport.csv(round)]]){
       const link=node('a',label);link.download=name;link.href=URL.createObjectURL(new Blob([content],{type}));downloadUrls.push(link.href);downloads.append(link);
     }
     report.append(node('p','Round data stays in this link on your phone. No analytics or uploads.','notes muted'));share.hidden=false;
@@ -257,7 +284,7 @@ if(typeof document!=='undefined') {
   share.addEventListener('click',async()=>{
     if(!round)return;const text=ScorecardReport.summary(round);
     try {
-      const files=[new File([ScorecardReport.agentText(round)],'scorecard-round.txt',{type:'text/plain;charset=utf-8'}),new File([ScorecardReport.csv(round)],'scorecard-round.csv',{type:'text/csv;charset=utf-8'})];
+      const files=[new File([ScorecardReport.agentText(round)],ScorecardReport.filename(round,'txt'),{type:'text/plain;charset=utf-8'}),new File([ScorecardReport.csv(round)],ScorecardReport.filename(round,'csv'),{type:'text/csv;charset=utf-8'})];
       const shareFiles=navigator.canShare&&(navigator.canShare({files})?files:navigator.canShare({files:[files[0]]})?[files[0]]:null);
       if(navigator.share&&shareFiles){await navigator.share({title:'Round report',text,files:shareFiles});status.textContent='Shared';}
       else {await navigator.clipboard.writeText(text);status.textContent='Summary copied';}
@@ -266,7 +293,7 @@ if(typeof document!=='undefined') {
       catch{status.textContent='Sharing unavailable. Select and copy the report text.';}
     }
   });
-  window.addEventListener('hashchange',render);render();
+  window.addEventListener('hashchange',()=>{phoneDate='';render();});render();
   if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js',{scope:'./'}).catch(()=>{});
 }
 </script>
