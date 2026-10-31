@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; manifest-src 'self'; worker-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<link rel="manifest" href="manifest.webmanifest">
+<title>Round report · Scorecard</title>
+<style>
+:root{color-scheme:light dark;--bg:#f8faf8;--card:#fff;--ink:#172b24;--muted:#51675c;--line:#dce5de;--accent:#173f32}
+*{box-sizing:border-box}body{margin:0 auto;padding:24px 16px calc(32px + env(safe-area-inset-bottom));max-width:680px;font:17px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+h1{font-size:28px;line-height:1.2;margin:8px 0}h2{font-size:21px;margin:0}p{margin:8px 0}.muted{color:var(--muted)}header{margin-bottom:24px}section{background:var(--card);padding:18px 14px;border:1px solid var(--line);border-radius:12px;margin:18px 0;overflow-wrap:anywhere}
+button{font:inherit;background:var(--accent);color:#fff;border:0;border-radius:8px;min-height:48px;padding:10px 24px;width:100%;margin-top:12px;cursor:pointer}.score{font-size:32px;font-weight:650;letter-spacing:-1px}.metrics{display:flex;flex-wrap:wrap;gap:8px 24px;margin:10px 0 18px}.metrics p{margin:0}.table-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:15px;white-space:nowrap}th,td{text-align:right;padding:8px 6px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}th:first-child,td:first-child{text-align:left}caption{text-align:left;color:var(--muted);font-size:14px;padding:8px 0}.notes{font-size:14px}.error{margin-top:32px}
+@media(prefers-color-scheme:dark){:root{--bg:#101b16;--card:#17271f;--ink:#e9f0eb;--muted:#b0c4b7;--line:#344d3e;--accent:#296446}}@media print{button{display:none}section{break-inside:avoid}}
+</style>
+</head>
+<body>
+<header><p class="muted">Scorecard · Round report</p><h1 id="course">Round report</h1><p id="details" class="muted"></p></header>
+<main id="report"><p class="error">Scan a round QR code to open its report.</p></main>
+<button id="share" type="button" hidden>Share</button><p id="share-status" role="status" class="muted"></p>
+<script id="report-code">
+'use strict';
+const ScorecardReport = (() => {
+  const CSV_HEADER = 'course,player,player_slot,date,status,detail,hole,entered,par,si,yards,putts,in100,out100,gross_strokes,penalty_strokes,fairway,gir,penalty_events,penalties_recorded,fairways_recorded,recovered';
+  function decode(fragment) {
+    const value = fragment.startsWith('#') ? fragment.slice(1) : fragment;
+    if (!value || value.length > 623 || !/^[A-Za-z0-9_-]+$/.test(value) || value.length % 4 === 1) throw Error('Invalid round');
+    const binary = atob(value.replace(/-/g,'+').replace(/_/g,'/'));
+    if (btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'') !== value) throw Error('Invalid round');
+    const data = Uint8Array.from(binary,c=>c.charCodeAt(0));
+    let pos = 0;
+    function nibble() { if (pos >= data.length*2) throw Error('Truncated round'); return (data[pos>>1] >> (pos++%2 ? 0 : 4)) & 15; }
+    function byte() { return nibble()*16+nibble(); }
+    function count() { const n=nibble(); if(n!==15)return n; const b=byte(); if(b<15)throw Error('Invalid count');return b; }
+    const utf8 = new TextDecoder('utf-8',{fatal:true});
+    function text(max) { const n=byte();if(n>max)throw Error('Invalid name');const a=new Uint8Array(n);for(let i=0;i<n;i++)a[i]=byte();const t=utf8.decode(a);if(/[\u0000-\u001f\u007f]/.test(t))throw Error('Invalid name');return t; }
+    if(byte()!==1)throw Error('Unsupported round');
+    const flags=byte();if(flags&224)throw Error('Invalid flags');
+    const dateYmd=byte()+byte()*256;
+    const holeCount=byte(), playerCount=byte();
+    if(![9,18].includes(holeCount)||playerCount<1||playerCount>4)throw Error('Invalid size');
+    const nines=[byte(),byte()];if(nines.some(n=>n>3&&n!==255))throw Error('Invalid nines');
+    const round={dateYmd,holeCount,nines,hasSi:!!(flags&1),archived:!!(flags&2),penaltiesRecorded:!!(flags&4),fairwaysRecorded:!!(flags&8),repaired:!!(flags&16),course:text(39),nineNames:[],players:[],par:[],si:[]};
+    for(let n=0;n<holeCount/9;n++)round.nineNames.push(text(11));
+    for(let p=0;p<playerCount;p++) {
+      const slot=byte(),name=text(23),tee=text(11);
+      if(slot>3 || (p&&slot<=round.players[p-1].slot) || !tee)throw Error('Invalid player');
+      round.players.push({slot,name,tee,holes:[]});
+    }
+    for(let h=0;h<holeCount;h++){const par=count();if(par!==0&&(par<3||par>6))throw Error('Invalid par');round.par.push(par);}
+    for(let h=0;h<holeCount;h++){const si=round.hasSi?count():0;if(si>18)throw Error('Invalid SI');round.si.push(si);}
+    for(const player of round.players)for(let h=0;h<holeCount;h++) {
+      const in100=count(),out100=count(),putts=count(),hazards=count(),obs=count(),marks=nibble();
+      if((marks&8)||(marks&3)===3||hazards+obs>8)throw Error('Invalid marks');
+      player.holes.push({in100,out100,putts,hazards,obs,fairway:marks&3,bunker:!!(marks&4)});
+    }
+    if(pos%2&&nibble()!==0)throw Error('Invalid padding');
+    if(pos!==data.length*2)throw Error('Trailing data');
+    return round;
+  }
+  function entered(h) { return h.in100+h.out100!==0; }
+  function gross(h) { return h.in100+h.out100+h.hazards+2*h.obs; }
+  function gir(par,h) { return entered(h)&&par>=3&&par<=5&&gross(h)-h.putts<=par-2; }
+  function hasPar(r) { return r.par.every(p=>p>=3&&p<=6); }
+  function stats(r,p) {
+    const s={score:0,par:0,toPar:0,putts:0,in100:0,out100:0,short:0,penalties:0,thru:0,onePutts:0,threePutts:0,fir:0,firAnswered:0,firEligible:0,gir:0,girEligible:0,scrambles:0,scrambleChances:0,sandSaves:0,sandChances:0};
+    p.holes.forEach((h,i)=>{
+      // GolfStats' penalty total includes all marker records.
+      s.penalties+=h.hazards+2*h.obs;
+      if(!entered(h))return;
+      const par=r.par[i],score=gross(h),eligible=par===4||par===5;
+      s.thru++;s.score+=score;s.par+=par;s.toPar+=par?score-par:0;s.putts+=h.putts;s.in100+=h.in100;s.out100+=h.out100;
+      s.onePutts+=h.putts===1;s.threePutts+=h.putts>=3;s.fir+=h.fairway===1;
+      if(hasPar(r)&&eligible){s.firEligible++;s.firAnswered+=h.fairway!==0;}
+      if(par>=3&&par<=5){s.girEligible++;s.gir+=gir(par,h);if(!gir(par,h)){s.scrambleChances++;s.scrambles+=score<=par;}}
+      if(h.bunker){s.sandChances++;s.sandSaves+=par>=3&&par<=6&&score<=par;}
+    });
+    s.short=(s.in100-s.putts)&65535;return s;
+  }
+  function date(r) {
+    if(!r.dateYmd)return '';
+    const y=2000+(r.dateYmd>>9),m=(r.dateYmd>>5)&15,d=r.dateYmd&31;
+    const v=new Date(Date.UTC(y,m-1,d));
+    return v.getUTCFullYear()===y&&v.getUTCMonth()===m-1&&v.getUTCDate()===d?`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`:'';
+  }
+  function quote(value) {
+    if(typeof value==='number')return String(value);
+    let text=String(value??'');if(/^[=+\-@\t\r\n]/.test(text))text="'"+text;
+    return '"'+text.replace(/"/g,'""')+'"';
+  }
+  function csv(r) {
+    const rows=[CSV_HEADER];
+    for(const p of r.players)p.holes.forEach((h,i)=>{
+      const played=entered(h),par=r.par[i];
+      rows.push([r.course,p.name,p.slot+1,date(r),r.archived?'archived':'in_progress','full',i+1,+played,par>=3&&par<=6?par:'',r.hasSi&&r.si[i]?r.si[i]:'','',played?h.putts:'',played?h.in100:'',played?h.out100:'',played?gross(h):'',played&&r.penaltiesRecorded?h.hazards+2*h.obs:'',r.fairwaysRecorded&&played&&(par===4||par===5)&&h.fairway?+(h.fairway===1):'',played&&par>=3&&par<=5?+gir(par,h):'','',+r.penaltiesRecorded,+r.fairwaysRecorded,+r.repaired].map(quote).join(','));
+    });
+    return rows.join('\r\n')+'\r\n';
+  }
+  function toPar(value) { return value>0?'+'+value:value===0?'E':String(value); }
+  function summary(r) { return [r.course,date(r),...r.nineNames.filter(Boolean),...r.players.map(p=>{const s=stats(r,p);return `${p.name} (${p.tee}): ${s.score}${hasPar(r)?' ('+toPar(s.toPar)+')':''}, ${s.putts} putts · ${s.thru}/${r.holeCount} holes`;})].filter(Boolean).join('\n'); }
+  return {decode,stats,csv,date,summary,gross,entered,gir,hasPar,toPar,CSV_HEADER};
+})();
+if(typeof module!=='undefined')module.exports=ScorecardReport;
+if(typeof document!=='undefined') {
+  let round;
+  const report=document.getElementById('report'),share=document.getElementById('share'),status=document.getElementById('share-status');
+  const node=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
+  const metric=(label,n,d)=>`${label}: ${n}/${d}${d?' ('+Math.round(n*100/d)+'%)':''}`;
+  function render() {
+    share.hidden=true;status.textContent='';round=null;
+    document.getElementById('course').textContent='Round report';document.getElementById('details').textContent='';
+    if(!location.hash||location.hash==='#'){report.replaceChildren(node('p','Scan a round QR code to open its report.'));return;}
+    try{round=ScorecardReport.decode(location.hash);}catch{round=null;document.getElementById('course').textContent='Round report';document.getElementById('details').textContent='';report.replaceChildren(node('p','This round link is invalid or unsupported.'));return;}
+    document.getElementById('course').textContent=round.course;
+    document.getElementById('details').textContent=[ScorecardReport.date(round)||'Date unavailable',...round.nineNames.filter(Boolean),round.archived?'Archived':'In progress'].join(' · ');
+    report.replaceChildren();
+    if(round.repaired)report.append(node('p','Recovered round: some source data was repaired.','muted'));
+    for(const player of round.players) {
+      const s=ScorecardReport.stats(round,player),section=node('section');
+      section.append(node('h2',player.name),node('p',player.tee,'muted'),node('p',`${s.score} ${ScorecardReport.hasPar(round)?'('+ScorecardReport.toPar(s.toPar)+')':''}`,'score'));
+      const metrics=node('div',undefined,'metrics');
+      metrics.append(node('p',`${s.putts} putts · ${s.thru}/${round.holeCount} holes`),node('p',round.fairwaysRecorded&&ScorecardReport.hasPar(round)?metric('Fairways',s.fir,s.firAnswered):'Fairways: —'),node('p',ScorecardReport.hasPar(round)?metric('GIR',s.gir,s.girEligible):'GIR: —'));
+      section.append(metrics);
+      const wrap=node('div',undefined,'table-wrap'),table=node('table'),head=node('thead'),headrow=node('tr'),body=node('tbody');
+      table.append(node('caption','Marks: H hazard · OB out of bounds · B greenside bunker'));
+      for(const text of ['Hole','Par','Strokes','Putts','FW','GIR','Marks']){const th=node('th',text);th.scope='col';headrow.append(th);}head.append(headrow);table.append(head);
+      player.holes.forEach((h,i)=>{
+        const row=node('tr'),par=round.par[i],played=ScorecardReport.entered(h),nine=round.nines[Math.floor(i/9)];
+        const marks=[round.penaltiesRecorded&&h.hazards?`H ×${h.hazards}`:'',round.penaltiesRecorded&&h.obs?`OB ×${h.obs}`:'',h.bunker?'B':''].filter(Boolean).join(' · ')||'—';
+        const hole=node('th',String(nine===255?i+1:nine*9+i%9+1));hole.scope='row';row.append(hole);
+        for(const value of [par||'—',played?ScorecardReport.gross(h):'—',played?h.putts:'—',played&&round.fairwaysRecorded&&(par===4||par===5)&&h.fairway?(h.fairway===1?'✓':'✕'):'—',played&&par>=3&&par<=5?(ScorecardReport.gir(par,h)?'✓':'✕'):'—',marks])row.append(node('td',String(value)));
+        body.append(row);
+      });table.append(body);wrap.append(table);section.append(wrap);report.append(section);
+    }
+    report.append(node('p','Round data stays in this link on your phone. No analytics or uploads.','notes muted'));share.hidden=false;
+  }
+  share.addEventListener('click',async()=>{
+    if(!round)return;const text=ScorecardReport.summary(round);
+    try {
+      const file=new File([ScorecardReport.csv(round)],'scorecard-round.csv',{type:'text/csv;charset=utf-8'});
+      if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({title:'Round report',text,files:[file]});status.textContent='Shared';}
+      else {await navigator.clipboard.writeText(text);status.textContent='Summary copied';}
+    }catch(error){
+      if(error.name!=='AbortError')try{await navigator.clipboard.writeText(text);status.textContent='Summary copied';}
+      catch{status.textContent='Sharing unavailable. Select and copy the report text.';}
+    }
+  });
+  window.addEventListener('hashchange',render);render();
+  if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js',{scope:'./'}).catch(()=>{});
+}
+</script>
+</body>
+</html>
